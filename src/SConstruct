@@ -208,10 +208,7 @@ SConsignFile( 'scons.signatures' )
 
 SetOption('num_jobs', JOBS)
 
-if ( OS == 'Linux' ):
-	LINK = CC
-else:
-	LINK = CXX
+LINK = CXX
 
 # common flags
 # BASE + CORE + OPT for engine
@@ -289,7 +286,7 @@ if ( int(JOBS) > 1 ):
 
 local_dedicated = 0
 # curl
-local_curl = 0	# config selection
+local_curl = 0  # config selection
 curl_lib = []
 
 GLOBALS = 'g_env OS g_os BUILD local_dedicated curl_lib local_curl MASTER gcc3 cpu'

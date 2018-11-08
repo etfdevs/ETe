@@ -64,7 +64,6 @@ tr_animation_mdm.c
 tr_animation_mds.c
 tr_arb.c
 tr_backend.c
-tr_bloom.c
 tr_bsp.c
 tr_cmds.c
 tr_cmesh.c
@@ -92,7 +91,9 @@ tr_shader.c
 tr_shadows.c
 tr_sky.c
 tr_surface.c
-tr_world.c"""
+tr_world.c
+tr_vbo.c
+tr_model_iqm.c"""
 
 renderer_list = scons_utils.BuildList('renderer', renderer_string)
 
@@ -105,7 +106,8 @@ sv_init.c
 sv_main.c
 sv_net_chan.c
 sv_snapshot.c
-sv_world.c"""
+sv_world.c
+sv_filter.c"""
 
 server_list = scons_utils.BuildList('server', server_string)
 
@@ -183,7 +185,10 @@ linux_full_sources = [
 'unix/linux_glimp.c',
 'unix/linux_qgl.c',
 'unix/linux_snd.c',
-'unix/linux_joystick.c'
+'qcommon/puff.c',
+'unix/x11_dga.c',
+'unix/x11_randr.c',
+'unix/x11_vidmode.c'
 ]
 
 mac_sources = [
@@ -266,11 +271,8 @@ botlib_objs = []
 for i in botlib_list:
 	botlib_objs.append( botlib_env.StaticObject( os.path.join( 'botlib', i ) ) )
 
-#staticx11_libs = [ 'libXxf86dga.a', 'libXxf86vm.a' ]
-#if ( os.path.exists( os.path.join( '/usr/lib', staticx11_libs[0] ) ) ):
-#	staticx11_libs = [ os.path.join( '/usr/lib', i ) for i in staticx11_libs ]
-#else:
-#	staticx11_libs = [ os.path.join( '/usr/X11R7/lib', i ) for i in staticx11_libs ]
+staticx11_libs = [ 'libXxf86dga.a', 'libXxf86vm.a', 'libX11.a', 'libxcb.a', 'libXau.a', 'libXdmcp.a', 'libbsd.a' ]
+staticx11_libs = [ os.path.join( '/usr/lib/i386-linux-gnu', i ) for i in staticx11_libs ]
 
 if ( g_os == 'Linux' ):
 	nasm_env = Environment( tools = [ 'nasm' ] )
@@ -289,25 +291,26 @@ splines_lib = splines_env.StaticLibrary( splines_list )
 local_env = g_env.Clone()
 
 if ( g_os == 'Linux' ):
-	local_env.Append( LIBS = [ 'dl' ] )
+	# dynamic libs
+	local_env.Append( LIBS = [ 'dl', 'm' ] )
+	local_env.Append( LIBPATH = [ '/usr/lib/i386-linux-gnu' ] )
 	if ( local_dedicated == 0 ):
-		local_env.Append( LIBS = [ 'X11', 'Xxf86dga', 'Xxf86vm', 'Xext', 'm' ] )
-		local_env.Append( LIBPATH = [ '/usr/X11R7/lib' ] )
-		local_env.Append( CPPPATH = [ 'curl-7.12.2/include' ] )
+		 # dynamic libs for the client sw
+		local_env.Append( LIBS = [ 'pthread' ] )
 	else:
 		local_env.Append( CPPDEFINES = [ 'DEDICATED' ] )
-		local_env.Append( LIBS = [ 'm' ] )
 
-	#if gcc3 == 0:
-	#	g_env.Append(LINKFLAGS=[ os.popen( g_env['CXX'] + ' -print-file-name=libstdc++.a' ).read().rstrip() ])
-	#else:
-	#	local_env['ENV']['CC'] = g_env['CC']
-	#	local_env['LINK'] = 'unix/staticlinkcpp.sh'
+    #TODO default gcc3 behaviour?
+	if gcc3 == 0:
+		g_env.Append(LINKFLAGS=[ os.popen( g_env['CXX'] + ' -print-file-name=libstdc++.a' ).read().rstrip() ])
+	else:
+		local_env['ENV']['CC'] = g_env['CC']
+		local_env['LINK'] = 'unix/staticlinkcpp.sh'
 elif ( g_os == 'win32' ):
 	local_env.Append( LIBS = [ 'm', 'winmm', 'wsock32', 'ws2_32', 'gdi32', 'ole32', 'iphlpapi', 'comctl32' ] )
 	if ( local_dedicated == 0 ):
 		local_env.Append( LIBS = [ 'dinput', 'dsound' ] )
-		local_env.Append( CPPPATH = [ 'curl-7.12.2/include' ] )
+		local_env.Append( CPPPATH = [ 'curl-7.58.0/include' ] )
 	else:
 		local_env.Append( CPPDEFINES = [ 'DEDICATED' ] )
 	local_env['LINK'] = g_env['CXX']
@@ -321,7 +324,6 @@ local_env.Append( CPPDEFINES = [ 'USE_PBMD5' ] )
 
 source_list = server_list + qcommon_list
 if ( g_os == 'Linux' ):
-#	source_list += linux_sources + snapvector + matha
 	source_list += linux_sources
 elif ( g_os == 'win32' ):
 	source_list += win32_sources
@@ -345,11 +347,12 @@ if ( local_dedicated == 0 ):
 	source_list += curl_lib
 	if ( g_os == 'Linux' ):
 		source_list += linux_full_sources
-		#source_list += staticx11_libs
+		source_list += staticx11_libs
 	if ( g_os == 'win32' ):
 		source_list += win32_full_sources
 else:
-	source_list += [ 'null/null_client.c', 'null/null_input.c', 'null/null_snddma.c', 'qcommon/dl_main_stubs.c' ]
+	source_list += [ 'qcommon/dl_main_stubs.c' ]
+
 source_list += splines_lib
 
 ret = local_env.Program( target = 'et', source = source_list )

@@ -1186,7 +1186,7 @@ otherwise, push it for execution at exit
 NOTE: might even want to add a small delay?
 ==================
 */
-void Sys_StartProcess( char *cmdline, qboolean doexit ) {
+void Sys_StartProcess( const char *cmdline, qboolean doexit ) {
 
 	if ( doexit ) {
 		Com_DPrintf( "Sys_StartProcess %s (delaying to final exit)\n", cmdline );
@@ -1398,4 +1398,19 @@ int main( int argc, const char* argv[] )
 qboolean Sys_IsNumLockDown( void ) {
 	// Gordon: FIXME for timothee
 	return qfalse;
+}
+
+void Sys_OmnibotLoad()
+{
+	// TODO linux omnibot
+}
+
+void Sys_OmnibotUnLoad()
+{
+	// TODO linux omnibot
+}
+
+const void * Sys_OmnibotRender( const void * data )
+{
+	assert(0 && "Linux Sys_OmnibotRender unimplemented");
 }

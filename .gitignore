@@ -174,10 +174,10 @@ pip-log.txt
 ## Unix
 #############
 *.o
-*.so.idea
+*.so
+.idea
 CMakeLists.txt
 cmake-build-debug
-.idea
 src/scons.signatures.dblite
 site.conf
 src/et.x86

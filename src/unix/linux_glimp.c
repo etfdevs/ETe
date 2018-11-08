@@ -952,82 +952,6 @@ void IN_Minimize( void )
 }
 
 
-/*****************************************************************************/
-
-/*
-** GLW_GenDefaultLists
-*/
-static void GLW_GenDefaultLists( void ) {
-	XFontStruct *fontInfo;
-	unsigned int first, last, firstrow, lastrow;
-	int maxchars;
-	int firstbitmap, i;
-
-	// keep going, we'll probably just leak some stuff
-	if ( fontbase_init ) {
-		Com_DPrintf( "ERROR: GLW_GenDefaultLists: font base is already marked initialized\n" );
-	}
-
-	fontInfo = XLoadQueryFont( dpy, "-*-helvetica-medium-r-normal-*-12-*-*-*-p-*-*-*" );
-	if ( fontInfo == NULL ) {
-		// try to load other fonts
-		fontInfo = XLoadQueryFont( dpy, "-*-helvetica-*-*-*-*-*-*-*-*-*-*-*-*" );
-
-		// any font will do !
-		if ( fontInfo == NULL ) {
-			fontInfo = XLoadQueryFont( dpy, "-*-*-*-*-*-*-*-*-*-*-*-*-*-*" );
-		}
-
-		if ( fontInfo == NULL ) {
-			Com_Printf( "ERROR: couldn't create font (XLoadQueryFont)\n" );
-			return;
-		}
-	}
-
-	first = (int)fontInfo->min_char_or_byte2;
-	last = (int)fontInfo->max_char_or_byte2;
-	firstrow = (int)fontInfo->min_byte1;
-	lastrow = (int)fontInfo->max_byte1;
-	/*
-	 * How many chars in the charset
-	 */
-	maxchars = 256 * lastrow + last;
-	if ( ( gl_NormalFontBase = qglGenLists( maxchars + 1 ) ) == 0 ) {
-		Com_Printf( "ERROR: couldn't create font (glGenLists)\n" );
-		return;
-	}
-
-	/*
-	 * Get offset to first char in the charset
-	 */
-	firstbitmap = 256 * firstrow + first;
-	/*
-	 * for each row of chars, call glXUseXFont to build the bitmaps.
-	 */
-
-	for ( i = firstrow; i <= lastrow; i++ )
-	{
-		// http://www.atomised.org/docs/XFree86-4.2.1/lib_2GL_2glx_2glxcmds_8c-source.html#l00373
-		qglXUseXFont( fontInfo->fid, firstbitmap, last - first + 1, gl_NormalFontBase + firstbitmap );
-		firstbitmap += 256;
-	}
-
-	fontbase_init = qtrue;
-}
-
-/*
-** GLW_DeleteDefaultLists
-*/
-static void GLW_DeleteDefaultLists( void ) {
-	if ( !fontbase_init ) {
-		Com_DPrintf( "ERROR: GLW_DeleteDefaultLists: no font list initialized\n" );
-		return;
-	}
-	qglDeleteLists( gl_NormalFontBase, 256 );
-	fontbase_init = qfalse;
-}
-
-
 qboolean BuildGammaRampTable( unsigned char *red, unsigned char *green, unsigned char *blue, int gammaRampSize, unsigned short table[3][4096] )
 {
 	int i, j;
@@ -1147,9 +1071,7 @@ void GLimp_Shutdown( qboolean unloadDLL )
 	ctx = NULL;
 
 	unsetenv( "vblank_mode" );
-
-	GLW_DeleteDefaultLists();
-
+	
 	//if ( glw_state.cdsFullscreen )
 	{
 		glw_state.cdsFullscreen = qfalse;
@@ -1493,7 +1415,6 @@ int GLW_SetMode( const char *drivername, int mode, const char *modeFS, qboolean 
 
 	qglXMakeCurrent( dpy, win, ctx );
 
-	GLW_GenDefaultLists();
 #if 0
 	glstring = (char *)qglGetString( GL_RENDERER );
 
@@ -1843,6 +1764,9 @@ char *Sys_GetClipboardData( void )
 	return NULL;
 }
 
+int GLimp_NormalFontBase( void ) {
+    return gl_NormalFontBase;
+}
 
 /*
 =================

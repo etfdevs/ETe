@@ -35,7 +35,7 @@ class idBuildCurl( scons_utils.idSetupBase ):
 		return 0
 
 build = idBuildCurl()
-build.curl_dir = 'curl-7.12.2'
+build.curl_dir = 'curl-7.58.0'
 if ( local_curl == 1 ):
 	build.debug = 1
 	target_name = '#' + build.curl_dir + '/lib/.libs/libcurl-debug.a'
