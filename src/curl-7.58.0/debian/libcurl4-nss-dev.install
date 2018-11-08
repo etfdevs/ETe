@@ -1,0 +1,7 @@
+usr/bin/curl-config
+usr/lib/*/libcurl-nss.a
+usr/lib/*/libcurl-nss.la
+usr/lib/*/libcurl-nss.so
+usr/lib/*/pkgconfig/libcurl.pc
+usr/include
+../../docs/libcurl/libcurl.m4	usr/share/aclocal

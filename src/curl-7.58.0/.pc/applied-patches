@@ -1,0 +1,14 @@
+04_workaround_as_needed_bug.patch
+06_always-disable-valgrind.patch
+07_do-not-disable-debug-symbols.patch
+08_enable-zsh.patch
+11_omit-directories-from-config.patch
+CVE-2018-1000120.patch
+CVE-2018-1000121.patch
+CVE-2018-1000122.patch
+CVE-2018-1000300.patch
+CVE-2018-1000301.patch
+CVE-2018-0500.patch
+CVE-2018-14618.patch
+90_gnutls.patch
+99_nss.patch

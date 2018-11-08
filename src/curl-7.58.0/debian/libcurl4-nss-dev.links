@@ -1,0 +1,5 @@
+#!/bin/sh
+
+echo /usr/lib/$DEB_HOST_MULTIARCH/libcurl-nss.a /usr/lib/$DEB_HOST_MULTIARCH/libcurl.a
+echo /usr/lib/$DEB_HOST_MULTIARCH/libcurl-nss.la /usr/lib/$DEB_HOST_MULTIARCH/libcurl.la
+echo /usr/lib/$DEB_HOST_MULTIARCH/libcurl-nss.so /usr/lib/$DEB_HOST_MULTIARCH/libcurl.so

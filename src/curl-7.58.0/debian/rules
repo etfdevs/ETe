@@ -1,0 +1,120 @@
+#! /usr/bin/make -f
+
+# this will avoid unneded dependencies
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+# this will catch miss-linking. (e.g. undefined symbols)
+#export DEB_LDFLAGS_MAINT_APPEND = -Wl,-z,defs
+
+# enable all hardening options (see #763372)
+export DEB_BUILD_MAINT_OPTIONS := hardening=+all
+
+DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+CONFIGURE_ARGS = -- --disable-dependency-tracking		\
+	--disable-symbol-hiding --enable-versioned-symbols	\
+	--enable-threaded-resolver --with-lber-lib=lber		\
+	--with-gssapi=/usr --with-libssh2 --with-nghttp2	\
+	--includedir=/usr/include/$(DEB_HOST_MULTIARCH)		\
+	--with-zsh-functions-dir=/usr/share/zsh/vendor-completions
+
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+	CONFIGURE_ARGS += --without-libssh2
+endif
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	mkdir -p debian/build debian/build-gnutls debian/build-nss
+	# pop the last patch (nss)
+	quilt pop
+	# pop the second last patch (gnutls)
+	quilt pop
+	# get the source without nss and gnutls patches
+	tar -cf - --exclude=debian/build* --exclude=.pc . \
+		| tar -xf - -C debian/build
+	# push the second last patch which must be gnutls
+	quilt push
+	# get the source with gnutls patch applied
+	tar -cf - --exclude=debian/build* --exclude=.pc . \
+		| tar -xf - -C debian/build-gnutls
+	# push the last patch which must be nss
+	quilt push
+	# get the source with nss patch applied
+	tar -cf - --exclude=debian/build* --exclude=.pc . \
+		| tar -xf - -C debian/build-nss
+	# run buildconf and make sure to copy the patched ltmain.sh
+	for flavour in build build-gnutls build-nss; do \
+		(cd debian/$$flavour && ./buildconf && cp ../../ltmain.sh .) \
+	done
+	cd debian/build && dh_auto_configure ${CONFIGURE_ARGS}		\
+		--with-ca-path=/etc/ssl/certs				\
+		--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt
+	cd debian/build-gnutls &&  dh_auto_configure ${CONFIGURE_ARGS}	\
+		--with-ca-path=/etc/ssl/certs				\
+		--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt	\
+		--without-ssl --with-gnutls
+	cd debian/build-nss && dh_auto_configure ${CONFIGURE_ARGS}	\
+		--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt	\
+		--without-ssl --with-nss
+
+override_dh_auto_build:
+	cd debian/build && dh_auto_build
+	cd debian/build-gnutls && dh_auto_build
+	cd debian/build-nss && dh_auto_build
+
+override_dh_auto_test:
+	-cd debian/build && dh_auto_test
+	-cd debian/build-gnutls && dh_auto_test
+	-cd debian/build-nss && dh_auto_test
+
+override_dh_install:
+	${MAKE} -C debian/build					\
+		DESTDIR=$(shell pwd)/debian/tmp install
+	${MAKE} -C debian/build-gnutls				\
+		DESTDIR=$(shell pwd)/debian/tmp-gnutls install
+	${MAKE} -C debian/build-nss				\
+		DESTDIR=$(shell pwd)/debian/tmp-nss install
+	dh_install -plibcurl3-gnutls -plibcurl4-gnutls-dev	\
+		--sourcedir=debian/tmp-gnutls
+	dh_install -plibcurl3-nss -plibcurl4-nss-dev		\
+		--sourcedir=debian/tmp-nss
+	dh_install -pcurl -plibcurl4 -plibcurl4-openssl-dev -plibcurl4-doc \
+		--sourcedir=debian/tmp
+	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
+# Modify curl-config to make it architecture-independent:
+# 1. In --static-libs output, replace the output of krb5-config (which
+#    currently includes architecture-specific paths) with a call at
+#    runtime to krb5-config.  Of course, this will only work correctly
+#    if the installed libkrb5-dev matches the architecture of the
+#    program you're linking, or if libkrb5-dev is made
+#    multiarch-compatible at some point in the future.  For dynamic
+#    linking this has no impact.
+# 2. In --configure output, replace the architecture-specific paths
+#    used for --libdir and --libexecdir with a literal backquoted call
+#    to dpkg-architecture.  This is functionally equivalent to the way
+#    debhelper actually invokes configure, and indicates to the user
+#    (who runs curl-config --configure in order to learn about how the
+#    library was compiled) that they are in fact using a multi-arch
+#    package.
+# 3. Likewise, replace the architecture name used for --build (and
+#    build_alias) with a literal backquoted call to dpkg-architecture.
+# 4. In --configure output, remove
+#    -fdebug-prefix-map=/buildd/specific/random/path=.
+	sed -e "/-lcurl /s|`krb5-config --libs gssapi`|\`krb5-config --libs gssapi\`|" \
+	    -e "/--prefix/s|/$(DEB_HOST_MULTIARCH)'|/'\\\\\`dpkg-architecture -qDEB_HOST_MULTIARCH\\\\\`|g" \
+	    -e "/--prefix/s|=$(DEB_BUILD_GNU_TYPE)'|='\\\\\`dpkg-architecture -qDEB_BUILD_GNU_TYPE\\\\\`|g" \
+	    -e "/-fdebug-prefix-map=/s|\(-fdebug-prefix-map=\)/[^ ]*=.||" \
+	    -i `find . -name curl-config`
+
+override_dh_installchangelogs:
+	dh_installchangelogs CHANGES
+
+override_dh_compress:
+	dh_compress -X.pdf
+
+override_dh_auto_clean:
+	$(RM) -r debian/build* debian/tmp*
+	dh_auto_clean

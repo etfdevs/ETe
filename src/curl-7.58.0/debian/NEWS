@@ -1,0 +1,22 @@
+curl (7.32.0-1) unstable; urgency=low
+
+  From this version the threaded DNS resolver will be used. This allows for
+  asynchronous DNS queries and also fixes possible issues related to handling
+  time outs of DNS lookups.
+
+  The threaded resolver was chosen instead of the event-based one (which uses
+  the c-ares library) because c-ares currently lacks somewhat important
+  features, such as support for the Name Service Switch system.
+
+ -- Alessandro Ghedini <ghedo@debian.org>  Mon, 12 Aug 2013 11:08:09 +0200
+
+curl (7.28.1-1) experimental; urgency=low
+
+  From this version the CURLOPT_SSL_VERIFYHOST option will stop accepting "1"
+  as a valid value. From the documentation:
+
+  > When the value is 1, libcurl will return a failure. It was previously (in
+  > 7.28.0 and earlier) a debug option of some sorts, but it is no longer
+  > supported due to frequently leading to programmer mistakes.
+
+ -- Alessandro Ghedini <ghedo@debian.org>  Mon, 26 Nov 2012 17:46:27 +0100
