@@ -295,7 +295,8 @@ if ( g_os == 'Linux' ):
 	local_env.Append( LIBS = [ 'dl', 'm' ] )
 	local_env.Append( LIBPATH = [ '/usr/lib/i386-linux-gnu' ] )
 	if ( local_dedicated == 0 ):
-		 # dynamic libs for the client sw
+		local_env.Append( CPPPATH = [ 'curl-7.58.0/include' ] )
+		# dynamic libs for the client sw
 		local_env.Append( LIBS = [ 'pthread' ] )
 	else:
 		local_env.Append( CPPDEFINES = [ 'DEDICATED' ] )
