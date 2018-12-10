@@ -5,7 +5,7 @@ dist: trusty
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install gcc-multilib g++-multilib
-  - sudo apt-get install libxpm-dev:i386 libxxf86dga-dev:i386 libxxf86vm-dev:i386 libglu1-mesa-dev:i386 libxext-dev:i386 libasound2-dev:i386
+  - sudo apt-get install mesa-common-dev:i386 libxxf86dga-dev:i386 libasound2-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libbsd-dev:i386
 
 script: cd src && scons
 
