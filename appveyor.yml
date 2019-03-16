@@ -9,10 +9,15 @@ environment:
 # custom build script to specify xp mode and listed configuration
 # wolf.sln currently only has the projects included that are built due to difficulty of making it only build ones we want on appveyor
 build_script:
-  - ps: |
-      cd src
-      msbuild wolf.sln /m /p:PlatformToolset="v141_xp" /p:Configuration="$env:BUILD_CONFIGURATION"
-
-      if (! $?) {
-        throw "Build failed."
-      }
+  - cmd: call appveyor.bat
+artifacts:
+  - path: ETe*.7z
+deploy:
+ description: 'release description'
+ provider: GitHub
+ auth_token:
+   secure: 'vRDRwIAOZhl6vY0rF1iR5vR36hYorxMHfSBvlVtm9hP6w4CVLUfh/jgRMwhWnWg8'
+ draft: true
+ prerelease: true
+ on:
+  appveyor_repo_tag: true
