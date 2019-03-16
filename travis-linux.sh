@@ -3,9 +3,7 @@
 set -o verbose
 
 #export BUILD_CONFIGURATION "Debug"
-#export BUILD_CONFIG_FOLDER "debug"
 export BUILD_CONFIGURATION "Release"
-export BUILD_CONFIG_FOLDER "release"
 
 sudo apt-get -qq update
 sudo apt-get install gcc-multilib g++-multilib
@@ -15,9 +13,11 @@ sudo apt-get install p7zip-full
 # Build ETe
 
 cd src
-scons || exit 1
+scons BUILD=${BUILD_CONFIGURATION,,} || exit 1
 
 ls -R *.x86
+echo $TRAVIS_TAG
+echo $BUILD_CONFIGURATION
 
 #7z a "ETe-Linux-$TRAVIS_TAG-$BUILD_CONFIGURATION.x86.7z" ete.x86 eteded.x86
 #cd $TRAVIS_BUILD_DIR
