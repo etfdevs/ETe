@@ -21,10 +21,11 @@ else
  exit 1
 fi
 
-ls -R "./*.x86"
+ls -R *.x86
+
 echo "$TRAVIS_TAG"
 echo "$BUILD_CONFIGURATION"
 
-7z a "ETe-Linux-$TRAVIS_TAG-$BUILD_CONFIGURATION.x86.7z" ete.x86 eteded.x86
+7z a "$TRAVIS_BUILD_DIR/ETe-Linux-$TRAVIS_TAG-$BUILD_CONFIGURATION.x86.7z" ete.x86 eteded.x86
 cd "$TRAVIS_BUILD_DIR"
 7z a "ETe-Linux-$TRAVIS_TAG-$BUILD_CONFIGURATION.x86.7z" docs\*
