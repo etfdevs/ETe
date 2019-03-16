@@ -13,7 +13,15 @@ sudo apt-get install p7zip-full
 # Build ETe
 
 cd src
-scons BUILD=${BUILD_CONFIGURATION,,} || exit 1
+if [ "$BUILD_CONFIGURATION" == "Release" ]
+then
+ scons BUILD=release || exit 1
+elif [ "$BUILD_CONFIGURATION" == "Debug" ]
+then
+ scons BUILD=debug || exit 1
+else
+ exit 1
+fi
 
 ls -R *.x86
 echo $TRAVIS_TAG
