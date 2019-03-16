@@ -2,12 +2,20 @@ language: cpp
 sudo: required
 dist: trusty
 
-before_install:
-  - sudo apt-get -qq update
-  - sudo apt-get install gcc-multilib g++-multilib
-  - sudo apt-get install mesa-common-dev:i386 libxxf86dga-dev:i386 libasound2-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libbsd-dev:i386
+script:
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux.sh; fi
 
-script: cd src && scons
+deploy:
+  provider: releases
+  file_glob: true
+  skip_cleanup: true
+  draft: true
+  prerelease: true
+  api_key:
+    secure: ""
+  file: "ETe*.7z"
+  on:
+    tags: true
 
 notifications:
   email: false
