@@ -13,8 +13,8 @@ sudo apt-get install p7zip-full
 
 #export BUILD_CONFIGURATION="Debug"
 export BUILD_CONFIGURATION="Release"
-export CC=gcc-7
-export CXX=g++-7
+export CC="gcc-7 -m32"
+export CXX="g++-7 -m32"
 
 cd src
 if [[ "$BUILD_CONFIGURATION" == "Release" ]] ; then
