@@ -21,7 +21,7 @@ deploy:
   prerelease: true
   api_key:
     secure: ""
-  file: "ETe*.7z"
+  file: "ete*.7z"
   on:
     tags: true
 
