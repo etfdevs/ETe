@@ -18,9 +18,9 @@ export CXX=g++-7
 
 cd src
 if [[ "$BUILD_CONFIGURATION" == "Release" ]] ; then
- scons BUILD=release "$CC" "$CXX" || exit 1
+ scons BUILD=release CC="$CC" CXX="$CXX" || exit 1
 elif [[ "$BUILD_CONFIGURATION" == "Debug" ]] ; then
- scons BUILD=debug "$CC" "$CXX" || exit 1
+ scons BUILD=debug CC="$CC" CXX="$CXX" || exit 1
 else
  exit 1
 fi
