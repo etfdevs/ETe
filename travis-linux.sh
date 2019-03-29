@@ -6,23 +6,21 @@ sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
 sudo apt-get -qq update
 sudo apt-get install gcc-multilib g++-multilib
 sudo apt-get install mesa-common-dev:i386 libxxf86dga-dev:i386 libasound2-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libbsd-dev:i386
-
-export CC=gcc-7
-export CXX=g++-7
 sudo apt-get -y install g++-7
-
 sudo apt-get install p7zip-full
 
 # Build ETe
 
 #export BUILD_CONFIGURATION="Debug"
 export BUILD_CONFIGURATION="Release"
+export CC=gcc-7
+export CXX=g++-7
 
 cd src
 if [[ "$BUILD_CONFIGURATION" == "Release" ]] ; then
- scons BUILD=release || exit 1
+ scons BUILD=release "$CC" "$CXX" || exit 1
 elif [[ "$BUILD_CONFIGURATION" == "Debug" ]] ; then
- scons BUILD=debug || exit 1
+ scons BUILD=debug "$CC" "$CXX" || exit 1
 else
  exit 1
 fi
