@@ -4,9 +4,8 @@ set -o verbose
 
 sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
 sudo apt-get -qq update
-sudo apt-get install gcc-multilib g++-multilib
+sudo apt-get -y install gcc-7 g++-7 gcc-7-multilib g++-7-multilib
 sudo apt-get install mesa-common-dev:i386 libxxf86dga-dev:i386 libasound2-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libbsd-dev:i386
-sudo apt-get -y install g++-7
 sudo apt-get install p7zip-full
 
 # Build ETe
