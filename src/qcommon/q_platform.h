@@ -116,12 +116,27 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <endian.h>
 
 #define OS_STRING "linux"
-#if defined (__i386__)
-#define OSARCH_STRING OS_STRING "32"
-defined (__x86_64__) || defined (__amd64__)
-#define OSARCH_STRING OS_STRING "64"
-#endif
+
 #define ID_INLINE inline
+#define PATH_SEP '/'
+#define PATH_SEP_FOREIGN '\\'
+#define DLL_EXT ".so"
+
+#if defined __i386__
+#define OSARCH_STRING "linux32"
+#define ARCH_STRING "i386"
+#define Q3_LITTLE_ENDIAN
+#undef id386
+#define id386 1
+#endif
+
+#if defined __x86_64__
+#define OSARCH_STRING "linux64"
+#define ARCH_STRING "x86_64"
+#define Q3_LITTLE_ENDIAN
+#undef idx64
+#define idx64 1
+#endif
 
 #endif // __linux___
 
