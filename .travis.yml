@@ -6,41 +6,24 @@ matrix:
       dist: xenial
       sudo: required
 
-before_install: |
-  DOCKER="i386/ubuntu:16.04"
-
-  docker pull $DOCKER
-  docker run --name bc -v $TRAVIS_BUILD_DIR:/ETe --cap-add SYS_ADMIN --device /dev/fuse -td $DOCKER /bin/bash
-
-install: |
-  docker exec bc apt update
-  docker exec bc apt -y install apt-transport-https ca-certificates gnupg software-properties-common wget
-  docker exec bc apt -y install git p7zip-full libfuse2 build-essential libsdl2-dev libgl1-mesa-dev libjpeg-dev
-  docker exec bc wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
-  docker exec bc apt-add-repository -y 'deb https://apt.kitware.com/ubuntu/ xenial main'
-  docker exec bc add-apt-repository -y ppa:ubuntu-toolchain-r/test
-  docker exec bc apt update
-  docker exec bc apt -y install kitware-archive-keyring
-  docker exec bc rm /etc/apt/trusted.gpg.d/kitware.gpg
-  docker exec bc apt -y install cmake
-  docker exec bc apt -y install gcc-8 g++-8 gcc-8-multilib g++-8-multilib
-  
+before_install:
+  - sudo apt-get -q update
+  - sudo apt-get -y install p7zip-full build-essential libsdl2-dev libgl1-mesa-dev libjpeg-dev
+  - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+  - sudo apt-get -q update
+  - sudo apt-get -y install gcc-8 g++-8 gcc-8-multilib g++-8-multilib
 
 script: |
   cd $TRAVIS_BUILD_DIR/src
   mkdir $TRAVIS_BUILD_DIR/src/build
   cd $TRAVIS_BUILD_DIR/src/build
-  mkdir $TRAVIS_BUILD_DIR/src/build/travis
-  cd $TRAVIS_BUILD_DIR/src/build/travis
 
-  CMAKE_OPTIONS="-DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DSystemProcessor=i386"
-
-  docker exec bc sh -c "cd /ETe/src/build/travis && cmake $CMAKE_OPTIONS ../.."
-  docker exec bc sh -c "cd /ETe/src/build/travis && cmake --build . --config Release"
-
-after_script: |
-  docker stop bc;
-
+  cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
+  cmake --build . --config Release"
+  TZ='America/Chicago'
+  build_date=date +%Y-%m-%d
+  7z a "$build_date.zip" ete.x86 ete-ded.x86
+  7z a "$build_date.zip" ../../docs/*
 
 # - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux-cmake.sh; fi
 # - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux.sh; fi
