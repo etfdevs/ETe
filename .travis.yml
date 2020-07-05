@@ -8,7 +8,7 @@ matrix:
 
 before_install:
   - sudo apt-get -q update
-  - sudo apt-get -y install p7zip-full build-essential libsdl2-dev libgl1-mesa-dev libjpeg-dev
+  - sudo apt-get -y install p7zip-full build-essential libsdl2-dev:i386 libgl1-mesa-dev:i386 libjpeg-dev:i386
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   - sudo apt-get -q update
   - sudo apt-get -y install gcc-8 g++-8 gcc-8-multilib g++-8-multilib
