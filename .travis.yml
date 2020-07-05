@@ -18,9 +18,11 @@ script: |
   mkdir $TRAVIS_BUILD_DIR/src/build
   cd $TRAVIS_BUILD_DIR/src/build
 
+  export CC="gcc-8 -m32"
+  export CXX="g++-8 -m32"
   cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
   cmake --build . --config Release"
-  TZ='America/Chicago'
+  export TZ='America/Chicago'
   build_date=date +%Y-%m-%d
   7z a "$build_date.zip" ete.x86 ete-ded.x86
   7z a "$build_date.zip" ../../docs/*
