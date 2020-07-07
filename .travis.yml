@@ -23,9 +23,9 @@ script: |
   cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
   cmake --build . --config Release
   export TZ='America/Chicago'
-  build_date=date +%Y-%m-%d
-  7z a "$build_date.zip" ete.x86 ete-ded.x86
-  7z a "$build_date.zip" ../../docs/*
+  build_date=$(date +%Y%m%d)
+  7z a "wolfet-2.60e-$build_date-Release-linux-i386.zip" ete.x86 ete-ded.x86
+  7z a "wolfet-2.60e-$build_date-Release-linux-i386.zip" ../../docs/*
 
 # - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux-cmake.sh; fi
 # - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux.sh; fi
