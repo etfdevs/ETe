@@ -267,27 +267,36 @@ set(renderer_files
 
 add_library(botlib STATIC "${botlib_files}")
 target_compile_options(botlib
-    PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug} -w>
-            $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release} -w>
-            $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo} -w>
+    PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:${compiler_flags_debug} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELEASE>>:${compiler_flags_release} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo} -w>
 )
 target_include_directories(botlib PUBLIC "${SRCDIR}/botlib ${SRCDIR}/qcommon")
 target_compile_definitions(botlib PUBLIC "BOTLIB")
 
 add_library(splines STATIC "${splines_files}")
 target_compile_options(splines
-    PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug} -w>
-            $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release} -w>
-            $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo} -w>
+    PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:${compiler_flags_debug} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELEASE>>:${compiler_flags_release} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release} -w>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo} -w>
 )
 target_include_directories(splines PUBLIC "${SRCDIR}/splines")
 #target_link_libraries(splines PRIVATE "libstdc++")
 
 add_library(renderer STATIC "${renderer_files}")
 target_compile_options(renderer
-    PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
-            $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
-            $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
+    PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
+            $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
+            $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
+            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
 )
 target_include_directories(renderer PUBLIC "${SRCDIR}/renderer ${SRCDIR}/renderercommon ${SRCDIR}/qcommon")
 
@@ -329,29 +338,40 @@ if(BUILD_CLIENT)
     endif(USE_SYSTEM_JPEG)
     find_package(CURL REQUIRED)
     if(USE_SDL2)
-        find_package(SDL2 CONFIG REQUIRED)
+        find_package(SDL2 REQUIRED CONFIG)
+
+        if (TARGET SDL2::SDL2)
+            set(SDL2_INCLUDE_DIRS "")
+            set(SDL2_LIBRARIES SDL2::SDL2)
+        endif()
     endif(USE_SDL2)
 
     add_executable(ete "${core_client_files}")
     target_compile_options(ete
-        PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
-                $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
-                $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
+        PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
+                $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
+                $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
+                $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
+                $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
+                $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
     )
     set_target_properties(ete PROPERTIES SUFFIX ".x86") #NOTE changeme when multi-platform and multi-arch support is added
     target_include_directories(ete PUBLIC "${SRCDIR}/botlib ${SRCDIR}/server ${SRCDIR}/client ${SRCDIR}/qcommon")
     target_compile_definitions(ete PUBLIC "USE_CURL")
-    target_link_libraries(ete PRIVATE ${CMAKE_DL_LIBS} m pthread X11 CURL::libcurl)
+    target_include_directories(ete PRIVATE ${CURL_INCLUDE_DIRS})
+    target_link_libraries(ete PRIVATE ${CMAKE_DL_LIBS} m pthread X11 ${CURL_LIBRARIES})
     if(USE_SDL2)
         target_compile_definitions(ete PUBLIC "USE_SDL" "USE_ICON")
-        target_link_libraries(ete PRIVATE SDL2::SDL2)
+        target_include_directories(ete PRIVATE ${SDL2_INCLUDE_DIRS})
+        target_link_libraries(ete PRIVATE ${SDL2_LIBRARIES})
     endif(USE_SDL2)
     #if(USE_DISCORD)
     #    target_compile_definitions(ete PUBLIC "USE_DISCORD")
     #endif(USE_SDL2)
     if(USE_SYSTEM_JPEG)
         target_compile_definitions(ete PUBLIC "USE_SYSTEM_JPEG")
-        target_link_libraries(ete PRIVATE JPEG::JPEG)
+        target_include_directories(ete PRIVATE ${JPEG_INCLUDE_DIRS})
+        target_link_libraries(ete PRIVATE ${JPEG_LIBRARIES})
     endif()
     target_link_libraries(ete PUBLIC botlib splines renderer)
 endif(BUILD_CLIENT)
@@ -359,9 +379,12 @@ endif(BUILD_CLIENT)
 if(BUILD_DEDSERVER)
     add_executable(ete-ded "${dedicated_server_files}")
     target_compile_options(ete-ded
-        PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
-                $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
-                $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
+        PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
+                $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
+                $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
+                $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${compiler_flags_debug}>
+                $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELEASE>>:${compiler_flags_release}>
+                $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${compiler_flags_relwithdebinfo}>
     )
     set_target_properties(ete-ded PROPERTIES SUFFIX ".x86") #NOTE changeme when multi-platform and multi-arch support is added
     target_include_directories(ete-ded PUBLIC "${SRCDIR}/botlib ${SRCDIR}/server ${SRCDIR}/client ${SRCDIR}/qcommon")
