@@ -11,7 +11,7 @@ environment:
 build_script:
   - cmd: call appveyor.bat
 artifacts:
-  - path: ETe*.7z
+  - path: wolfet*.zip
 deploy:
  description: ''
  provider: GitHub
