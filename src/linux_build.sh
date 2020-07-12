@@ -2,8 +2,8 @@
 
 # Setups 32-bit build environment on Debian Stretch 64-bit
 
-if ! dpkg-query -l gcc-multilib g++-multilib make scons > /dev/null ; then
-    echo "run: sudo apt install gcc-multilib g++-multilib make scons"
+if ! dpkg-query -l gcc-multilib g++-multilib make cmake > /dev/null ; then
+    echo "run: sudo apt install gcc-multilib g++-multilib make cmake"
     exit 1
 fi
 
@@ -12,9 +12,12 @@ if ! dpkg --print-foreign-architectures | grep -q i386 ; then
     exit 1
 fi 
 
-if ! dpkg-query -l mesa-common-dev:i386 libxxf86dga-dev:i386 libasound2-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libbsd-dev:i386 > /dev/null ; then
-    echo "run: sudo apt install mesa-common-dev:i386 libxxf86dga-dev:i386 libasound2-dev:i386 libxrandr-dev:i386 libxxf86vm-dev:i386 libbsd-dev:i386"
+if ! dpkg-query -l libglib2.0-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386 libpulse-dev:i386 libjpeg-dev:i386 libsdl2-dev:i386 libcurl4-openssl-dev:i386 ; then
+    echo "run: sudo apt install libglib2.0-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386 libpulse-dev:i386 libjpeg-dev:i386 libsdl2-dev:i386 libcurl4-openssl-dev:i386"
     exit 1
 fi
 
-scons
+mkdir -p build
+cd build
+cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
+cmake --build . --config Release -- -j8
