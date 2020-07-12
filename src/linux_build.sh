@@ -21,3 +21,4 @@ mkdir -p build
 cd build
 cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
 cmake --build . --config Release -- -j8
+cd ..
