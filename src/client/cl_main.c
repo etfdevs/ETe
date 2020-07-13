@@ -2326,7 +2326,7 @@ void CL_NextDownload( void )
 					"(sv_allowDownload is %d)\n",
 					clc.sv_allowDownload);
 			}
-			else if(!*clc.sv_dlURL) {
+			else if(!*clc.sv_dlURL && !*cl_dlURL->string) {
 				Com_Printf("WARNING: server allows "
 					"download redirection, but does not "
 					"have sv_dlURL set\n");
@@ -2336,8 +2336,14 @@ void CL_NextDownload( void )
 					"cURL library\n");
 			}
 			else {
-				CL_cURL_BeginDownload(localName, va("%s/%s",
-					clc.sv_dlURL, remoteName));
+				if(*clc.sv_dlURL) {
+					CL_cURL_BeginDownload(localName, va("%s/%s",
+						clc.sv_dlURL, remoteName));
+				}
+				else {
+					CL_cURL_BeginDownload(localName, va("%s/%s",
+						cl_dlURL->string, remoteName));
+				}
 				useCURL = qtrue;
 			}
 		}
@@ -4738,6 +4744,7 @@ void CL_Shutdown( const char *finalmsg, qboolean quit ) {
 	Cmd_RemoveCommand ("modelist");
 
 #ifdef USE_CURL
+	DL_Shutdown();
 	Com_DL_Cleanup( &download );
 
 	Cmd_RemoveCommand( "download" );

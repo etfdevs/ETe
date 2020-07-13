@@ -937,7 +937,17 @@ DOWNLOAD
 ==============================================================
 */
 
-#include "dl_public.h"
+typedef enum {
+	DL_CONTINUE = 0,
+	DL_DONE,
+	DL_FAILED
+} dlStatus_t;
+
+// bitmask
+typedef enum {
+	DL_FLAG_DISCON = 0,
+	DL_FLAG_URL
+} dlFlags_t;
 
 /*
 ==============================================================

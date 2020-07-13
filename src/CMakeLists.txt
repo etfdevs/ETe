@@ -95,7 +95,7 @@ set(client_files
     "client/snd_mem.c"
     "client/snd_mix.c"
     "client/snd_wavelet.c"
-    "qcommon/dl_main_curl.c"
+    #"qcommon/dl_main_curl.c"
 )
 
 set(server_files
@@ -357,7 +357,7 @@ if(BUILD_CLIENT)
     )
     set_target_properties(ete PROPERTIES SUFFIX ".x86") #NOTE changeme when multi-platform and multi-arch support is added
     target_include_directories(ete PUBLIC "${SRCDIR}/botlib ${SRCDIR}/server ${SRCDIR}/client ${SRCDIR}/qcommon")
-    target_compile_definitions(ete PUBLIC "USE_CURL")
+    target_compile_definitions(ete PUBLIC "USE_CURL" "USE_CURL_DLOPEN")
     target_include_directories(ete PRIVATE ${CURL_INCLUDE_DIRS})
     target_link_libraries(ete PRIVATE ${CMAKE_DL_LIBS} m pthread X11 ${CURL_LIBRARIES})
     if(USE_SDL2)

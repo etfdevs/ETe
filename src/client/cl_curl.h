@@ -24,8 +24,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef __QCURL_H__
 #define __QCURL_H__
 
-extern cvar_t *cl_cURLLib;
-
 #include "../qcommon/q_shared.h"
 #include "../qcommon/qcommon.h"
 
@@ -44,6 +42,9 @@ extern cvar_t *cl_cURLLib;
   #include <curl/curl.h>
 #endif
 
+#ifdef USE_CURL_DLOPEN
+extern cvar_t *cl_cURLLib;
+#endif
 
 #ifdef USE_CURL_DLOPEN
 extern char* (*qcurl_version)(void);
@@ -72,6 +73,35 @@ extern CURLMcode (*qcurl_multi_cleanup)(CURLM *multi_handle);
 extern CURLMsg *(*qcurl_multi_info_read)(CURLM *multi_handle,
 						int *msgs_in_queue);
 extern const char *(*qcurl_multi_strerror)(CURLMcode);
+
+extern char* (*dl_curl_version)(void);
+
+extern CURL* (*dl_curl_easy_init)(void);
+extern CURLcode (*dl_curl_easy_setopt)(CURL *curl, CURLoption option, ...);
+extern CURLcode (*dl_curl_easy_perform)(CURL *curl);
+extern void (*dl_curl_easy_cleanup)(CURL *curl);
+extern CURLcode (*dl_curl_easy_getinfo)(CURL *curl, CURLINFO info, ...);
+extern void (*dl_curl_easy_reset)(CURL *curl);
+extern const char *(*dl_curl_easy_strerror)(CURLcode);
+
+extern CURLM* (*dl_curl_multi_init)(void);
+extern CURLMcode (*dl_curl_multi_add_handle)(CURLM *multi_handle,
+						CURL *curl_handle);
+extern CURLMcode (*dl_curl_multi_remove_handle)(CURLM *multi_handle,
+						CURL *curl_handle);
+extern CURLMcode (*dl_curl_multi_fdset)(CURLM *multi_handle,
+						fd_set *read_fd_set,
+						fd_set *write_fd_set,
+						fd_set *exc_fd_set,
+						int *max_fd);
+extern CURLMcode (*dl_curl_multi_perform)(CURLM *multi_handle,
+						int *running_handles);
+extern CURLMcode (*dl_curl_multi_cleanup)(CURLM *multi_handle);
+extern CURLMsg *(*dl_curl_multi_info_read)(CURLM *multi_handle,
+						int *msgs_in_queue);
+extern const char *(*dl_curl_multi_strerror)(CURLMcode);
+
+
 #else
 #define qcurl_version curl_version
 
@@ -92,6 +122,26 @@ extern const char *(*qcurl_multi_strerror)(CURLMcode);
 #define qcurl_multi_cleanup curl_multi_cleanup
 #define qcurl_multi_info_read curl_multi_info_read
 #define qcurl_multi_strerror curl_multi_strerror
+
+#define dl_curl_version curl_version
+
+#define dl_curl_easy_init curl_easy_init
+#define dl_curl_easy_setopt curl_easy_setopt
+#define dl_curl_easy_perform curl_easy_perform
+#define dl_curl_easy_cleanup curl_easy_cleanup
+#define dl_curl_easy_getinfo curl_easy_getinfo
+#define dl_curl_easy_duphandle curl_easy_duphandle
+#define dl_curl_easy_reset curl_easy_reset
+#define dl_curl_easy_strerror curl_easy_strerror
+
+#define dl_curl_multi_init curl_multi_init
+#define dl_curl_multi_add_handle curl_multi_add_handle
+#define dl_curl_multi_remove_handle curl_multi_remove_handle
+#define dl_curl_multi_fdset curl_multi_fdset
+#define dl_curl_multi_perform curl_multi_perform
+#define dl_curl_multi_cleanup curl_multi_cleanup
+#define dl_curl_multi_info_read curl_multi_info_read
+#define dl_curl_multi_strerror curl_multi_strerror
 #endif
 
 qboolean CL_cURL_Init( void );
@@ -99,6 +149,12 @@ void CL_cURL_Shutdown( void );
 void CL_cURL_BeginDownload( const char *localName, const char *remoteURL );
 void CL_cURL_PerformDownload( void );
 void CL_cURL_Cleanup( void );
+
+qboolean DL_Init( void );
+void DL_Shutdown( void );
+int DL_BeginDownload( const char *localName, const char *remoteName, int debug );
+dlStatus_t DL_DownloadLoop( void );
+void DL_Cleanup( void );
 
 typedef struct download_s {
 	char		URL[MAX_OSPATH];
