@@ -22,7 +22,7 @@ script: |
   export CXX="g++-8 -m32"
   cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
   cmake --build . --config Release
-  export TZ='America/Chicago'
+  export TZ='UTC'
   build_date=$(date +%Y%m%d)
   7z a "wolfet-2.60e-$build_date-Release-linux-i386.zip" ete.x86 ete-ded.x86
   7z a "wolfet-2.60e-$build_date-Release-linux-i386.zip" ../../docs/*
