@@ -18,8 +18,8 @@ script: |
   mkdir $TRAVIS_BUILD_DIR/src/build
   cd $TRAVIS_BUILD_DIR/src/build
 
-  export CC="gcc-8 -m32"
-  export CXX="g++-8 -m32"
+  export CC="gcc-8"
+  export CXX="g++-8"
   cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
   cmake --build . --config Release
   export TZ='UTC'
