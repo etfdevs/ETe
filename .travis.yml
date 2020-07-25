@@ -4,32 +4,18 @@ matrix:
   include:
     - os: linux
       dist: xenial
-      sudo: required
+      addons:
+        apt:
+          sources:
+            - sourceline: "ppa:ubuntu-toolchain-r/test"
+          packages:
+            - p7zip-full gcc-8 g++-8 gcc-8-multilib g++-8-multilib libglib2.0-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386 libpulse-dev:i386 libjpeg-dev:i386 libsdl2-dev:i386 libcurl4-openssl-dev:i386
+#    - os: osx
+#      osx_image: xcode11.3
 
-before_install:
-  - sudo apt-get -q update
-  - sudo apt-get -y install p7zip-full libglib2.0-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386 libpulse-dev:i386 libjpeg-dev:i386 libsdl2-dev:i386 libcurl4-openssl-dev:i386
-  - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-  - sudo apt-get -q update
-  - sudo apt-get -y install gcc-8 g++-8 gcc-8-multilib g++-8-multilib
-
-script: |
-  cd $TRAVIS_BUILD_DIR/src
-  mkdir $TRAVIS_BUILD_DIR/src/build
-  cd $TRAVIS_BUILD_DIR/src/build
-
-  export CC="gcc-8"
-  export CXX="g++-8"
-  cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE="../cmake/toolchains/linux-i686.cmake" ..
-  cmake --build . --config Release
-  export TZ='UTC'
-  build_date=$(date +%Y%m%d)
-  7z a "wolfet-2.60e-$build_date-Release-linux-i386.zip" ete.x86 ete-ded.x86
-  7z a "wolfet-2.60e-$build_date-Release-linux-i386.zip" ../../docs/*
-
-# - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux-cmake.sh; fi
-# - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux.sh; fi
-# - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then ./travis-macos.sh; fi
+script:
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux.sh; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then ./travis-macos.sh; fi
 
 #deploy:
 #  provider: releases
