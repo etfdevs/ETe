@@ -47,13 +47,17 @@ WIP
 
 ~~`make install DESTDIR=<path_to_game_files>`~~
 
-### linux/bsd
+### linux
 
-WIP
+Debian based distros:
+`
+cd src
+./linux_build.sh
+`
+
+Build artifacts ete.x86 and ete-ded.x86 are then found under the build directory.
 
 Only 32-bit binaries compatible until 64-bit mods become available and a 64-bit etmain is available
-
-Use `cmake` or `cmake-gui`
 
 The provided 32-bit cross compile toolchain is provided on this repository.
 
