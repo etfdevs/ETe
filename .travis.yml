@@ -2,20 +2,27 @@ language: cpp
 
 matrix:
   include:
-    - os: linux
-      dist: xenial
-      addons:
-        apt:
-          sources:
-            - sourceline: "ppa:ubuntu-toolchain-r/test"
-          packages:
-            - p7zip-full gcc-8 g++-8 gcc-8-multilib g++-8-multilib libglib2.0-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386 libpulse-dev:i386 libjpeg-dev:i386 libsdl2-dev:i386 libcurl4-openssl-dev:i386
-#    - os: osx
-#      osx_image: xcode11.3
+  - os: linux
+    dist: xenial
+    addons:
+      apt:
+        sources:
+        - sourceline: ppa:ubuntu-toolchain-r/test
+        packages:
+        - p7zip-full gcc-8 g++-8 gcc-8-multilib g++-8-multilib libglib2.0-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386 libpulse-dev:i386 libjpeg-dev:i386 libsdl2-dev:i386 libcurl4-openssl-dev:i386
+#  - os: osx
+#    osx_image: xcode11.3
 
 script:
 - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./travis-linux.sh; fi
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then ./travis-macos.sh; fi
+
+notifications:
+  email: false
+
+before_install:
+- openssl aes-256-cbc -K $encrypted_db2095f63ba3_key -iv $encrypted_db2095f63ba3_iv
+  -in deploy_rsa.enc -out deploy_rsa -d
 
 #deploy:
 #  provider: releases
@@ -28,6 +35,3 @@ script:
 #  file: "ete*.7z"
 #  on:
 #    tags: true
-
-notifications:
-  email: false
