@@ -2,7 +2,7 @@
 
 set -euxo
 
-ssh-keyscan etf2.org
+ssh-keyscan -H etf2.org >> ~/.ssh/known_hosts
 ssh etf@etf2.org mkdir /tmp/etfdeploy
 scp $TRAVIS_BUILD_DIR/*.7z etf@etf2.org:/tmp/etfdeploy
 ssh etf@etf2.org 7z x /tmp/etfdeploy/*.7z
