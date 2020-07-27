@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#set -euxo
+set -euxo
 
 ssh-keyscan etf2.org
 ssh etf@etf2.org mkdir /tmp/etfdeploy
