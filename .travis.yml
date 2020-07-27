@@ -1,3 +1,6 @@
+addons:
+  ssh_known_hosts: etf2.org
+
 language: cpp
 
 matrix:
