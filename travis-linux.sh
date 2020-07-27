@@ -22,5 +22,5 @@ ls -R *.x86
 echo "$TRAVIS_TAG"
 echo "$BUILD_CONFIGURATION"
 
-7z a "$TRAVIS_BUILD_DIR/wolfet-2.60e-$TRAVIS_COMMIT-$BUILD_CONFIGURATION-linux-i386.7z" ete.x86 eteded.x86
+7z a "$TRAVIS_BUILD_DIR/wolfet-2.60e-$TRAVIS_COMMIT-$BUILD_CONFIGURATION-linux-i386.7z" ete.x86 ete-ded.x86
 7z a "$TRAVIS_BUILD_DIR/wolfet-2.60e-$TRAVIS_COMMIT-$BUILD_CONFIGURATION-linux-i386.7z" ../../docs/*
