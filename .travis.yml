@@ -21,9 +21,20 @@ notifications:
   email: false
 
 before_install:
-- openssl aes-256-cbc -K $encrypted_db2095f63ba3_key -iv $encrypted_db2095f63ba3_iv
-  -in deploy_rsa.enc -out deploy_rsa -d
+- openssl aes-256-cbc -K $encrypted_db2095f63ba3_key -iv $encrypted_db2095f63ba3_iv -in deploy_rsa.enc -out /tmp/deploy_rsa -d
+- eval "$(ssh-agent -s)"
+- chmod 600 /tmp/deploy_rsa
+- ssh-add /tmp/deploy_rsa
 
+# master snapshot deployment to test server
+deploy:
+  provider: script
+  skip_cleanup: true
+  script: bash scripts/deploy.sh
+  on:
+    branch: travis-deploy
+
+#  TODO release deployment
 #deploy:
 #  provider: releases
 #  file_glob: true
