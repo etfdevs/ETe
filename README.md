@@ -50,10 +50,10 @@ WIP
 ### linux
 
 Debian based distros:
-`
+```
 cd src
 ./linux_build.sh
-`
+```
 
 Build artifacts ete.x86 and ete-ded.x86 are then found under the build directory.
 
