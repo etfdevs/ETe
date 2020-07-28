@@ -32,7 +32,7 @@ deploy:
   skip_cleanup: true
   script: bash scripts/deploy.sh
   on:
-    branch: travis-deploy
+    branch: master
 
 #  TODO release deployment
 #deploy:
