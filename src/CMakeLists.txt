@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.6)
 project(ETe C CXX)
 
+# print compiler flags
+# set( CMAKE_VERBOSE_MAKEFILE on )
+
 # Set a default build type if none was specified
 set(default_build_type "Release")
  
@@ -10,7 +13,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
       STRING "Choose the type of build." FORCE)
   # Set the possible values of build type for cmake-gui
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-    "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+    "Debug" "Release" "RelWithDebInfo")
 endif()
 
 Include(CheckTypeSize)
@@ -30,10 +33,9 @@ option(USE_SYSTEM_JPEG "Look for and use system jpeg library instead of locally 
 set(USE_DISCORD OFF)
 
 set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing)
-set(compiler_flags_debug ${compiler_flags_global} -g -D_DEBUG)
-set(compiler_flags_relwithdebinfo ${compiler_flags_debug} -O1)
-#set(compiler_flags_minsizerel)
-set(compiler_flags_release ${compiler_flags_global} -DNDEBUG -O3 -march=i686 -Winline -ffast-math -fomit-frame-pointer -finline-functions -fschedule-insns2)
+set(compiler_flags_debug ${compiler_flags_global} -g -Og -D_DEBUG)
+set(compiler_flags_relwithdebinfo ${compiler_flags_global} -g -O1)
+set(compiler_flags_release ${compiler_flags_global} -O3 -DNDEBUG -march=i686 -Winline -ffast-math -fomit-frame-pointer -finline-functions -fschedule-insns2)
 
 set(SRCDIR "${CMAKE_SOURCE_DIR}")
 

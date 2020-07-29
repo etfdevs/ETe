@@ -2277,7 +2277,7 @@ R_FindCachedImage
 =============
 */
 image_t *R_FindCachedImage( const char *name, int hash ) {
-	image_t *bImage, *bImagePrev;
+	image_t *bImage;
 
 	if ( !r_cacheShaders->integer ) {
 		return NULL;
@@ -2288,7 +2288,6 @@ image_t *R_FindCachedImage( const char *name, int hash ) {
 	}
 
 	bImage = backupHashTable[hash];
-	bImagePrev = NULL;
 	while ( bImage ) {
 
 		if ( !Q_stricmp( name, bImage->imgName ) ) {
@@ -2301,7 +2300,6 @@ image_t *R_FindCachedImage( const char *name, int hash ) {
 			return bImage;
 		}
 
-		bImagePrev = bImage;
 		bImage = bImage->next;
 	}
 

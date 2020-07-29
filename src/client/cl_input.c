@@ -310,12 +310,13 @@ void IN_CenterView (void) {
 	cl.viewangles[PITCH] = -SHORT2ANGLE(cl.snap.ps.delta_angles[PITCH]);
 }
 */
-
+/*
 static void IN_Notebook( void ) {
-	//if ( cls.state == CA_ACTIVE && !clc.demoplaying ) {
-	//VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_NOTEBOOK);	// startup notebook
-	//}
+	if ( cls.state == CA_ACTIVE && !clc.demoplaying ) {
+		VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_NOTEBOOK);	// startup notebook
+	}
 }
+*/
 
 static void IN_Help( void ) {
 	if ( uivm && cls.state == CA_ACTIVE && !clc.demoplaying ) {

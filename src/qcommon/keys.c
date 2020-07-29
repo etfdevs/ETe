@@ -320,7 +320,14 @@ static const keyname_t keynames[] =
 	{NULL,0}
 };
 
-static const keyname_t keynames_d[] =    //deutsch
+// suppress unused warnings when building DEDICATED server
+#ifdef __GNUC__
+#define VARIABLE_IS_NOT_USED_IN_DEDICATED_SERVER __attribute__ ((unused))
+#else
+#define VARIABLE_IS_NOT_USED_IN_DEDICATED_SERVER
+#endif
+
+static const keyname_t VARIABLE_IS_NOT_USED_IN_DEDICATED_SERVER keynames_d[] =    //deutsch
 {
 	{"TAB", K_TAB},
 	{"EINGABETASTE", K_ENTER},
@@ -442,7 +449,7 @@ static const keyname_t keynames_d[] =    //deutsch
 	{NULL,0}
 };  //end german
 
-static const keyname_t keynames_f[] =    //french
+static const keyname_t VARIABLE_IS_NOT_USED_IN_DEDICATED_SERVER keynames_f[] =    //french
 {
 	{"TAB", K_TAB},
 	{"ENTREE",   K_ENTER},
@@ -565,7 +572,7 @@ static const keyname_t keynames_f[] =    //french
 	{NULL,0}
 };  //end french
 
-static const keyname_t keynames_s[] =  //Spanish
+static const keyname_t VARIABLE_IS_NOT_USED_IN_DEDICATED_SERVER keynames_s[] =  //Spanish
 {
 	{"TABULADOR", K_TAB},
 	{"INTRO", K_ENTER},
@@ -690,7 +697,7 @@ static const keyname_t keynames_s[] =  //Spanish
 	{NULL,0}
 };
 
-static const keyname_t keynames_i[] =  //Italian
+static const keyname_t VARIABLE_IS_NOT_USED_IN_DEDICATED_SERVER keynames_i[] =  //Italian
 {
 	{"TAB", K_TAB},
 	{"INVIO", K_ENTER},

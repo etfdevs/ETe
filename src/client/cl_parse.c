@@ -580,7 +580,7 @@ void CL_SystemInfoChanged( qboolean onlyGame ) {
 		}
 
 		// we don't really need any of these server cvars to be set on client-side
-		foundkey = (const char *)Q_LinearSearch( key, ignoredCvars, numIgnoredCvars, sizeof( ignoredCvars[0] ), Q_stricmp );
+		foundkey = (const char *)Q_LinearSearch( key, ignoredCvars, numIgnoredCvars, sizeof( ignoredCvars[0] ), (cmpFunc_t)Q_stricmp );
 		if ( foundkey ) {
 			continue;
 		}
@@ -1145,7 +1145,7 @@ void CL_ParseBinaryMessage( msg_t *msg ) {
 		return;
 	}
 
-	CL_CGameBinaryMessageReceived( &msg->data[msg->readcount], size, cl.snap.serverTime );
+	CL_CGameBinaryMessageReceived( (const char *)&msg->data[msg->readcount], size, cl.snap.serverTime );
 }
 
 /*

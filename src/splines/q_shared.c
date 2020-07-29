@@ -530,7 +530,6 @@ int Q_stricmp( const char *s1, const char *s2 ) {
 	return Q_stricmpn( s1, s2, 99999 );
 }
 
-
 char *Q_strlwr( char *s1 ) {
 	char    *s;
 

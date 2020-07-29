@@ -61,8 +61,6 @@ R_Fog (void)
 =================
 */
 void R_Fog( glfog_t *curfog ) {
-	static glfog_t setfog;
-
 	if ( !r_wolffog->integer ) {
 		R_FogOff();
 		return;
@@ -123,11 +121,7 @@ void R_Fog( glfog_t *curfog ) {
 //		}
 	}
 
-	setfog.registered = qtrue;
-
 	qglClearColor( curfog->color[0], curfog->color[1], curfog->color[2], curfog->color[3] );
-
-
 }
 
 // Ridah, allow disabling fog temporarily
@@ -1640,7 +1634,7 @@ DRAWSURF SORTING
 R_Radix
 ===============
 */
-static ID_INLINE void R_Radix( int byte, int size, const drawSurf_t *source, drawSurf_t *dest )
+static void R_Radix( int byte, int size, const drawSurf_t *source, drawSurf_t *dest )
 {
   int           count[ 256 ] = { 0 };
   int           index[ 256 ];

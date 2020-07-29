@@ -213,9 +213,8 @@ qhandle_t R_RegisterMDS(const char *name, model_t *mod)
 	} buf;
 	int	ident;
 	qboolean loaded = qfalse;
-	int filesize;
 
-	filesize = ri.FS_ReadFile(name, (void **) &buf.v);
+	ri.FS_ReadFile(name, (void **) &buf.v);
 	if(!buf.u)
 	{
 		mod->type = MOD_BAD;
@@ -251,9 +250,8 @@ qhandle_t R_RegisterMDM(const char *name, model_t *mod)
 	} buf;
 	int	ident;
 	qboolean loaded = qfalse;
-	int filesize;
 
-	filesize = ri.FS_ReadFile(name, (void **) &buf.v);
+	ri.FS_ReadFile(name, (void **) &buf.v);
 	if(!buf.u)
 	{
 		mod->type = MOD_BAD;
@@ -289,9 +287,8 @@ qhandle_t R_RegisterMDX(const char *name, model_t *mod)
 	} buf;
 	int	ident;
 	qboolean loaded = qfalse;
-	int filesize;
 
-	filesize = ri.FS_ReadFile(name, (void **) &buf.v);
+	ri.FS_ReadFile(name, (void **) &buf.v);
 	if(!buf.u)
 	{
 		mod->type = MOD_BAD;
@@ -2463,13 +2460,10 @@ R_PurgeModels
 ===============
 */
 void R_PurgeModels( int count ) {
-	static int lastPurged = 0;
-
 	if ( !numBackupModels ) {
 		return;
 	}
 
-	lastPurged = 0;
 	numBackupModels = 0;
 
 	// note: we can only do this since we only use the virtual memory for the model caching!

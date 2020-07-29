@@ -187,7 +187,7 @@ static void tty_FlushIn( void )
 //   (there may be a way to find out if '\b' alone would work though)
 static void tty_Back( void )
 {
-	write( STDOUT_FILENO, "\b \b", 3 );
+	(void)!write( STDOUT_FILENO, "\b \b", 3 );
 }
 
 
@@ -230,11 +230,11 @@ void tty_Show( void )
 		ttycon_hide--;
 		if ( ttycon_hide == 0 )
 		{
-			write( STDOUT_FILENO, "]", 1 ); // -EC-
+			(void)!write( STDOUT_FILENO, "]", 1 ); // -EC-
 
 			if ( tty_con.cursor > 0 )
 			{
-				write( STDOUT_FILENO, tty_con.buffer, tty_con.cursor );
+				(void)!write( STDOUT_FILENO, tty_con.buffer, tty_con.cursor );
 			}
 		}
 	}
@@ -519,7 +519,7 @@ char *Sys_ConsoleInput( void )
 						s++;
 					Q_strncpyz( text, s, sizeof( text ) );
 					Field_Clear( &tty_con );
-					write( STDOUT_FILENO, "\n]", 2 );
+					(void)!write( STDOUT_FILENO, "\n]", 2 );
 					return text;
 				}
 
@@ -574,10 +574,10 @@ char *Sys_ConsoleInput( void )
 
 				if ( key == 12 ) // clear teaminal
 				{
-					write( STDOUT_FILENO, "\ec]", 3 );
+					(void)!write( STDOUT_FILENO, "\ec]", 3 );
 					if ( tty_con.cursor )
 					{
-						write( STDOUT_FILENO, tty_con.buffer, tty_con.cursor );
+						(void)!write( STDOUT_FILENO, tty_con.buffer, tty_con.cursor );
 					}
 					tty_FlushIn();
 					return NULL;
@@ -593,7 +593,7 @@ char *Sys_ConsoleInput( void )
 			tty_con.buffer[ tty_con.cursor ] = key;
 			tty_con.cursor++;
 			// print the current line (this is differential)
-			write( STDOUT_FILENO, &key, 1 );
+			(void)!write( STDOUT_FILENO, &key, 1 );
 		}
 		return NULL;
 	}
@@ -767,7 +767,7 @@ static void* try_dlopen( const char* base, const char* gamedir, const char* fnam
 
 	if( !libHandle ) 
 	{
-    	Com_Printf( "Sys_LoadDll(%s) failed:\n\"%s\"\n", fn, do_dlerror() );
+		Com_Printf( "Sys_LoadDll(%s) failed:\n\"%s\"\n", fn, do_dlerror() );
 		return NULL;
 	}
 
@@ -849,18 +849,15 @@ void *Sys_LoadDll( const char *name, dllSyscall_t *entryPoint, dllSyscall_t syst
 //	char		currpath[MAX_OSPATH];
 //#endif
 	char		fname[MAX_OSPATH];
-	const char	*pwdpath;
 	const char	*basepath;
 	const char	*homepath;
 	const char	*gamedir;
-	const char	*fn;
 	const char	*cvar_name;
 	const char	*err = NULL;
 
 	assert( name ); // let's have some paranoia
 
 	Q_strncpyz( fname, Sys_GetDLLName( name ), sizeof( fname ) );
-	pwdpath = Sys_Pwd();
 	basepath = Cvar_VariableString( "fs_basepath" );
 	homepath = Cvar_VariableString( "fs_homepath" );
 	gamedir = Cvar_VariableString( "fs_game" );
@@ -869,6 +866,7 @@ void *Sys_LoadDll( const char *name, dllSyscall_t *entryPoint, dllSyscall_t syst
 	}
 
 	cvar_name = va( "cl_lastVersion%s", name );
+	Com_DPrintf("cl_lastVersion: %s\n", cvar_name);
 
 	// this is relevant to client only
 	// this code is in for full client hosting a game, but it's not affected by it
@@ -880,7 +878,8 @@ void *Sys_LoadDll( const char *name, dllSyscall_t *entryPoint, dllSyscall_t syst
 	fn = FS_BuildOSPath( pwdpath, gamedir, fname );
 	if ( access( fn, R_OK ) == -1 ) {
 #endif
-	fn = FS_BuildOSPath( homepath, gamedir, fname );
+	const char	*pwdpath = Sys_Pwd();
+	const char	*fn = FS_BuildOSPath( homepath, gamedir, fname );
 	if ( access( fn, R_OK ) == 0 ) {
 		// there is a .so in fs_homepath, but is it a valid one version-wise?
 		// we use a persistent variable in config.cfg to make sure
@@ -896,7 +895,7 @@ void *Sys_LoadDll( const char *name, dllSyscall_t *entryPoint, dllSyscall_t syst
 			fn = FS_BuildOSPath( basepath, gamedir, fname );
 			if ( access( fn, R_OK ) == -1 ) {
 				// we may be dealing with a media-only mod, check wether we can find 'reference' DLLs and copy them over
-				if ( !CopyDLLForMod( &fn, gamedir, pwdpath, homepath, basepath, fname ) ) {
+				if ( !CopyDLLForMod( (char **)&fn, gamedir, pwdpath, homepath, basepath, fname ) ) {
 					Com_Error( ERR_FATAL, "Sys_LoadDll(%s) failed, no corresponding .so file found in fs_homepath or fs_basepath\n", name );
 				}
 			}
@@ -905,8 +904,8 @@ void *Sys_LoadDll( const char *name, dllSyscall_t *entryPoint, dllSyscall_t syst
 	} else {
 		fn = FS_BuildOSPath( basepath, gamedir, fname );
 		if ( access( fn, R_OK ) == -1 ) {
-			// we may be dealing with a media-only mod, check wether we can find 'reference' DLLs and copy them over
-			if ( !CopyDLLForMod( &fn, gamedir, pwdpath, homepath, basepath, fname ) ) {
+			// we may be dealing with a media-only mod, check whether we can find 'reference' DLLs and copy them over
+			if ( !CopyDLLForMod( (char **)&fn, gamedir, pwdpath, homepath, basepath, fname ) ) {
 				Com_Error( ERR_FATAL, "Sys_LoadDll(%s) failed, no corresponding .so file found in fs_homepath or fs_basepath\n", name );
 			}
 		}
@@ -1177,9 +1176,12 @@ void Sys_DoStartProcess( const char *cmdline ) {
 		break;
 	case 0:
 		if ( strchr( cmdline, ' ' ) ) {
-			system( cmdline );
+			int res = system( cmdline );
+			if (!res) {
+				printf( "system call for %s failed with result: %d\n", cmdline, res );
+			}
 		} else {
-			execl( cmdline, cmdline, NULL );
+            execl( cmdline, cmdline, NULL );
 			printf( "execl failed: %s\n", strerror( errno ) );
 		}
 		_exit( 0 );

@@ -469,7 +469,6 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 {
 	qboolean fog = qfalse;
 	qboolean linear = qfalse;
-	qboolean directional = qfalse;
 	qboolean abslight = qfalse;
 
 	program[0] = '\0';
@@ -499,7 +498,6 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		case DLIGHT_DIRECTIONAL_FRAGMENT_FOG:
 		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT:
 		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG:
-			directional = qtrue;
 			break;
 	}
 

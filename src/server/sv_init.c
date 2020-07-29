@@ -470,10 +470,10 @@ static void SV_SetExpectedHunkUsage( const char *mapname ) {
 
 		// now parse the file, filtering out the current map
 		buftrav = buf;
-		while ( ( token = COM_Parse( &buftrav ) ) != NULL && token[0] ) {
+		while ( ( token = COM_Parse( (const char **)&buftrav ) ) != NULL && token[0] ) {
 			if ( !Q_stricmp( token, mapname ) ) {
 				// found a match
-				token = COM_Parse( &buftrav );  // read the size
+				token = COM_Parse( (const char **)&buftrav );  // read the size
 				if ( token && token[0] ) {
 					// this is the usage
 					com_expectedhunkusage = atoi( token );
@@ -1039,7 +1039,7 @@ to totally exit after returning from this function.
 */
 void SV_FinalCommand( const char *cmd, qboolean disconnect ) {
 	int i, j;
-	client_t    *cl;
+	client_t *cl;
 
 	// send it twice, ignoring rate
 	for ( j = 0 ; j < 2 ; j++ ) {
