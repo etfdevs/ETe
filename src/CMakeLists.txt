@@ -32,7 +32,7 @@ option(USE_SYSTEM_JPEG "Look for and use system jpeg library instead of locally 
 
 set(USE_DISCORD OFF)
 
-set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing -Wno-format-security)
+set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing)
 set(compiler_flags_debug ${compiler_flags_global} -g -Og -D_DEBUG)
 set(compiler_flags_relwithdebinfo ${compiler_flags_global} -g -O1)
 set(compiler_flags_release ${compiler_flags_global} -O3 -DNDEBUG -march=i686 -Winline -ffast-math -fomit-frame-pointer -finline-functions -fschedule-insns2)

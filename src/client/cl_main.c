@@ -2622,6 +2622,7 @@ print OOB are the only messages we handle markups in
   to 256 chars.
 ===================
 */
+#pragma GCC diagnostic ignored "-Wformat-security"
 static qboolean CL_PrintPacket( const netadr_t *from, msg_t *msg ) {
 	const char *s = NULL;
 	qboolean fromserver = NET_CompareAdr( from, &clc.serverAddress );
@@ -2657,6 +2658,7 @@ static qboolean CL_PrintPacket( const netadr_t *from, msg_t *msg ) {
 	Com_Printf( "%s", clc.serverMessage );
 	return fromserver;
 }
+#pragma GCC diagnostic pop
 
 /*
 ===================
@@ -3320,7 +3322,9 @@ void CL_WWWDownload( void ) {
 			const char *error = va( "Download failure while getting '%s'\n", cls.downloadName ); // get the msg before clearing structs
 			cls.bWWWDlDisconnected = qfalse; // need clearing structs before ERR_DROP, or it goes into endless reload
 			CL_ClearStaticDownload();
+#pragma GCC diagnostic ignored "-Wformat-security"
 			Com_Error( ERR_DROP, error );
+#pragma GCC diagnostic pop
 		} else {
 			// see CL_ParseDownload, same abort strategy
 			Com_Printf( "Download failure while getting '%s'\n", cls.downloadName );
@@ -6304,7 +6308,9 @@ CL_OpenURLForCvar
 */
 void CL_OpenURL( const char *url ) {
 	if ( !url || !strlen( url ) ) {
+#pragma GCC diagnostic ignored "-Wformat-security"
 		Com_Printf( CL_TranslateStringBuf( "invalid/empty URL\n" ) );
+#pragma GCC diagnostic pop
 		return;
 	}
 	Sys_OpenURL( url, qtrue );
