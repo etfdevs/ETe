@@ -1048,10 +1048,13 @@ void SV_FinalCommand( const char *cmd, qboolean disconnect ) {
 				// don't send a disconnect to a local client
 				if ( cl->netchan.remoteAddress.type != NA_LOOPBACK ) {
 					//%	SV_SendServerCommand( cl, "print \"%s\"", message );
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wformat-security"
+#endif
 					SV_SendServerCommand( cl, cmd );
+#ifdef __GNUC__
 #pragma GCC diagnostic pop
-
+#endif
 					// ydnar: added this so map changes can use this functionality
 					if ( disconnect ) {
 						SV_SendServerCommand( cl, "disconnect" );
