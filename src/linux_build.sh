@@ -14,7 +14,7 @@ if [ -e "/etc/arch-release" ] || [ -e "/etc/manjaro-release" ]; then
         echo "run: sudo pacman -S lib32-alsa-lib lib32-libpulse lib32-jack lib32-sdl2 lib32-libjpeg-turbo lib32-curl"
     fi
 elif [ -e "/etc/debian_version" ] || [ -e "/etc/debian_release" ] || [ -e "/etc/ubuntu-release" ] ; then
-    # Setups 32-bit build environment on Debian Stretch 64-bit
+    # Setups 32-bit build environment on Debian 64-bit
 
     echo "Debian/Ubuntu Detected"
 

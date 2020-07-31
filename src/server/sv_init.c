@@ -455,7 +455,7 @@ SV_SetExpectedHunkUsage
 static void SV_SetExpectedHunkUsage( const char *mapname ) {
 	int handle;
 	char *buf;
-	char *buftrav;
+	const char **buftrav;
 	char *token;
 	int len;
 
@@ -469,11 +469,11 @@ static void SV_SetExpectedHunkUsage( const char *mapname ) {
 		FS_FCloseFile( handle );
 
 		// now parse the file, filtering out the current map
-		buftrav = buf;
-		while ( ( token = COM_Parse( (const char **)&buftrav ) ) != NULL && token[0] ) {
+		buftrav = (const char**)&buf;
+		while ( ( token = COM_Parse( buftrav ) ) != NULL && token[0] ) {
 			if ( !Q_stricmp( token, mapname ) ) {
 				// found a match
-				token = COM_Parse( (const char **)&buftrav );  // read the size
+				token = COM_Parse( buftrav );  // read the size
 				if ( token && token[0] ) {
 					// this is the usage
 					com_expectedhunkusage = atoi( token );
