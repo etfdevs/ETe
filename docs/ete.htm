@@ -4,7 +4,7 @@ This client aims to be fully compatible with original etmain and (most) other va
 while trying to be fast, reliable and bug-free.
 <br>
 It is based on ioquake3-r1160 (latest non-SDL revision) with upstream patches an many custom improvements.
-It also contains some changes imported from etlegacy upstream for posteriety and compatibility as well as additional fixes.<br>
+It also contains some changes imported from etlegacy upstream for posterity and compatibility as well as additional fixes.<br>
 <br>
 <b>Common changes/additions:</b>
 <ul>
@@ -31,7 +31,7 @@ It also contains some changes imported from etlegacy upstream for posteriety and
 <li>hardcoded Shift+PrintScreen - for "\screenshotBMP"</li>
 <li><b>\com_maxfpsUnfocused</b> - will save cpu when inactive,set to your desktop refresh rate, for example</li>
 <li><b>\com_skipIdLogo</b> <font color=silver><b>0</b>|1</font>- skip playing idlogo movie at startup</li>
-<li><b>\com_yieldCPU </b>&lt;milliseconds&gt; - try to sleep specified amout of time between rendered frames when game is active, this will greatly reduce CPU load, use <b>0</b> only if you're experiencing some lags (also it is usualy reduces performance on integrated graphics because CPU steals GPU's power budget)</li>
+<li><b>\com_yieldCPU </b>&lt;milliseconds&gt; - try to sleep specified amout of time between rendered frames when game is active, this will greatly reduce CPU load, use <b>0</b> only if you're experiencing some lags (also it is usually reduces performance on integrated graphics because CPU steals GPU's power budget)</li>
 <li><b>\r_defaultImage</b> <font color=silver>&lt;filename&gt;|#rgb|#rrggbb</font> - replace default (missing) image texture by either exact file or solid #rgb|#rrggbb background color</li>
 <li><b>\r_vbo</b> <font color=silver><b>0</b>|1</font> - use Vertex Buffer Objects to cache static map geometry, may improve FPS on modern GPUs, increases hunk memory usage by 15-30MB (map-dependent)</li>
 <div id="r_fbo"></div>
@@ -79,13 +79,13 @@ It also contains some changes imported from etlegacy upstream for posteriety and
 <li><b>\sv_levelTimeReset</b> <font color=silver><b>0</b>|1</font> - reset or do not reset leveltime after new map loads, when enabled - fixes gfx for clients affected by "frameloss" bug, however it may be necessary disable in case of troubles with GTV</li>
 <li><b>\sv_maxclientsPerIP</b> - limit number of simultaneous connections from the same IP address</li>
 <li>much improved DDoS protection</li>
-<li><b>\sv_minPing</b> and <b>\sv_maxPing</b> were removed because of new much better client connecion code</li>
+<li><b>\sv_minPing</b> and <b>\sv_maxPing</b> were removed because of new much better client connection code</li>
 <li>userinfo filtering system, see docs/filter.txt</li>
 <li><b>rcon</b> now is always available on dedicated servers</li>
 <li><b>rconPassword2</b> - hidden master rcon password that can be set only from command line, i.e.<br>
 &nbsp;&nbsp;<b> +set rconPassword2 "123456"</b><br>
 can be used to change/revoke compromised <b>rconPassword</b></li>
-<li>significally reduced memory usage for client slots</li>
+<li>significantly reduced memory usage for client slots</li>
 </li>
 </ul>
 
@@ -103,7 +103,7 @@ can be used to change/revoke compromised <b>rconPassword</b></li>
 
 <hr>
 <p><b>Fast client downloads</b><br><br>
-Usually downloads in ET is slow because all dowloaded data is requested/revieced from game server directly. 
+Usually downloads in ET is slow because all downloaded data is requested/received from game server directly. 
 So called `download redirection' allows very fast downloads because game server just tells you from where you should download all required mods/maps etc. - it can be internet or local http/ftp server<br>
 So what you need:
 <ul>
@@ -129,13 +129,13 @@ You can easy download pk3 files you need from any ftp/http/etc resource via foll
 <b>\dlmap</b> is the same as <b>\download</b> but also will check for map existence
 <br>
 <br>
-<b>cl_dlURL</b> cvar must points to download location, where (optional) <b>%1</b> pattern will be replaced by <b>\download|dlmap</b> command argument (filename/mapmane) and HTTP header may be analysed to obtain destination filename<br><br>
+<b>cl_dlURL</b> cvar must points to download location, where (optional) <b>%1</b> pattern will be replaced by <b>\download|dlmap</b> command argument (filename/mapname) and HTTP header may be analysed to obtain destination filename<br><br>
 
 For example: <br><br>
 &nbsp;&nbsp;1) If <b>cl_dlURL</b> is <b>http://127.0.0.1</b> and you type <b>\download <u>promaps.pk3</u></b> -
-&nbsp;&nbsp;resulting download url will be <b>http://127.0.0.1/promaps.pk3</b><br>
+&nbsp;&nbsp;resulting download URL will be <b>http://127.0.0.1/promaps.pk3</b><br>
 &nbsp;&nbsp;2) If <b>cl_dlURL</b> is <b>http://127.0.0.1/%1</b> and you type <b>\dlmap dm17</b> -
-&nbsp;&nbsp;resulting download url will be <b>http://127.0.0.1/dm17</b><br>
+&nbsp;&nbsp;resulting download URL will be <b>http://127.0.0.1/dm17</b><br>
 &nbsp;&nbsp;Also in this case HTTP-header will be analysed and resulting filename may be changed<br>
 
 <br>
@@ -162,7 +162,7 @@ What you need to do:
 </ul>
 <br>
 <hr>
-<p><b><div id="condstages"></div>Condifional shader stages</b><br><br>
+<p><b><div id="condstages"></div>Conditional shader stages</b><br><br>
 Optional "if"-"elif"-"else" keywords can be used to control which shaders stages can be loaded depending from some cvar values.<br>
 For example, old shader:
 <pre>
@@ -201,7 +201,7 @@ lvalue-only conditions are supported, count of conditions inside if()/elif() is 
 <br>
 <br>
 <hr>
-<p><b><div id="video-pipe"></div>Redurect captured video to ffmpeg input pipe</b><br><br>
+<p><b><div id="video-pipe"></div>Redirect captured video to ffmpeg input pipe</b><br><br>
 In order to use this functionality you need to install ffmpeg package (on linux) or put ffmpeg binary near ete executable (on windows).<br>
 <br>
 Use <b>\cl_aviPipeFormat</b> to control encoder parameters passed to ffmpeg, see ffmpeg documentation for details, default value is set according to YouTube recommendations:<br>
@@ -215,7 +215,7 @@ And since ffmpeg can utilize all available CPU cores for faster encoding - make 
 <hr>
 <div id="arr"></div><b>Arbitrary resolution rendering</b><br>
 <br>
-Use <b>\r_renderWidth</b> and <b>\r_renderHeight</b> cvars to set persistant rendering resolution, i.e. game frame will be rendered at this resolution and later upscaled/downscaled to window size set by either <b>\r_mode</b> or <b>\r_modeFullscreen</b> cvars.<br>
+Use <b>\r_renderWidth</b> and <b>\r_renderHeight</b> cvars to set persistent rendering resolution, i.e. game frame will be rendered at this resolution and later upscaled/downscaled to window size set by either <b>\r_mode</b> or <b>\r_modeFullscreen</b> cvars.<br>
 Cvar <b>\r_renderScale</b> controls upscale/downscale behavior:
 <ul>
 <li>0 - disabled</li>
