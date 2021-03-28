@@ -2520,6 +2520,7 @@ static qboolean CollapseMultitexture( shaderStage_t *st0, shaderStage_t *st1, in
 	st0->mtEnv = collapse[i].multitextureEnv;
 	st0->stateBits &= ~GLS_BLEND_BITS;
 	st0->stateBits |= collapse[i].multitextureBlend;
+	st0->tessFlags |= TESS_ST1;
 
 	//
 	// move down subsequent shaders
@@ -3188,6 +3189,10 @@ static shader_t *FinishShader( void ) {
 		stage = 1;
 		hasLightmapStage = qfalse;
 	}*/
+
+	for ( i = 0; i < stage; i++ ) {
+		stages[i].tessFlags = TESS_ST0;
+	}
 
 	//
 	// look for multitexture potential
