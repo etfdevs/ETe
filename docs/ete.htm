@@ -3,7 +3,7 @@
 This client aims to be fully compatible with original etmain and (most) other vanilla mods
 while trying to be fast, reliable and bug-free.
 <br>
-It is based on ioquake3-r1160 (latest non-SDL revision) with upstream patches an many custom improvements.
+It is based on ioquake3-r1160 (latest non-SDL revision) with upstream patches and many custom improvements.
 It also contains some changes imported from etlegacy upstream for posterity and compatibility as well as additional fixes.<br>
 <br>
 <b>Common changes/additions:</b>
@@ -11,7 +11,7 @@ It also contains some changes imported from etlegacy upstream for posterity and 
 <li>a lot of security, performance and bug fixes</li>
 <li>much improved autocompletion (map, demo, exec and other commands), in-game <b>\callvote</b> argument autocompletion</li>
 <li><b>\com_affinityMask</b> - bind ETe process to bitmask-specified CPU core(s)</li>
-<li>raized filesystem limits, much faster startup with 1000+ pk3 files in use, level restart times were also reduced as well</li>
+<li>raised filesystem limits, much faster startup with 1000+ pk3 files in use, level restart times were also reduced as well</li>
 <li><b>\fs_locked</b> <font color=silver><b>0</b>|1</font> - keep opened pk3 files locked or not, removes pk3 file limit when unlocked</li>
 </ul>
 <b>Client-specific changes/additions:</b>
@@ -29,9 +29,9 @@ It also contains some changes imported from etlegacy upstream for posterity and 
 <li><b>\screenshotBMP</b> and <b>\screenshotBMP clipboard</b> commands</li>
 <li>hardcoded PrintScreen key - for "\screenshotBMP clipboard"</li>
 <li>hardcoded Shift+PrintScreen - for "\screenshotBMP"</li>
-<li><b>\com_maxfpsUnfocused</b> - will save cpu when inactive,set to your desktop refresh rate, for example</li>
+<li><b>\com_maxfpsUnfocused</b> - will save cpu when inactive, set to your desktop refresh rate, for example</li>
 <li><b>\com_skipIdLogo</b> <font color=silver><b>0</b>|1</font>- skip playing idlogo movie at startup</li>
-<li><b>\com_yieldCPU </b>&lt;milliseconds&gt; - try to sleep specified amout of time between rendered frames when game is active, this will greatly reduce CPU load, use <b>0</b> only if you're experiencing some lags (also it is usually reduces performance on integrated graphics because CPU steals GPU's power budget)</li>
+<li><b>\com_yieldCPU </b>&lt;milliseconds&gt; - try to sleep specified amout of time between rendered frames when game is active, this will greatly reduce CPU load, use <b>0</b> only if you're experiencing some lags (also it usually reduces performance on integrated graphics because CPU steals GPU's power budget)</li>
 <li><b>\r_defaultImage</b> <font color=silver>&lt;filename&gt;|#rgb|#rrggbb</font> - replace default (missing) image texture by either exact file or solid #rgb|#rrggbb background color</li>
 <li><b>\r_vbo</b> <font color=silver><b>0</b>|1</font> - use Vertex Buffer Objects to cache static map geometry, may improve FPS on modern GPUs, increases hunk memory usage by 15-30MB (map-dependent)</li>
 <div id="r_fbo"></div>
@@ -49,8 +49,8 @@ It also contains some changes imported from etlegacy upstream for posterity and 
 <li><b>\r_modeFullscreen</b> - dedicated mode string for fullscreen mode, set to -2 to use desktop resolution, set empty to use <b>\r_mode</b> in all cases</li>
 <li><b>\r_nomip</b> <font color=silver><b>0</b>|1</font>- apply picmip only on worldspawn textures</li>
 <li><b>\r_neatsky</b> <font color=silver><b>0</b>|1</font> - nopicmip for skyboxes</li>
-<li><b>\r_greyscale</b> <font color=silver>[<b>0</b>..1.0]</font> - desaturates rendered frame, requires <b><a href="#r_fbo">\r_fbo 1</a></b>, can be changed on 	the fly</li>
-<li><b>\r_mapGreyScale</b> <font color=silver>[-1.0..1.0]</font> - desaturate world map textures only, works independently from <b>\r_greyscale</b>, negative values desaturates lightmaps only</li>
+<li><b>\r_greyscale</b> <font color=silver>[<b>0</b>..1.0]</font> - desaturate rendered frame, requires <b><a href="#r_fbo">\r_fbo 1</a></b>, can be changed on 	the fly</li>
+<li><b>\r_mapGreyScale</b> <font color=silver>[-1.0..1.0]</font> - desaturate world map textures only, works independently from <b>\r_greyscale</b>, negative values desaturate lightmaps only</li>
 <li><b>\r_ext_multisample</b> <font color=silver><b>0</b>|2|4|6|8</font> - multi-sample anti-aliasing, requires <b><a href="#r_fbo">\r_fbo 1</a></b>, can be changed on the fly</li>
 <li><b>\r_ext_supersample</b> <font color=silver><b>0</b>|1</font> - super-sample anti-aliasing, requires <b><a href="#r_fbo">\r_fbo 1</a></b></li>
 <li><b>\r_noborder</b> <font color=silver><b>0</b>|1</font> - to draw game window without border, hold ALT to drag & drop it with opened console</li>
@@ -76,16 +76,16 @@ It also contains some changes imported from etlegacy upstream for posterity and 
 
 <b>Server-specific changes/additions:</b>
 <ul>
-<li><b>\sv_levelTimeReset</b> <font color=silver><b>0</b>|1</font> - reset or do not reset leveltime after new map loads, when enabled - fixes gfx for clients affected by "frameloss" bug, however it may be necessary disable in case of troubles with GTV</li>
+<li><b>\sv_levelTimeReset</b> <font color=silver><b>0</b>|1</font> - reset or do not reset leveltime after new map loads, when enabled - fixes gfx for clients affected by "frameloss" bug, however it may be necessary to disable in case of troubles with GTV</li>
 <li><b>\sv_maxclientsPerIP</b> - limit number of simultaneous connections from the same IP address</li>
 <li>much improved DDoS protection</li>
-<li><b>\sv_minPing</b> and <b>\sv_maxPing</b> were removed because of new much better client connecion code</li>
+<li><b>\sv_minPing</b> and <b>\sv_maxPing</b> were removed because of new, much better client connecion code</li>
 <li>userinfo filtering system, see docs/filter.txt</li>
 <li><b>rcon</b> now is always available on dedicated servers</li>
 <li><b>rconPassword2</b> - hidden master rcon password that can be set only from command line, i.e.<br>
 &nbsp;&nbsp;<b> +set rconPassword2 "123456"</b><br>
 can be used to change/revoke compromised <b>rconPassword</b></li>
-<li>significally reduced memory usage for client slots</li>
+<li>significantly reduced memory usage for client slots</li>
 </li>
 </ul>
 
@@ -103,8 +103,8 @@ can be used to change/revoke compromised <b>rconPassword</b></li>
 
 <hr>
 <p><b>Fast client downloads</b><br><br>
-Usually downloads in ET is slow because all downloaded data is requested/revieced from game server directly.
-So called `download redirection' allows very fast downloads because game server just tells you from where you should download all required mods/maps etc. - it can be internet or local http/ftp server<br>
+Usually downloads in ET are slow because all downloaded data is requested/received from game server directly.
+So called "download redirection" allows very fast downloads because game server just tells you from where you should download all required mods/maps etc. - it can be internet or local http/ftp server<br>
 So what you need:
 <ul>
 <li>set <b>sv_dlURL</b> cvar to download location, for example:<br>
@@ -121,7 +121,7 @@ So what you need:
 <hr>
 <div id="dlmap"></div>
 <p><b>Fast client-initiated downloads</b><br><br>
-You can easy download pk3 files you need from any ftp/http/etc resource via following commands: <br>
+You can easily download pk3 files you need from any ftp/http/etc resource via following commands: <br>
 
 <b>\download</b> <b>filename</b>[.pk3]<br>
 <b>\dlmap</b> <b>mapname</b>[.pk3]<br>
@@ -129,7 +129,7 @@ You can easy download pk3 files you need from any ftp/http/etc resource via foll
 <b>\dlmap</b> is the same as <b>\download</b> but also will check for map existence
 <br>
 <br>
-<b>cl_dlURL</b> cvar must points to download location, where (optional) <b>%1</b> pattern will be replaced by <b>\download|dlmap</b> command argument (filename/mapmane) and HTTP header may be analysed to obtain destination filename<br><br>
+<b>cl_dlURL</b> cvar must point to download location, where (optional) <b>%1</b> pattern will be replaced by <b>\download|dlmap</b> command argument (filename/mapmane) and HTTP header may be analysed to obtain destination filename<br><br>
 
 For example: <br><br>
 &nbsp;&nbsp;1) If <b>cl_dlURL</b> is <b>http://127.0.0.1</b> and you type <b>\download <u>promaps.pk3</u></b> -
@@ -149,7 +149,7 @@ To stop download just specify '-' as argument:<br>
 <br>
 <hr>
 <p> <b>Built-in URL-filter</b><br><br>
-There is ability to launch ET 2.60e client directly from your browser
+There is the ability to launch ET 2.60e client directly from your browser
 by just clicking on URL that contains <b>et://</b>
 instead of usual <b>http://</b> or <b>ftp://</b> protocol headers<br><br>
 
@@ -157,7 +157,7 @@ What you need to do:
 <ul>
 <li>copy <b>eturl_add.cmd</b>/<b>eturl_rem.cmd</b> in ete.exe directory </li>
 <li>run <b>eturl_add.cmd</b> if you want to add protocol binding or <b>eturl_add.cmd</b> if you want to remove it</li>
-<li>type in your browser <a href="et://127.0.0.1"><b>et://</b>127.0.0.1</a> and follow it - if you see ete launching and trying to connect then everything is fine
+<li>type in your browser <a href="et://127.0.0.1"><b>et://</b>127.0.0.1</a> and follow it - if you see ete launching and trying to connect, everything is fine
 </li>
 </ul>
 <br>
@@ -201,7 +201,7 @@ lvalue-only conditions are supported, count of conditions inside if()/elif() is 
 <br>
 <br>
 <hr>
-<p><b><div id="video-pipe"></div>Redurect captured video to ffmpeg input pipe</b><br><br>
+<p><b><div id="video-pipe"></div>Redirect captured video to ffmpeg input pipe</b><br><br>
 In order to use this functionality you need to install ffmpeg package (on linux) or put ffmpeg binary near ete executable (on windows).<br>
 <br>
 Use <b>\cl_aviPipeFormat</b> to control encoder parameters passed to ffmpeg, see ffmpeg documentation for details, default value is set according to YouTube recommendations:<br>
@@ -215,7 +215,7 @@ And since ffmpeg can utilize all available CPU cores for faster encoding - make 
 <hr>
 <div id="arr"></div><b>Arbitrary resolution rendering</b><br>
 <br>
-Use <b>\r_renderWidth</b> and <b>\r_renderHeight</b> cvars to set persistant rendering resolution, i.e. game frame will be rendered at this resolution and later upscaled/downscaled to window size set by either <b>\r_mode</b> or <b>\r_modeFullscreen</b> cvars.<br>
+Use <b>\r_renderWidth</b> and <b>\r_renderHeight</b> cvars to set persistent rendering resolution, i.e. game frame will be rendered at this resolution and later upscaled/downscaled to window size set by either <b>\r_mode</b> or <b>\r_modeFullscreen</b> cvars.<br>
 Cvar <b>\r_renderScale</b> controls upscale/downscale behavior:
 <ul>
 <li>0 - disabled</li>
@@ -224,7 +224,7 @@ Cvar <b>\r_renderScale</b> controls upscale/downscale behavior:
 <li>3 - linear filtering, stretch to full size</li>
 <li>4 - linear filtering, preserve aspect ratio (black bars on sides)</li>
 </ul>
-It may be useful if you want to render and record 4k+ video on HD display or if you're preferring playing at low resolution but your monitor or GPU driver can't set video|scaling mode properly.<br>
+It may be useful if you want to render and record 4k+ videos on HD display or if you're preferring playing at low resolution, but your monitor or GPU driver can't set video|scaling mode properly.<br>
 <br>
 <hr>
 <div id="r_bloom"></div><b>High-Quality Bloom</b><br><br>
@@ -254,7 +254,7 @@ Requires <b><a href="#r_fbo">\r_fbo 1</a></b>, available operation modes via <b>
 <br>
 <b>\r_bloom_blend_base</b> - 0-based, topmost downsampled framebuffer to use for final image, high values can be used for stronger haze effect, results in overall weaker intensity<br>
 <br>
-<b>\r_bloom_filter_size</b> - filter size of Gaussian Blur effect for each pass, bigger filter size means stronger and wider blur, lower value are faster, default is 6<br>
+<b>\r_bloom_filter_size</b> - filter size of Gaussian Blur effect for each pass, bigger filter size means stronger and wider blur, lower values are faster, default is 6<br>
 <br>
 <b>\r_bloom_reflection</b> - bloom lens reflection effect, value is an intensity factor of the effect, negative value means blend only reflection and skip main bloom texture<br>
 <br>
