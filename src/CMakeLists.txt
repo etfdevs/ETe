@@ -99,9 +99,9 @@ option(ENABLE_SPLINES "Splines code" ON)
 set(USE_DISCORD OFF)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing -fvisibility=hidden)
+set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing -fvisibility=hidden -fcolor-diagnostics)
 else()
-set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing -fvisibility=hidden)
+set(compiler_flags_global -pipe -Wall -fmessage-length=0 -fno-strict-aliasing -fvisibility=hidden -fdiagnostics-color=always)
 endif()
 # debug: explicit -Og -D_DEBUG, implicit -g
 set(compiler_flags_debug ${compiler_flags_global} -Og -D_DEBUG)
