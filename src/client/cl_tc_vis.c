@@ -191,16 +191,17 @@ static void add_clips(void) {
 	int i, s;
 	for (i = 0; i < cm.numBrushes; i++) {
 		cbrush_t *brush = &cm.brushes[i];
-		if (brush->contents & CONTENTS_PLAYERCLIP) {
+                // need to exclude ladders here explicitly since common/ladder is also CONTENTS_PLAYERCLIP
+		if (brush->contents & CONTENTS_PLAYERCLIP && !(brush->sides->surfaceFlags & SURF_LADDER)) {
 			gen_visible_brush(i, vec3_origin, CLIP_BRUSH, clip_color);
 		}
 		// this should match weaponclips, although it might also match other shaders.
-		// weaponclips don't have a specific content/surfaceparm, so in reality this is just a hack
-        // to match parameters used in weaponclip shaders
+                // weaponclips don't have a specific content/surfaceparm, so in reality this is just a hack
+		// to match parameters used in weaponclip shaders
 		for (s = 0; s < brush->numsides; s++)
 		{
 			cbrushside_t *side = &brush->sides[s];
-			if (!(brush->contents & CONTENTS_SOLID) || (side->surfaceFlags & SURF_SLICK) || (side->surfaceFlags & SURF_LADDER))
+			if (!(brush->contents & CONTENTS_SOLID) || (side->surfaceFlags & SURF_SLICK))
 			{
 				continue;
 			}
@@ -302,11 +303,11 @@ static void gen_visible_brush(int brushnum, const vec3_t origin, visBrushType_t 
 				VectorAdd(p, v3, v3);
 
 				vec2_t uv;
-				if (type != SLICK_BRUSH || angleSlick(p1))
+				if (brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p1))
 					add_vert_to_face(&node->faces[i], v1, color, get_uv_coords(uv, p, p1->normal));
-				if (type != SLICK_BRUSH || angleSlick(p2))
+				if (brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p2))
 					add_vert_to_face(&node->faces[j], v2, color, get_uv_coords(uv, p, p2->normal));
-				if (type != SLICK_BRUSH || angleSlick(p3))
+				if (brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p3))
 					add_vert_to_face(&node->faces[k], v3, color, get_uv_coords(uv, p, p3->normal));
 			}
 		}
