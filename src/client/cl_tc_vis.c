@@ -303,12 +303,12 @@ static void gen_visible_brush(int brushnum, const vec3_t origin, visBrushType_t 
 				VectorAdd(p, v3, v3);
 
 				vec2_t uv;
-				if (brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p1))
-					add_vert_to_face(&node->faces[i], v1, color, get_uv_coords(uv, p, p1->normal));
-				if (brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p2))
-					add_vert_to_face(&node->faces[j], v2, color, get_uv_coords(uv, p, p2->normal));
-				if (brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p3))
-					add_vert_to_face(&node->faces[k], v3, color, get_uv_coords(uv, p, p3->normal));
+                                if (type != SLICK_BRUSH || brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p1))
+                                  add_vert_to_face(&node->faces[i], v1, color, get_uv_coords(uv, p, p1->normal));
+                                if (type != SLICK_BRUSH || brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p2))
+                                  add_vert_to_face(&node->faces[j], v2, color, get_uv_coords(uv, p, p2->normal));
+                                if (type != SLICK_BRUSH || brush->sides->surfaceFlags & SURF_SLICK || angleSlick(p3))
+                                  add_vert_to_face(&node->faces[k], v3, color, get_uv_coords(uv, p, p3->normal));
 			}
 		}
 	}
