@@ -236,6 +236,9 @@ static void add_slicks(void) {
 	int i, s;
 	for (i = 0; i < cm.numBrushes; i++) {
 		cbrush_t *brush = &cm.brushes[i];
+		if (!(brush->contents & CONTENTS_SOLID)) {
+			continue;
+		}
 		for (s = 0; s < brush->numsides; s++) {
 			cbrushside_t* side = &brush->sides[s];
 			if (side->surfaceFlags & SURF_SLICK ||
