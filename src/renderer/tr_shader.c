@@ -3521,7 +3521,7 @@ static void R_CreateDefaultShading( image_t *image ) {
 		stages[0].active = qtrue;
 		stages[0].bundle[0].image[0] = image;
 		stages[0].rgbGen = CGEN_IDENTITY_LIGHTING;
-		stages[0].stateBits = GLS_DEFAULT;
+		stages[0].stateBits = implicitStateBits;
 		break;
 
 		// explicit colors at vertexes

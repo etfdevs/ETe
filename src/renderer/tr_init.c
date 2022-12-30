@@ -1661,7 +1661,9 @@ static void R_Register( void )
 	//
 	// temporary latched variables that can only change over a restart
 	//
-	r_fullbright = ri.Cvar_Get( "r_fullbright", "0", CVAR_CHEAT ); // ensi note unused but some mods might expect it to exist?
+	r_fullbright = ri.Cvar_Get( "r_fullbright", "0", CVAR_CHEAT | CVAR_LATCH); // ensi note unused but some mods might expect it to exist?
+    ri.Cvar_CheckRange( r_fullbright, "0", "1", CV_INTEGER );
+    ri.Cvar_SetDescription( r_fullbright, "Use fullbright lightmaps, effectively disabling static world lighting" );
 	r_overBrightBits = ri.Cvar_Get( "r_overBrightBits", "0", CVAR_ARCHIVE_ND | CVAR_LATCH ); // Arnout: disable overbrightbits by default
 	ri.Cvar_CheckRange( r_overBrightBits, "0", "1", CV_INTEGER ); // ydnar: limit to overbrightbits 1 (sorry 1337 players)
 	ri.Cvar_SetDescription( r_overBrightBits, "Sets the intensity of overall brightness of texture pixels" );
