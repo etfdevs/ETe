@@ -180,7 +180,7 @@ pip-log.txt
 .idea
 [Bb]uild*/
 src/[Bb]uild*/
-cmake-build-debug
+cmake-build-*
 src/scons.signatures.dblite
 site.conf
 src/et.x86
