@@ -551,6 +551,11 @@ static rserr_t GLimp_StartDriverAndSetMode( int mode, const char *modeFS, qboole
 		fullscreen = qfalse;
 	}
 
+    if ( r_sdlAllowScreenSaver->integer )
+    {
+        SDL_SetHint( SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1" );
+    }
+
 	if ( !SDL_WasInit( SDL_INIT_VIDEO ) )
 	{
 		const char *driverName;

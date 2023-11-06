@@ -522,6 +522,7 @@ extern	cvar_t	*r_swapInterval;
 extern	cvar_t	*r_glDriver;
 #else
 extern	cvar_t	*r_sdlDriver;
+extern	cvar_t	*r_sdlAllowScreenSaver;
 #endif
 extern	cvar_t	*r_displayRefresh;
 extern	cvar_t	*r_fullscreen;

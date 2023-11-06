@@ -109,6 +109,7 @@ cvar_t *r_swapInterval;
 cvar_t *r_glDriver;
 #else
 cvar_t *r_sdlDriver;
+cvar_t *r_sdlAllowScreenSaver;
 #endif
 cvar_t *r_displayRefresh;
 cvar_t *r_fullscreen;
@@ -4309,6 +4310,8 @@ static void CL_InitGLimp_Cvars( void )
 #else
 	r_sdlDriver = Cvar_Get( "r_sdlDriver", "", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
 	Cvar_SetDescription( r_sdlDriver, "Override hint to SDL which video driver to use, example \"x11\" or \"wayland\"" );
+    r_sdlAllowScreenSaver = Cvar_Get( "r_sdlAllowScreenSaver", "0", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
+    Cvar_SetDescription( r_sdlAllowScreenSaver, "Allow screen to sleep while the game is running, requires full restart");
 #endif
 
 	r_displayRefresh = Cvar_Get( "r_displayRefresh", "0", CVAR_LATCH | CVAR_UNSAFE );
