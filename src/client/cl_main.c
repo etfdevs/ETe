@@ -107,6 +107,9 @@ cvar_t *r_allowSoftwareGL;	// don't abort out if the pixelformat claims software
 cvar_t *r_swapInterval;
 #ifndef USE_SDL
 cvar_t *r_glDriver;
+#ifdef _WIN32
+cvar_t *r_allowScreenSaver;
+#endif
 #else
 cvar_t *r_sdlDriver;
 cvar_t *r_sdlAllowScreenSaver;
@@ -4307,11 +4310,15 @@ static void CL_InitGLimp_Cvars( void )
 #ifndef USE_SDL
 	r_glDriver = Cvar_Get( "r_glDriver", OPENGL_DRIVER_NAME, CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
 	Cvar_SetDescription( r_glDriver, "Specifies the OpenGL driver to use, will revert back to default if driver name set is invalid" );
+#ifdef _WIN32
+	r_allowScreenSaver = Cvar_Get( "r_allowScreenSaver", "0", CVAR_ARCHIVE_ND  | CVAR_UNSAFE );
+	Cvar_SetDescription( r_allowScreenSaver, "Allow screen to sleep while the game is running" );
+#endif
 #else
 	r_sdlDriver = Cvar_Get( "r_sdlDriver", "", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
 	Cvar_SetDescription( r_sdlDriver, "Override hint to SDL which video driver to use, example \"x11\" or \"wayland\"" );
-    r_sdlAllowScreenSaver = Cvar_Get( "r_sdlAllowScreenSaver", "0", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
-    Cvar_SetDescription( r_sdlAllowScreenSaver, "Allow screen to sleep while the game is running, requires full restart");
+	r_sdlAllowScreenSaver = Cvar_Get( "r_sdlAllowScreenSaver", "0", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
+	Cvar_SetDescription( r_sdlAllowScreenSaver, "Allow screen to sleep while the game is running, requires full restart");
 #endif
 
 	r_displayRefresh = Cvar_Get( "r_displayRefresh", "0", CVAR_LATCH | CVAR_UNSAFE );

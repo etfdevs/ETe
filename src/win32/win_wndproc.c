@@ -990,7 +990,13 @@ LRESULT WINAPI MainWndProc( HWND hWnd, UINT uMsg, WPARAM  wParam, LPARAM lParam 
 			return 0;
 
 		if ( wParam == SC_SCREENSAVE || wParam == SC_MONITORPOWER )
+		{
+			if ( Cvar_VariableIntegerValue("r_allowScreenSaver") )
+			{
+				break;
+			}
 			return 0;
+		}
 
 		if ( wParam == SC_MINIMIZE && CL_VideoRecording() != AVIDEMO_NONE && !( re.CanMinimize && re.CanMinimize() ) )
 			return 0;
