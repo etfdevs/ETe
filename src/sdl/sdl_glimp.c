@@ -560,7 +560,7 @@ static rserr_t GLimp_StartDriverAndSetMode( int mode, const char *modeFS, qboole
 			SDL_setenv("SDL_VIDEODRIVER", r_sdlDriver->string, 0 );
 		}
 
-		if ( r_sdlAllowScreenSaver->integer )
+		if ( r_allowScreenSaver->integer )
 		{
 			SDL_SetHint( SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1" );
 		}

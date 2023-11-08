@@ -525,7 +525,7 @@ extern	cvar_t  *r_allowScreenSaver;
 #endif
 #else
 extern	cvar_t	*r_sdlDriver;
-extern	cvar_t	*r_sdlAllowScreenSaver;
+extern	cvar_t	*r_allowScreenSaver;
 #endif
 extern	cvar_t	*r_displayRefresh;
 extern	cvar_t	*r_fullscreen;
