@@ -253,6 +253,13 @@ qboolean SNDDMA_Init( void )
 	s_sdlLevelSamps = Cvar_Get( "s_sdlLevelSamps", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	Cvar_CheckRange( s_sdlLevelSamps, "0", "2", CV_INTEGER );
 
+#if defined(USE_SDL)
+	if ( s_sdlDriver->string )
+	{
+		SDL_setenv("SDL_AUDIODRIVER", s_sdlDriver->string, 0);
+	}
+#endif
+
 	Com_Printf( "SDL_Init( SDL_INIT_AUDIO )... " );
 
 	if ( SDL_Init( SDL_INIT_AUDIO ) != 0 )

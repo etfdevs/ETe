@@ -261,6 +261,10 @@ extern cvar_t *s_muteWhenUnfocused;
 
 extern cvar_t *s_testsound;
 
+#if defined(USE_SDL)
+extern cvar_t *s_sdlDriver;
+#endif
+
 extern float s_volCurrent;
 
 qboolean S_LoadSound( sfx_t *sfx );

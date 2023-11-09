@@ -110,6 +110,10 @@ static cvar_t *s_mixOffset;
 cvar_t		*s_device;
 #endif
 
+#if defined(USE_SDL)
+cvar_t		*s_sdlDriver;
+#endif
+
 cvar_t *s_debugStreams;
 
 // fretn
@@ -2451,6 +2455,11 @@ qboolean S_Base_Init( soundInterface_t *si ) {
 	s_device = Cvar_Get( "s_device", "default", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	Cvar_SetDescription( s_device, "Set SDL audio output device index\n"
 		"Use \"default\" to let system pick or choose one from \\s_devlist output." );
+#endif
+
+#if defined(USE_SDL)
+	s_sdlDriver = Cvar_Get( "s_sdlDriver", "", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
+	Cvar_SetDescription( s_sdlDriver, "Set SDL audio driver, e.g. \"pulseaudio\" or \"pipewire\"" );
 #endif
 
 	s_debugStreams = Cvar_Get("s_debugStreams", "0", CVAR_TEMP);
