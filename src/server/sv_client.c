@@ -1635,7 +1635,6 @@ static int SV_WriteDownloadToClient( client_t *cl )
 	if ( cl->downloadBlockSize[curindex] > 0 )
 		MSG_WriteData( &msg, cl->downloadBlocks[curindex], cl->downloadBlockSize[curindex] );
 
-	MSG_WriteByte( &msg, svc_EOF );
 	SV_Netchan_Transmit( cl, &msg );
 
 	Com_DPrintf( "clientDownload: %d : writing block %d\n", (int) (cl - svs.clients), cl->downloadXmitBlock );
