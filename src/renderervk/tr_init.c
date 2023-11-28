@@ -2244,12 +2244,12 @@ static void RE_Shutdown( refShutdownCode_t code ) {
 
 	if ( r_cache->integer ) {
 		if ( tr.registered ) {
+#ifdef USE_VULKAN
+			vk_release_resources();
+#endif
 			if ( code != REF_KEEP_CONTEXT ) {
 				//R_IssuePendingRenderCommands();
 				R_DeleteTextures();
-#ifdef USE_VULKAN
-				vk_release_resources();
-#endif
 			} else {
 				// backup the current media
 
