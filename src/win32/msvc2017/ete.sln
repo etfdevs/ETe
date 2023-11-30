@@ -2,13 +2,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27428.2015
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Splines", "Splines.vcxproj", "{0C24E6E9-2B9F-43AE-ADB7-B7693966F41E}"
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libjpeg", "libjpeg.vcxproj", "{17867AF4-12CB-4847-A13E-BF37D8BDF597}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ete", "ete.vcxproj", "{B604B554-38D6-4BC8-9F7F-D6BC8719A653}"
 	ProjectSection(ProjectDependencies) = postProject
 		{7906CC4F-E230-4049-A3EF-EA7F64E73DDE} = {7906CC4F-E230-4049-A3EF-EA7F64E73DDE}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Splines", "Splines.vcxproj", "{0C24E6E9-2B9F-43AE-ADB7-B7693966F41E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libjpeg", "libjpeg.vcxproj", "{17867AF4-12CB-4847-A13E-BF37D8BDF597}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ete-ded", "ete-ded.vcxproj", "{7815162A-BB04-4C87-919D-415B1C1ED2FF}"
 EndProject
@@ -30,6 +30,14 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|Win32.Build.0 = Debug|Win32
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|x64.ActiveCfg = Debug|x64
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|x64.Build.0 = Debug|x64
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|Win32.ActiveCfg = Release|Win32
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|Win32.Build.0 = Release|Win32
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|x64.ActiveCfg = Release|x64
+		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|x64.Build.0 = Release|x64
 		{0C24E6E9-2B9F-43AE-ADB7-B7693966F41E}.Debug|Win32.ActiveCfg = Debug|Win32
 		{0C24E6E9-2B9F-43AE-ADB7-B7693966F41E}.Debug|Win32.Build.0 = Debug|Win32
 		{0C24E6E9-2B9F-43AE-ADB7-B7693966F41E}.Debug|x64.ActiveCfg = Debug|x64
@@ -46,14 +54,6 @@ Global
 		{17867AF4-12CB-4847-A13E-BF37D8BDF597}.Release|Win32.Build.0 = Release|Win32
 		{17867AF4-12CB-4847-A13E-BF37D8BDF597}.Release|x64.ActiveCfg = Release|x64
 		{17867AF4-12CB-4847-A13E-BF37D8BDF597}.Release|x64.Build.0 = Release|x64
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|Win32.ActiveCfg = Debug|Win32
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|Win32.Build.0 = Debug|Win32
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|x64.ActiveCfg = Debug|x64
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Debug|x64.Build.0 = Debug|x64
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|Win32.ActiveCfg = Release|Win32
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|Win32.Build.0 = Release|Win32
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|x64.ActiveCfg = Release|x64
-		{B604B554-38D6-4BC8-9F7F-D6BC8719A653}.Release|x64.Build.0 = Release|x64
 		{7815162A-BB04-4C87-919D-415B1C1ED2FF}.Debug|Win32.ActiveCfg = Debug|Win32
 		{7815162A-BB04-4C87-919D-415B1C1ED2FF}.Debug|Win32.Build.0 = Debug|Win32
 		{7815162A-BB04-4C87-919D-415B1C1ED2FF}.Debug|x64.ActiveCfg = Debug|x64
