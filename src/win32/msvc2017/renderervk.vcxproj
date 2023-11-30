@@ -227,7 +227,6 @@
     <ClCompile Include="..\..\renderervk\vk_vbo.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\renderercommon\tr_types.h" />
     <ClInclude Include="..\..\renderercommon\nanosvg\nanosvg.h" />
     <ClInclude Include="..\..\renderercommon\nanosvg\nanosvgrast.h" />
     <ClInclude Include="..\..\qcommon\puff.h" />
