@@ -852,7 +852,7 @@ static void SVC_Status( const netadr_t *from ) {
 			if ( cl->netchan.remoteAddress.type == NA_BOT )
 				ping = 0;
 			else
-				ping = MIN( 1, cl->ping );
+				ping = MAX( cl->ping, 1 );
 			playerLength = Com_sprintf( player, sizeof( player ), "%i %i \"%s\"\n", 
 				ps->persistant[ PERS_SCORE ], ping, cl->name );
 			
@@ -937,7 +937,7 @@ void SVC_GameCompleteStatus( const netadr_t *from ) {
 			if ( cl->netchan.remoteAddress.type == NA_BOT )
 				ping = 0;
 			else
-				ping = MIN( 1, cl->ping );
+				ping = MAX( cl->ping, 1 );
 			playerLength = Com_sprintf( player, sizeof( player ), "%i %i \"%s\"\n",
 				ps->persistant[PERS_SCORE], ping, cl->name );
 
