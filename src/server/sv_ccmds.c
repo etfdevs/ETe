@@ -387,8 +387,8 @@ static void SV_MapRestart_f( void ) {
 
 	// run a few frames to allow everything to settle
 	for ( i = 0; i < GAME_INIT_FRAMES; i++ ) {
-		sv.time += FRAMETIME;
 		VM_Call( gvm, 1, GAME_RUN_FRAME, sv.time );
+		sv.time += FRAMETIME;
 	}
 
 	sv.state = SS_GAME;
@@ -437,8 +437,8 @@ static void SV_MapRestart_f( void ) {
 		}
 	}	
 	// run another frame to allow things to look at all the players
-	sv.time += FRAMETIME;
 	VM_Call( gvm, 1, GAME_RUN_FRAME, sv.time );
+	sv.time += FRAMETIME;
 	svs.time += FRAMETIME;
 
 	Cvar_Set( "sv_serverRestarting", "0" );
