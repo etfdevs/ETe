@@ -480,8 +480,9 @@ static qboolean CullFace(const visFace_t *face) {
 }
 
 static void draw(visBrushNode_t *brush, qhandle_t shader) {
-	frustum = re.GetFrustum();
 	vec3_t clientOrigin;
+	frustum = re.GetFrustum();
+
 	VectorCopy(cl.cgameClientLerpOrigin, clientOrigin);
 
 	while (brush) {
