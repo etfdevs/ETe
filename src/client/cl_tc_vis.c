@@ -481,10 +481,20 @@ static qboolean CullFace(const visFace_t *face) {
 
 static void draw(visBrushNode_t *brush, qhandle_t shader) {
 	frustum = re.GetFrustum();
+	vec3_t clientOrigin;
+	VectorCopy(cl.cgameClientLerpOrigin, clientOrigin);
+
 	while (brush) {
 		int i;
 		for (i = 0; i < brush->numFaces; ++i) {
-			if (CullFace(brush->faces + i)) continue;
+			if (CullFace(brush->faces + i)) {
+				continue;
+			}
+
+			if (!re.inPVS(clientOrigin, brush->faces->mins) && !re.inPVS(clientOrigin, brush->faces->maxs)) {
+				continue;
+			}
+
 			re.AddPolyToScene(shader, brush->faces[i].numVerts, brush->faces[i].verts);
 		}
 		brush = brush->next;
