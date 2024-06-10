@@ -118,7 +118,7 @@ SV_BotFrame
 	if ( !gvm ) {
 		return;
 	}
-	VM_Call( gvm, 1, BOTAI_START_FRAME, time );
+	VM_Call( gvm, BOTAI_START_FRAME, time );
 }*/
 
 

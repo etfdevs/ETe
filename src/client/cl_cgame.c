@@ -235,7 +235,7 @@ static void CL_SetClientLerpOrigin( float x, float y, float z ) {
 
 qboolean CL_CGameCheckKeyExec( int key ) {
 	if ( cgvm ) {
-		return VM_Call( cgvm, 1, CG_CHECKEXECKEY, key );
+		return VM_Call( cgvm, CG_CHECKEXECKEY, key );
 	} else {
 		return qfalse;
 	}
@@ -421,7 +421,7 @@ rescan:
 	if ( !strcmp( cmd, "popup" ) ) { // direct server to client popup request, bypassing cgame
 //		trap_UI_Popup(Cmd_Argv(1));
 //		if ( cls.state == CA_ACTIVE && !clc.demoplaying ) {
-//			VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_CLIPBOARD);
+//			VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_CLIPBOARD);
 //			Menus_OpenByName(Cmd_Argv(1));
 //		}
 		return qfalse;
@@ -542,7 +542,7 @@ void CL_CGameBinaryMessageReceived( const char *buf, int buflen, int serverTime 
 	// TODO error instead or is this sufficient?
 	if ( !cgvm )
 		return;
-	VM_Call( cgvm, 3, CG_MESSAGERECEIVED, buf, buflen, serverTime );
+	VM_Call( cgvm, CG_MESSAGERECEIVED, buf, buflen, serverTime );
 }
 
 /*
@@ -584,7 +584,7 @@ void CL_ShutdownCGame( void ) {
 		return;
 	}
 
-	VM_Call( cgvm, 0, CG_SHUTDOWN );
+	VM_Call( cgvm, CG_SHUTDOWN );
 	VM_Free( cgvm );
 	cgvm = NULL;
 	Cmd_UnregisterModule( MODULE_CGAME );
@@ -1094,7 +1094,7 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 	case CG_INGAME_POPUP:
 		if ( cls.state == CA_ACTIVE && !clc.demoplaying ) {
 			if ( uivm ) { // Gordon: can be called as the system is shutting down
-				VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, args[1] );
+				VM_Call( uivm, UI_SET_ACTIVE_MENU, args[1] );
 			}
 		}
 		return 0;
@@ -1345,10 +1345,10 @@ void CL_InitCGame( void ) {
 	// otherwise server commands sent just before a gamestate are dropped
 	//bani - added clc.demoplaying, since some mods need this at init time, and drawactiveframe is too late for them
 	if ( currentGameMod == GAMEMOD_LEGACY ) {
-		VM_Call( cgvm, 7, CG_INIT, clc.serverMessageSequence, clc.lastExecutedServerCommand, clc.clientNum, clc.demoplaying, qtrue, NULL, com_legacyVersion->integer );
+		VM_Call( cgvm, CG_INIT, clc.serverMessageSequence, clc.lastExecutedServerCommand, clc.clientNum, clc.demoplaying, qtrue, NULL, com_legacyVersion->integer );
 	}
 	else {
-		VM_Call( cgvm, 4, CG_INIT, clc.serverMessageSequence, clc.lastExecutedServerCommand, clc.clientNum, clc.demoplaying );
+		VM_Call( cgvm, CG_INIT, clc.serverMessageSequence, clc.lastExecutedServerCommand, clc.clientNum, clc.demoplaying );
 	}
 
 	// reset any CVAR_CHEAT cvars registered by cgame
@@ -1398,7 +1398,7 @@ qboolean CL_GameCommand( void ) {
 		return qfalse;
 	}
 
-	bRes = (qboolean)VM_Call( cgvm, 0, CG_CONSOLE_COMMAND );
+	bRes = (qboolean)VM_Call( cgvm, CG_CONSOLE_COMMAND );
 
 	Cbuf_NestedReset();
 
@@ -1412,7 +1412,7 @@ CL_CGameRendering
 =====================
 */
 void CL_CGameRendering( stereoFrame_t stereo ) {
-	VM_Call( cgvm, 3, CG_DRAW_ACTIVE_FRAME, cl.serverTime, stereo, clc.demoplaying );
+	VM_Call( cgvm, CG_DRAW_ACTIVE_FRAME, cl.serverTime, stereo, clc.demoplaying );
 #ifdef _DEBUG
 	VM_Debug( 0 );
 #endif
@@ -1714,7 +1714,7 @@ qboolean CL_GetTag( int clientNum, char *tagname, orientation_t *orientation ) {
 		return qfalse;
 	}
 
-	return VM_Call( cgvm, 3, CG_GET_TAG, clientNum, tagname, orientation );
+	return VM_Call( cgvm, CG_GET_TAG, clientNum, tagname, orientation );
 }
 
 qboolean CL_CgameRunning( void ) {

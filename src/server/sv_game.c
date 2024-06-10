@@ -356,14 +356,14 @@ SV_GameBinaryMessageReceived
 void SV_GameBinaryMessageReceived( int cno, const char *buf, int buflen, int commandTime ) {
 	if ( !gvm )
 		return;
-	VM_Call( gvm, 4, GAME_MESSAGERECEIVED, cno, buf, buflen, commandTime );
+	VM_Call( gvm, GAME_MESSAGERECEIVED, cno, buf, buflen, commandTime );
 }
 
 
 qboolean SV_GameSnapshotCallback( int entityNum, int clientNum ) {
 	if ( !gvm )
 		return qtrue;
-	return VM_Call( gvm, 2, GAME_SNAPSHOT_CALLBACK, entityNum, clientNum );
+	return VM_Call( gvm, GAME_SNAPSHOT_CALLBACK, entityNum, clientNum );
 }
 
 
@@ -754,7 +754,7 @@ void SV_ShutdownGameProgs( void ) {
 
 	//Sys_OmnibotUnLoad();
 
-	VM_Call( gvm, 1, GAME_SHUTDOWN, qfalse );
+	VM_Call( gvm, GAME_SHUTDOWN, qfalse );
 	VM_Free( gvm );
 	gvm = NULL;
 	Cmd_UnregisterModule( MODULE_SGAME );
@@ -790,9 +790,9 @@ static void SV_InitGameVM( qboolean restart ) {
 	// use the current msec count for a random seed
 	// init for this gamestate
 	if ( currentGameMod == GAMEMOD_LEGACY )
-		VM_Call( gvm, 5, GAME_INIT, sv.time, Com_Milliseconds(), restart, qtrue, com_legacyVersion->integer );
+		VM_Call( gvm, GAME_INIT, sv.time, Com_Milliseconds(), restart, qtrue, com_legacyVersion->integer );
 	else
-		VM_Call( gvm, 3, GAME_INIT, sv.time, Com_Milliseconds(), restart );
+		VM_Call( gvm, GAME_INIT, sv.time, Com_Milliseconds(), restart );
 }
 
 
@@ -811,7 +811,7 @@ void SV_RestartGameProgs( void ) {
 	// unload the refs during a restart
 	//Sys_OmnibotUnLoad();
 
-	VM_Call( gvm, 1, GAME_SHUTDOWN, qtrue );
+	VM_Call( gvm, GAME_SHUTDOWN, qtrue );
 
 	// do a restart instead of a free
 	gvm = VM_Restart( gvm );
@@ -865,7 +865,7 @@ qboolean SV_GameCommand( void ) {
 		return qfalse;
 	}
 
-	return VM_Call( gvm, 0, GAME_CONSOLE_COMMAND );
+	return VM_Call( gvm, GAME_CONSOLE_COMMAND );
 }
 
 /*

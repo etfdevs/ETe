@@ -526,7 +526,7 @@ static void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 
 	re.BeginFrame( stereoFrame );
 
-	uiFullscreen = (uivm && VM_Call( uivm, 0, UI_IS_FULLSCREEN ));
+	uiFullscreen = (uivm && VM_Call( uivm, UI_IS_FULLSCREEN ));
 
 	// wide aspect ratio screens need to have the sides cleared
 	// unless they are displaying game renderings
@@ -556,20 +556,20 @@ static void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 		case CA_DISCONNECTED:
 			// force menu up
 			S_StopAllSounds();
-			VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
+			VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
 			break;
 		case CA_CONNECTING:
 		case CA_CHALLENGING:
 		case CA_CONNECTED:
 			// connecting clients will only show the connection dialog
 			// refresh to update the time
-			VM_Call( uivm, 1, UI_REFRESH, cls.realtime );
-			VM_Call( uivm, 1, UI_DRAW_CONNECT_SCREEN, qfalse );
+			VM_Call( uivm, UI_REFRESH, cls.realtime );
+			VM_Call( uivm, UI_DRAW_CONNECT_SCREEN, qfalse );
 			break;
 //			// Ridah, if the cgame is valid, fall through to there
 //			if (!cls.cgameStarted || !com_sv_running->integer) {
 //				// connecting clients will only show the connection dialog
-//				VM_Call( uivm, 1, UI_DRAW_CONNECT_SCREEN, qfalse );
+//				VM_Call( uivm, UI_DRAW_CONNECT_SCREEN, qfalse );
 //				break;
 //			}
 		case CA_LOADING:
@@ -581,8 +581,8 @@ static void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 			// also draw the connection information, so it doesn't
 			// flash away too briefly on local or lan games
 			// refresh to update the time
-			VM_Call( uivm, 1, UI_REFRESH, cls.realtime );
-			VM_Call( uivm, 1, UI_DRAW_CONNECT_SCREEN, qtrue );
+			VM_Call( uivm, UI_REFRESH, cls.realtime );
+			VM_Call( uivm, UI_DRAW_CONNECT_SCREEN, qtrue );
 			break;
 		case CA_ACTIVE:
 			// always supply STEREO_CENTER as vieworg offset is now done by the engine.
@@ -597,7 +597,7 @@ static void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 
 	// the menu draws next
 	if ( (Key_GetCatcher( ) & KEYCATCH_UI) && uivm ) {
-		VM_Call( uivm, 1, UI_REFRESH, cls.realtime );
+		VM_Call( uivm, UI_REFRESH, cls.realtime );
 	}
 
 	// console draws next

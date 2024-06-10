@@ -434,7 +434,9 @@ void	VM_Forced_Unload_Start(void);
 void	VM_Forced_Unload_Done(void);
 vm_t	*VM_Restart( vm_t *vm );
 
-intptr_t	QDECL VM_Call( vm_t *vm, int nargs, int callNum, ... );
+#define		VM_CALL_END (-1337)
+intptr_t	QDECL VM_CallFunc(vm_t* vm, int callNum, ...);
+#define		VM_Call(...) VM_CallFunc(__VA_ARGS__, VM_CALL_END)
 
 void	VM_Debug( int level );
 
