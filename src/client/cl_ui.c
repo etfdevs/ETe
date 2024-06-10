@@ -1359,7 +1359,7 @@ void CL_ShutdownUI( void ) {
 	if ( !uivm ) {
 		return;
 	}
-	VM_Call( uivm, 0, UI_SHUTDOWN );
+	VM_Call( uivm, UI_SHUTDOWN );
 	VM_Free( uivm );
 	uivm = NULL;
 	Cmd_UnregisterModule( MODULE_UI );
@@ -1397,7 +1397,7 @@ void CL_InitUI( void ) {
 	}
 
 	// sanity check
-	v = VM_Call( uivm, 0, UI_GETAPIVERSION );
+	v = VM_Call( uivm, UI_GETAPIVERSION );
 	if ( v != UI_API_VERSION ) {
 		// Free uivm now, so UI_SHUTDOWN doesn't get called later.
 		VM_Free( uivm );
@@ -1409,16 +1409,16 @@ void CL_InitUI( void ) {
 	else {
 		// init for this gamestate
 		if ( currentGameMod == GAMEMOD_LEGACY || currentGameMod == GAMEMOD_ETJUMP )
-			VM_Call( uivm, 3, UI_INIT, ( cls.state >= CA_AUTHORIZING && cls.state < CA_ACTIVE ), qtrue, com_legacyVersion->integer );
+			VM_Call( uivm, UI_INIT, ( cls.state >= CA_AUTHORIZING && cls.state < CA_ACTIVE ), qtrue, com_legacyVersion->integer );
 		else
-			VM_Call( uivm, 1, UI_INIT, ( cls.state >= CA_AUTHORIZING && cls.state < CA_ACTIVE ) );
+			VM_Call( uivm, UI_INIT, ( cls.state >= CA_AUTHORIZING && cls.state < CA_ACTIVE ) );
 	}
 }
 
 
 qboolean UI_usesUniqueCDKey() {
 	if ( uivm ) {
-		return ( VM_Call( uivm, 0, UI_HASUNIQUECDKEY ) == qtrue );
+		return ( VM_Call( uivm, UI_HASUNIQUECDKEY ) == qtrue );
 	} else {
 		return qfalse;
 	}
@@ -1426,7 +1426,7 @@ qboolean UI_usesUniqueCDKey() {
 
 qboolean UI_checkKeyExec( int key ) {
 	if ( uivm ) {
-		return VM_Call( uivm, 1, UI_CHECKEXECKEY, key );
+		return VM_Call( uivm, UI_CHECKEXECKEY, key );
 	} else {
 		return qfalse;
 	}
@@ -1444,5 +1444,5 @@ qboolean UI_GameCommand( void ) {
 		return qfalse;
 	}
 
-	return VM_Call( uivm, 1, UI_CONSOLE_COMMAND, cls.realtime );
+	return VM_Call( uivm, UI_CONSOLE_COMMAND, cls.realtime );
 }

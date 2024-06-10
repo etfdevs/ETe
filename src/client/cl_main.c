@@ -1429,7 +1429,7 @@ qboolean CL_Disconnect( qboolean showMainMenu ) {
 	Key_ClearStates();
 
 	if ( uivm && showMainMenu ) {
-		VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_NONE );
+		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NONE );
 	}
 
 	// Remove pure paks
@@ -1616,7 +1616,7 @@ void CL_Disconnect_f( void ) {
 				CL_FlushMemory();
 			}
 			if ( uivm ) {
-				VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
+				VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
 			}
 		}
 	}
@@ -3116,7 +3116,7 @@ static void CL_CheckTimeout( void ) {
 				CL_FlushMemory();
 			}
 			if ( uivm ) {
-				VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
+				VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
 			}
 			return;
 		}
@@ -3335,12 +3335,12 @@ void CL_Frame( int msec, int realMsec ) {
 	if ( cls.cddialog ) {
 		// bring up the cd error dialog if needed
 		cls.cddialog = qfalse;
-		VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_NEED_CD );
+		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NEED_CD );
 	} else	if ( cls.state == CA_DISCONNECTED && !( Key_GetCatcher( ) & KEYCATCH_UI )
 		&& !com_sv_running->integer && uivm ) {
 		// if disconnected, bring up the menu
 		S_StopAllSounds();
-		VM_Call( uivm, 1, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
+		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
 	}
 
 	aviRecord = CL_VideoRecording();

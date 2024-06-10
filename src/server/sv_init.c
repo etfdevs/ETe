@@ -701,7 +701,7 @@ void SV_SpawnServer( const char *mapname ) {
 	// run a few frames to allow everything to settle
 	for ( i = 0 ; i < GAME_INIT_FRAMES ; i++ )
 	{
-		VM_Call( gvm, 1, GAME_RUN_FRAME, sv.time );
+		VM_Call( gvm, GAME_RUN_FRAME, sv.time );
         sv.time += FRAMETIME;
 		////SV_BotFrame (sv.time);
 	}
@@ -726,7 +726,7 @@ void SV_SpawnServer( const char *mapname ) {
 			}
 
 			// connect the client again
-			denied = GVM_ArgPtr( VM_Call( gvm, 3, GAME_CLIENT_CONNECT, i, qfalse, isBot ) );	// firstTime = qfalse
+			denied = GVM_ArgPtr( VM_Call( gvm, GAME_CLIENT_CONNECT, i, qfalse, isBot ) );	// firstTime = qfalse
 			if ( denied ) {
 				// this generally shouldn't happen, because the client
 				// was connected before the level change
@@ -750,14 +750,14 @@ void SV_SpawnServer( const char *mapname ) {
 					client->deltaMessage = client->netchan.outgoingSequence - ( PACKET_BACKUP + 1 ); // force delta reset
 					client->lastSnapshotTime = svs.time - 9999; // generate a snapshot immediately
 
-					VM_Call( gvm, 1, GAME_CLIENT_BEGIN, i );
+					VM_Call( gvm, GAME_CLIENT_BEGIN, i );
 				}
 			}
 		}
 	}
 
 	// run another frame to allow things to look at all the players
-	VM_Call( gvm, 1, GAME_RUN_FRAME, sv.time );
+	VM_Call( gvm, GAME_RUN_FRAME, sv.time );
 	sv.time += FRAMETIME;
 	////SV_BotFrame( sv.time );
 	svs.time += FRAMETIME;

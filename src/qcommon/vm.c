@@ -301,7 +301,7 @@ locals from sp
 ==============
 */
 
-intptr_t QDECL VM_Call( vm_t *vm, int nargs, int callnum, ... )
+intptr_t QDECL VM_CallFunc( vm_t *vm, int callnum, ... )
 {
 	intptr_t r = 0;
 	int i;
@@ -314,10 +314,6 @@ intptr_t QDECL VM_Call( vm_t *vm, int nargs, int callnum, ... )
 	if ( vm_debugLevel ) {
 		Com_Printf( "VM_Call( %d )\n", callnum );
 	}
-
-	if ( nargs >= MAX_VMMAIN_CALL_ARGS ) {
-		Com_Error( ERR_DROP, "VM_Call: nargs >= MAX_VMMAIN_CALL_ARGS" );
-	}
 #endif
 
 	++vm->callLevel;
@@ -325,11 +321,16 @@ intptr_t QDECL VM_Call( vm_t *vm, int nargs, int callnum, ... )
 	if ( vm->entryPoint ) 
 	{
 		//rcg010207 -  see dissertation at top of VM_DllSyscall() in this file.
-		intptr_t args[MAX_VMMAIN_CALL_ARGS-1] = { 0 };
+		intptr_t args[MAX_VMMAIN_CALL_ARGS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 		va_list ap;
 		va_start( ap, callnum );
-		for ( i = 0; i < nargs; i++ ) {
+		for ( i = 0; i < ARRAY_LEN(args); i++ ) {
 			args[i] = va_arg( ap, intptr_t );
+
+			if (VM_CALL_END == (int)args[i]) {
+				args[i] = 0;
+				break;
+			}
 		}
 		va_end(ap);
 
