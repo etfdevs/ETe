@@ -301,7 +301,7 @@ locals from sp
 ==============
 */
 
-intptr_t QDECL VM_Call( vm_t *vm, int nargs, int callnum, ... )
+intptr_t QDECL VM_CallFunc( vm_t *vm, int nargs, int callnum, ... )
 {
 	intptr_t r = 0;
 	int i;

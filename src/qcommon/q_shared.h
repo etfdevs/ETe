@@ -299,6 +299,31 @@ typedef int		clipHandle_t;
 #define ARRAY_LEN(x)		(sizeof(x) / sizeof(*(x)))
 #define STRARRAY_LEN(x)		(ARRAY_LEN(x) - 1)
 
+// We need to use EXPAND because the Microsoft MSVC preprocessor does not expand the va_args the same way as other preprocessors
+// http://stackoverflow.com/questions/5134523/msvc-doesnt-expand-va-args-correctly
+#define EXPAND(x) x
+
+#define VM_CALL_END (intptr_t)(-1337)
+#define GET_SYSCALL_MACRO(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, NAME, ...) NAME
+
+#define SystemCall_0(arg) syscall(arg, VM_CALL_END)
+#define SystemCall_1(arg, a1) syscall(arg, (intptr_t)(a1), VM_CALL_END)
+#define SystemCall_2(arg, a1, a2) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), VM_CALL_END)
+#define SystemCall_3(arg, a1, a2, a3) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), VM_CALL_END)
+#define SystemCall_4(arg, a1, a2, a3, a4) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), VM_CALL_END)
+#define SystemCall_5(arg, a1, a2, a3, a4, a5) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), VM_CALL_END)
+#define SystemCall_6(arg, a1, a2, a3, a4, a5, a6) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), VM_CALL_END)
+#define SystemCall_7(arg, a1, a2, a3, a4, a5, a6, a7) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), VM_CALL_END)
+#define SystemCall_8(arg, a1, a2, a3, a4, a5, a6, a7, a8) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), VM_CALL_END)
+#define SystemCall_9(arg, a1, a2, a3, a4, a5, a6, a7, a8, a9) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), (intptr_t)(a9), VM_CALL_END)
+#define SystemCall_10(arg, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), (intptr_t)(a9), (intptr_t)(a10), VM_CALL_END)
+#define SystemCall_11(arg, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), (intptr_t)(a9), (intptr_t)(a10), (intptr_t)(a11), VM_CALL_END)
+#define SystemCall_12(arg, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), (intptr_t)(a9), (intptr_t)(a10), (intptr_t)(a11), (intptr_t)(a12), VM_CALL_END)
+#define SystemCall_13(arg, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), (intptr_t)(a9), (intptr_t)(a10), (intptr_t)(a11), (intptr_t)(a12), (intptr_t)(a13), VM_CALL_END)
+#define SystemCall_14(arg, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14) syscall(arg, (intptr_t)(a1), (intptr_t)(a2), (intptr_t)(a3), (intptr_t)(a4), (intptr_t)(a5), (intptr_t)(a6), (intptr_t)(a7), (intptr_t)(a8), (intptr_t)(a9), (intptr_t)(a10), (intptr_t)(a11), (intptr_t)(a12), (intptr_t)(a13), (intptr_t)(a14), VM_CALL_END)
+
+#define SystemCall(...) EXPAND(GET_SYSCALL_MACRO(__VA_ARGS__, SystemCall_14, SystemCall_13, SystemCall_12, SystemCall_11, SystemCall_10, SystemCall_9, SystemCall_8, SystemCall_7, SystemCall_6, SystemCall_5, SystemCall_4, SystemCall_3, SystemCall_2, SystemCall_1, SystemCall_0)(__VA_ARGS__))
+
 // angle indexes
 #define	PITCH				0		// up / down
 #define	YAW					1		// left / right
