@@ -777,8 +777,8 @@ CL_CompareFrametimes
 =================
 */
 static int CL_CompareFrametimes(const void *a, const void *b) {
-	const uint32_t arg1 = *(uint32_t *)a;
-	const uint32_t arg2 = *(uint32_t *)b;
+	const uint32_t arg1 = *(const uint32_t *)a;
+	const uint32_t arg2 = *(const uint32_t *)b;
 
 	if (arg1 > arg2) {
 		return 1;
