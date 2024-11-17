@@ -513,6 +513,8 @@ CL_MouseMove
 */
 static void CL_MouseMove( usercmd_t *cmd )
 {
+	// for normalizing m_forward/side to 125FPS
+	const float deltaStrafeSensitivity = 0.008f * (1000.0f / (float)frame_msec);
 	float mx, my;
 
 	// allow mouse smoothing
@@ -603,14 +605,14 @@ static void CL_MouseMove( usercmd_t *cmd )
 
 	// add mouse X/Y movement to cmd
 	if(kb[KB_STRAFE].active)
-		cmd->rightmove = ClampCharMove( cmd->rightmove + m_side->value * mx );
+		cmd->rightmove = ClampCharMove( cmd->rightmove + m_side->value * deltaStrafeSensitivity * mx );
 	else
 		cl.viewangles[YAW] -= m_yaw->value * mx;
 
 	if ((kb[KB_MLOOK].active || cl_freelook->integer) && !kb[KB_STRAFE].active) 
 		cl.viewangles[PITCH] += m_pitch->value * my;
 	else
-		cmd->forwardmove = ClampCharMove( cmd->forwardmove - m_forward->value * my );
+		cmd->forwardmove = ClampCharMove( cmd->forwardmove - m_forward->value * deltaStrafeSensitivity * my );
 }
 
 
