@@ -3694,14 +3694,11 @@ static void Sys_GetProcessorId( char *vendor )
 	Com_sprintf( vendor, 128, "%s %s", ARCH_STRING, (const char*)getauxval( AT_PLATFORM ) );
 #endif
 #endif // !arm32
-}
 
 #if idppc || idppc64
-static void Sys_GetProcessorId( char *vendor )
-{
-	Com_sprintf( vendor, 100, "%s", ARCH_STRING );
-}
+        Com_sprintf( vendor, 100, "%s", ARCH_STRING );
 #endif
+}
 
 #endif // __linux__
 
