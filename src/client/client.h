@@ -214,6 +214,14 @@ demo through a file.
 =============================================================================
 */
 
+#define MAX_TIMEDEMO_FRAMES 262140
+
+typedef struct {
+	uint32_t frametime[MAX_TIMEDEMO_FRAMES];
+	int timeDemoFrames;             // counter of rendered frames
+	int64_t timeDemoStart;          // cls.realtime before first frame
+	int timeDemoBaseTime;           // each frame will be at this time + frameNum * 50
+} timedemo_t ;
 
 typedef struct {
 
@@ -288,9 +296,7 @@ typedef struct {
 	fileHandle_t wavefile;
 	int wavetime;
 
-	int timeDemoFrames;             // counter of rendered frames
-	int timeDemoStart;              // cls.realtime before first frame
-	int timeDemoBaseTime;           // each frame will be at this time + frameNum * 50
+	timedemo_t timedemo;
 
 	float	aviVideoFrameRemainder;
 	float	aviSoundFrameRemainder;
@@ -430,6 +436,8 @@ typedef struct {
 	float		biasX;
 	float		biasY;
 
+	qboolean benchmarking;
+	qboolean resetTimedemoCvar;
 } clientStatic_t;
 
 extern int bigchar_width;
