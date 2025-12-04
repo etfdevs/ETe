@@ -68,7 +68,12 @@ void GLimp_Shutdown( qboolean unloadDLL )
 	SDL_DestroyWindow( SDL_window );
 	SDL_window = NULL;
 
-	if ( glw_state.isFullscreen )
+	if ( glw_state.isFullscreen
+#ifdef __linux__
+		// wayland does not support 'SDL_WarpMouseGlobal' and crashes if called
+		&& Q_stricmp(SDL_GetCurrentVideoDriver(), "wayland")
+#endif
+	)
 		SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
 
 	if ( unloadDLL )
