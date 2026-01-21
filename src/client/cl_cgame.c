@@ -1539,7 +1539,7 @@ static void CL_FirstSnapshot( void ) {
 	cl.serverTimeDelta = cl.snap.serverTime - cls.realtime;
 	cl.oldServerTime = cl.snap.serverTime;
 
-	clc.timeDemoBaseTime = cl.snap.serverTime;
+	clc.timedemo.timeDemoBaseTime = cl.snap.serverTime;
 
 	// if this is the first frame of active play,
 	// execute the contents of activeAction now
@@ -1715,11 +1715,11 @@ void CL_SetCGameTime( void ) {
 	// while a normal demo may have different time samples
 	// each time it is played back
 	if ( com_timedemo->integer ) {
-		if ( !clc.timeDemoStart ) {
-			clc.timeDemoStart = Sys_Milliseconds();
+		if ( !clc.timedemo.timeDemoStart ) {
+			clc.timedemo.timeDemoStart = Sys_Microseconds();
 		}
-		clc.timeDemoFrames++;
-		cl.serverTime = clc.timeDemoBaseTime + clc.timeDemoFrames * 50;
+		clc.timedemo.timeDemoFrames++;
+		cl.serverTime = clc.timedemo.timeDemoBaseTime + clc.timedemo.timeDemoFrames * 50;
 	}
 
 	//while ( cl.serverTime >= cl.snap.serverTime ) {
