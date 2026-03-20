@@ -751,19 +751,140 @@ CLIENT SIDE DEMO PLAYBACK
 */
 
 /*
+====================
+CL_StartBenchmark_f
+====================
+*/
+static void CL_StartBenchmark_f(void) {
+	if (Cmd_Argc() < 2) {
+		Com_Printf("benchmark <demoname>\n");
+		return;
+	}
+
+	// enable timedemo if it isn't set already (and keep track if we changed the value, so we can restore it)
+	if (!Cvar_VariableIntegerValue("timedemo"))	{
+		Cvar_Set("timedemo", "1");
+		cls.resetTimedemoCvar = qtrue;
+	}
+
+	cls.benchmarking = qtrue;
+	Cbuf_ExecuteText(EXEC_APPEND, va("demo %s", Cmd_Argv(1)));
+}
+
+/*
+=================
+CL_CompareFrametimes
+=================
+*/
+static int CL_CompareFrametimes(const void *a, const void *b) {
+	const uint32_t arg1 = *(const uint32_t *)a;
+	const uint32_t arg2 = *(const uint32_t *)b;
+
+	if (arg1 > arg2) {
+		return 1;
+	} else if (arg2 > arg1) {
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
+/*
+=================
+CL_TimedemoResults
+=================
+*/
+static void CL_TimedemoResults(void) {
+	int64_t  time;
+	int      i, numFrames;
+	uint32_t sortedFrametimes[MAX_TIMEDEMO_FRAMES];
+	int      onePercentIdx, pointOnePercentIdx;
+	float    fps, minFps, maxFps;
+	char     onePercent[8], pointOnePercent[8];
+	int      desiredFrametime, numOptimalFrames;
+
+	time = Sys_Microseconds() - clc.timedemo.timeDemoStart;
+
+	if (time <= 0) {
+		return;
+	}
+
+	// timeFrames gets incremented before we get here, but we never have a chance to measure the frametime
+	// since the playback ends, therefore scrap the last frame entirely as it never gets stored
+	numFrames = clc.timedemo.timeDemoFrames - 1;
+
+	fps = numFrames * 1000000.0f / time;
+
+	Com_Memcpy(sortedFrametimes, clc.timedemo.frametime, numFrames * sizeof(uint32_t));
+	qsort(sortedFrametimes, numFrames, sizeof(uint32_t), CL_CompareFrametimes);
+
+	minFps = 1000000.0f / sortedFrametimes[numFrames - 1];
+	maxFps = 1000000.0f / sortedFrametimes[0];
+
+	// filter out potential 0ms anomalies for maxfps
+	if (sortedFrametimes[0] == 0) {
+		for (i = 0; i < numFrames; i++) {
+			if (sortedFrametimes[i] != 0) {
+				maxFps = 1000000.0f / sortedFrametimes[i];
+				break;
+			}
+		}
+	}
+
+	onePercentIdx = (int)(0.01f * numFrames);
+
+	// make sure we have enough total frames to display 1% lows
+	if (onePercentIdx) {
+		Com_sprintf(onePercent, sizeof(onePercent), "%3.2f", 1000000.0f / sortedFrametimes[numFrames - 1 - onePercentIdx]);
+	}
+
+	pointOnePercentIdx = (int)(0.001f * numFrames);
+
+	// make sure we have enough total frames to display 0.1% lows
+	if (pointOnePercentIdx) {
+		Com_sprintf(pointOnePercent, sizeof(pointOnePercent), "%3.2f", 1000000.0f / sortedFrametimes[numFrames - 1 - pointOnePercentIdx]);
+	}
+
+	desiredFrametime = 1000 / com_maxfps->integer;
+	numOptimalFrames = 0;
+
+	for (i = 0; i < numFrames; i++) {
+		if (sortedFrametimes[i] / 1000.0f > desiredFrametime) {
+			break;
+		}
+
+		numOptimalFrames++;
+	}
+
+	Com_Printf("\n----- Benchmark results -----\n");
+	Com_Printf("\n%-18s %3.2f sec\n%-18s %i\n%-18s %3.2f\n%-18s %3.2f\n%-18s %3.2f\n%-18s %s\n%-18s %s\n%-18s %3.2f pct\n",
+			   "Time elapsed:", time / 1000000.0f,
+			   "Total frames:", numFrames,
+			   "Minimum fps:", minFps,
+			   "Maximum fps:", maxFps,
+			   "Average fps:", fps,
+			   "99th pct. min:", onePercentIdx ? onePercent : "--",
+			   "99.9th pct. min:", pointOnePercentIdx ? pointOnePercent : "--",
+			   "Stability:", (float)numOptimalFrames / (float)numFrames * 100.0f);
+	Com_Printf("\n-----------------------------\n\n");
+}
+
+/*
 =================
 CL_DemoCompleted
 =================
 */
 static void CL_DemoCompleted( void ) {
 	if ( com_timedemo->integer ) {
-		int	time;
+		CL_TimedemoResults();
 
-		time = Sys_Milliseconds() - clc.timeDemoStart;
-		if ( time > 0 ) {
-			Com_Printf( "%i frames, %3.*f seconds: %3.1f fps\n", clc.timeDemoFrames,
-			time > 10000 ? 1 : 2, time/1000.0, clc.timeDemoFrames*1000.0 / time );
+		// reset timedemo cvar if 'benchmark' command forcibly enabled it
+		if (cls.benchmarking && cls.resetTimedemoCvar) {
+			Cvar_Set("timedemo", "0");
 		}
+
+		cls.benchmarking = qfalse;
+		cls.resetTimedemoCvar = qfalse;
 	}
 
 	// fretn
@@ -3314,6 +3435,11 @@ void CL_Frame( int msec, int realMsec ) {
 	float fps;
 	float frameDuration;
 	aviRecordingState_t aviRecord = AVIDEMO_NONE;
+	int64_t frameStart = 0;
+
+	if (clc.demoplaying && com_timedemo && com_timedemo->integer) {
+		frameStart = Sys_Microseconds();
+	}
 
 	CL_TrackCvarChanges( qfalse );
 
@@ -3466,6 +3592,12 @@ void CL_Frame( int msec, int realMsec ) {
 		cls.discordInit = qfalse;
 	}
 #endif
+
+	if (clc.demoplaying && clc.timedemo.timeDemoFrames && com_timedemo && com_timedemo->integer) {
+		// use circular buffer to store frametimes, the array should hold enough frames for ~3h of demo playback,
+		// but in case of extremely long demos, just start dropping frames from the beginning
+		clc.timedemo.frametime[(clc.timedemo.timeDemoFrames - 1) % MAX_TIMEDEMO_FRAMES] = Sys_Microseconds() - frameStart;
+	}
 }
 
 
@@ -4390,6 +4522,7 @@ static void CL_InitGLimp_Cvars( void )
 
 static const cmdListItem_t cl_cmds[] = {
 	{ "addFavorite", CL_AddFavorite_f, NULL },
+	{ "benchmark", CL_StartBenchmark_f, CL_CompleteDemoName },
 	{ "cache_endgather", CL_Cache_EndGather_f, NULL },
 	{ "cache_mapchange", CL_Cache_MapChange_f, NULL },
 	{ "cache_setindex", CL_Cache_SetIndex_f, NULL },
