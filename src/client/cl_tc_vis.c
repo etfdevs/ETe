@@ -480,11 +480,29 @@ static qboolean CullFace(const visFace_t *face) {
 }
 
 static void draw(visBrushNode_t *brush, qhandle_t shader) {
+	vec3_t clientOrigin = { 0.0f, 0.0f, 0.0f };
 	frustum = re.GetFrustum();
+
+	// this should be set to cg.refdef.vieworg in cgame,
+	// but fallback to player origin in case a mod has removed the syscall that sets it
+	if (!VectorCompare(cl.cgameClientLerpOrigin, vec3_origin)) {
+		VectorCopy(cl.cgameClientLerpOrigin, clientOrigin);
+	} else if (cl.snap.valid) {
+		VectorCopy(cl.snap.ps.origin, clientOrigin);
+		clientOrigin[2] += (float)cl.snap.ps.viewheight;
+	}
+
 	while (brush) {
 		int i;
 		for (i = 0; i < brush->numFaces; ++i) {
-			if (CullFace(brush->faces + i)) continue;
+			if (CullFace(brush->faces + i)) {
+				continue;
+			}
+
+			if (!re.inPVS(clientOrigin, brush->faces->mins) && !re.inPVS(clientOrigin, brush->faces->maxs)) {
+				continue;
+			}
+
 			re.AddPolyToScene(shader, brush->faces[i].numVerts, brush->faces[i].verts);
 		}
 		brush = brush->next;
