@@ -124,11 +124,11 @@ static qboolean CL_GetUserCmd( int cmdNumber, usercmd_t *ucmd ) {
 
 	// the usercmd has been overwritten in the wrapping
 	// buffer because it is too far out of date
-	if ( cl.cmdNumber - cmdNumber >= CMD_BACKUP ) {
+	if ( cl.cmdNumber - cmdNumber >= cl.cmdBackup ) {
 		return qfalse;
 	}
 
-	*ucmd = cl.cmds[ cmdNumber & CMD_MASK ];
+	*ucmd = cl.cmds[ cmdNumber & cl.cmdMask ];
 
 	return qtrue;
 }
@@ -684,6 +684,11 @@ static qboolean CL_CG_GetValue( char* value, int valueSize, const char* key ) {
 		return qtrue;
 	}
 
+	if ( !Q_stricmp( key, "trap_CmdBackup_Ext_Legacy" ) ) {
+		Com_sprintf( value, valueSize, "%i", CG_CMDBACKUP_EXT );
+		return qtrue;
+	}
+
 	return qfalse;
 }
 
@@ -1198,6 +1203,11 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 
 	case CG_GETCLIPBOARDDATA:
 		CL_GetClipboardData( VMA(1), args[2] );
+		return 0;
+
+	case CG_CMDBACKUP_EXT:
+		cl.cmdBackup = CMD_BACKUP_EXT;
+		cl.cmdMask = CMD_MASK_EXT;
 		return 0;
 
 	case CG_TRAP_GETVALUE:

@@ -30,6 +30,9 @@ If you have questions concerning this license or the applicable additional terms
 
 #define CMD_BACKUP          64
 #define CMD_MASK            ( CMD_BACKUP - 1 )
+
+#define CMD_BACKUP_EXT      128
+#define CMD_MASK_EXT        ( CMD_BACKUP_EXT - 1 )
 // allow a lot of command backups for very fast systems
 // multiple commands may be combined into a single packet, so this
 // needs to be larger than PACKET_BACKUP
@@ -273,6 +276,8 @@ typedef enum {
 	CG_R_ADDLINEARLIGHTTOSCENE,
 	CG_PC_REMOVE_ALL_GLOBAL_DEFINES,
 	CG_GETCLIPBOARDDATA,
+	CG_CMDBACKUP_EXT,
+
 	CG_TRAP_GETVALUE = COM_TRAP_GETVALUE,
 #endif
 
