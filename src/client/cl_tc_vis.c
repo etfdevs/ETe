@@ -17,6 +17,7 @@ typedef enum {TRIGGER_BRUSH = 0, CLIP_BRUSH, SLICK_BRUSH/*, LANDMINE_BRUSH*/} vi
 
 typedef struct {
 	int numVerts;
+	int cap;
 	polyVert_t *verts;
 	vec3_t mins;
 	vec3_t maxs;
@@ -274,9 +275,11 @@ static void gen_visible_brush(int brushnum, const vec3_t origin, visBrushType_t 
 	node = malloc(sizeof(visBrushNode_t));
 	node->numFaces = brush->numsides;
 	node->faces = malloc(node->numFaces * sizeof(visFace_t));
+
 	for (i = 0; i < node->numFaces; i++) {
 		node->faces[i].numVerts = 0;
-		node->faces[i].verts = malloc(MAX_FACE_VERTS * sizeof(polyVert_t));
+		node->faces[i].cap = 0;
+		node->faces[i].verts = NULL;
 	}
 
 	for (i = 0; i < brush->numsides; i++) {
@@ -428,8 +431,24 @@ static int winding_cmp(const void *a, const void *b) {
 }
 
 static void add_vert_to_face(visFace_t *face, const vec3_t vert, const vec4_t color, const vec2_t tex_coords) {
-	if (face->numVerts >= MAX_FACE_VERTS)
+	if (face->numVerts >= MAX_FACE_VERTS) {
 		return;
+	}
+
+	// allocate memory if needed - if current number of verts is equal to cap,
+	// we either have not allocated anything yet (both are 0), or we need to
+	// reallocate more memory
+	// each realloc doubles the cap, up to 'MAX_FACE_VERTS', starting at 8
+	if (face->numVerts == face->cap) {
+		int newCap = face->cap ? face->cap * 2 : 8;
+
+		if (newCap > MAX_FACE_VERTS) {
+			newCap = MAX_FACE_VERTS;
+		}
+
+		face->verts = realloc(face->verts, (size_t)newCap * sizeof(polyVert_t));
+		face->cap = newCap;
+	}
 
 	VectorCopy(vert, face->verts[face->numVerts].xyz);
 	Vector4Copy(color, face->verts[face->numVerts].modulate);
