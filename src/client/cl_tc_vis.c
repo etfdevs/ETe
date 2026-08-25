@@ -13,10 +13,17 @@
 #define MAX_FACE_VERTS 64
 #define MIN_WALK_NORMAL 0.7f
 
-typedef enum {TRIGGER_BRUSH = 0, CLIP_BRUSH, SLICK_BRUSH/*, LANDMINE_BRUSH*/} visBrushType_t;
+typedef enum {
+	TRIGGER_BRUSH = 0,
+	CLIP_BRUSH,
+	SLICK_BRUSH,
+	//LANDMINE_BRUSH,
+	NUM_VIS_BRUSH_TYPES,
+} visBrushType_t;
 
 typedef struct {
 	int numVerts;
+	int cap;
 	polyVert_t *verts;
 	vec3_t mins;
 	vec3_t maxs;
@@ -32,6 +39,79 @@ typedef struct visBrushNode_s {
 	struct visBrushNode_s *next;
 } visBrushNode_t;
 
+// chunked bump allocator used for all visible-brush geometry
+// blocks are never moved, so pointers into the arena stay valid for the
+// whole map session; everything is bulk-freed on the next map load
+#define VIS_ARENA_INITIAL_BLOCK	(64 * 1024)
+#define VIS_ARENA_MAX_BLOCK		(8 * 1024 * 1024)
+
+typedef struct visArenaBlock_s {
+	struct visArenaBlock_s *next;
+	size_t size;
+	size_t used;
+	/* payload follows */
+} visArenaBlock_t;
+
+typedef struct {
+	visArenaBlock_t *head;
+	visArenaBlock_t *tail;
+	size_t totalSize;  /* sum of all block payload capacities */
+	size_t totalUsed;  /* sum of payload bytes handed out */
+} visArena_t;
+
+static visArena_t visArena;
+
+static void *visArena_Alloc(visArena_t *arena, size_t size) {
+	static const size_t align = 8;
+	const size_t payload = (size + align - 1) & ~(align - 1);
+	const size_t payloadOffset = (sizeof(visArenaBlock_t) + align - 1) & ~(align - 1);
+	visArenaBlock_t *blk = arena->tail;
+
+	if (blk == NULL || blk->size - blk->used < payload) {
+		size_t blkSize = payload;
+		if (blk != NULL) {
+			size_t grown = blk->size * 2;
+			if (grown > VIS_ARENA_MAX_BLOCK)
+				grown = VIS_ARENA_MAX_BLOCK;
+			if (blkSize < grown)
+				blkSize = grown;
+		} else if (blkSize < VIS_ARENA_INITIAL_BLOCK) {
+			blkSize = VIS_ARENA_INITIAL_BLOCK;
+		}
+		blk = malloc(payloadOffset + blkSize);
+		if (blk == NULL)
+			return NULL;
+		blk->next = NULL;
+		blk->size = blkSize;
+		blk->used = 0;
+		if (arena->tail != NULL)
+			arena->tail->next = blk;
+		else
+			arena->head = blk;
+		arena->tail = blk;
+		arena->totalSize += blkSize;
+	}
+
+	{
+		byte *p = (byte *)blk + payloadOffset + blk->used;
+		blk->used += payload;
+		arena->totalUsed += payload;
+		return p;
+	}
+}
+
+static void visArena_FreeAll(visArena_t *arena) {
+	visArenaBlock_t *blk = arena->head;
+	while (blk != NULL) {
+		visArenaBlock_t *next = blk->next;
+		free(blk);
+		blk = next;
+	}
+	arena->head = NULL;
+	arena->tail = NULL;
+	arena->totalSize = 0;
+	arena->totalUsed = 0;
+}
 
 static void add_triggers(void);
 static void add_clips(void);
@@ -43,14 +123,17 @@ static qboolean point_in_brush(const vec3_t point, const cbrush_t *brush);
 static int winding_cmp(const void *a, const void *b);
 static void add_vert_to_face(visFace_t *face, const vec3_t vert, const vec4_t color, const vec2_t tex_coords);
 static float *get_uv_coords(vec2_t uv, const vec3_t vert, const vec3_t normal);
-static void free_vis_brushes(visBrushNode_t *brushes);
 static void draw(visBrushNode_t *brush, qhandle_t shader);
-
+static void tc_vis_meminfo_f(void);
 
 static visBrushNode_t *trigger_head = NULL;
 static visBrushNode_t *clip_head = NULL;
 static visBrushNode_t *slick_head = NULL;
 //static visBrushNode_t *landmine_head = NULL;
+
+static size_t visBrushTypeAlloc[NUM_VIS_BRUSH_TYPES];
+static const char * const visBrushTypeNames[NUM_VIS_BRUSH_TYPES] = { "trigger", "clip", "slick" };
+static qboolean tcVisMemInfoRegistered = qfalse;
 
 /* needed for winding_cmp */
 static vec3_t w_center, w_normal, w_ref_vec;
@@ -82,10 +165,14 @@ static const vec4_t slick_color = { 0, 64, 128, 255 };
 static const cplane_t *frustum;
 
 void tc_vis_init(void) {
-	free_vis_brushes(trigger_head);
-	free_vis_brushes(clip_head);
-	free_vis_brushes(slick_head);
-	//free_vis_brushes(landmine_head);
+	size_t usedBefore;
+
+	if (!tcVisMemInfoRegistered) {
+		Cmd_AddCommand("tcVisMemInfo", tc_vis_meminfo_f);
+		tcVisMemInfoRegistered = qtrue;
+	}
+
+	visArena_FreeAll(&visArena);
 	trigger_head = NULL;
 	clip_head = NULL;
 	slick_head = NULL;
@@ -110,9 +197,17 @@ void tc_vis_init(void) {
 	//	return;
 	//}
 
+	usedBefore = visArena.totalUsed;
 	add_triggers();
+	visBrushTypeAlloc[TRIGGER_BRUSH] = visArena.totalUsed - usedBefore;
+
+	usedBefore = visArena.totalUsed;
 	add_clips();
+	visBrushTypeAlloc[CLIP_BRUSH] = visArena.totalUsed - usedBefore;
+
+	usedBefore = visArena.totalUsed;
 	add_slicks();
+	visBrushTypeAlloc[SLICK_BRUSH] = visArena.totalUsed - usedBefore;
 	//add_landmines();
 }
 
@@ -135,6 +230,28 @@ void tc_vis_render(void) {
 	/*if (landmines_draw->integer) {
 		draw(landmine_head, landmine_shader);
 	}*/
+}
+
+static void tc_vis_meminfo_f(void) {
+	int i, blocks = 0;
+	size_t totalBrushes = 0;
+	visArenaBlock_t *blk;
+
+	for (blk = visArena.head; blk != NULL; blk = blk->next) {
+		blocks++;
+	}
+
+	Com_Printf( "visible brush geometry:\n" );
+	for (i = 0; i < NUM_VIS_BRUSH_TYPES; i++) {
+		Com_Printf( "%9zu bytes (%6.2f MB) in %s brushes\n", visBrushTypeAlloc[i], visBrushTypeAlloc[i] / Square(1024.0), visBrushTypeNames[i] );
+		totalBrushes += visBrushTypeAlloc[i];
+	}
+	Com_Printf( "%9zu bytes (%6.2f MB) total in visible brushes\n", totalBrushes, totalBrushes / Square(1024.0) );
+	Com_Printf( "\n" );
+	Com_Printf( "%9zu bytes (%6.2f MB) total arena\n", visArena.totalSize, visArena.totalSize / Square(1024.0) );
+	Com_Printf( "%9zu bytes (%6.2f MB) arena used\n", visArena.totalUsed, visArena.totalUsed / Square(1024.0) );
+	Com_Printf( "%9zu bytes (%6.2f MB) arena unused\n", visArena.totalSize - visArena.totalUsed, (visArena.totalSize - visArena.totalUsed) / Square(1024.0) );
+	Com_Printf( "%i arena blocks\n", blocks );
 }
 
 // ripped from breadsticks
@@ -195,7 +312,7 @@ static void add_clips(void) {
 			gen_visible_brush(i, vec3_origin, CLIP_BRUSH, clip_color);
 		}
 		// this should match weaponclips, although it might also match other shaders.
-                // weaponclips don't have a specific content/surfaceparm, so in reality this is just a hack
+		// weaponclips don't have a specific content/surfaceparm, so in reality this is just a hack
 		// to match parameters used in weaponclip shaders
 		for (s = 0; s < brush->numsides; s++)
 		{
@@ -241,7 +358,7 @@ static void add_slicks(void) {
 		for (s = 0; s < brush->numsides; s++) {
 			const cbrushside_t* side = &brush->sides[s];
 			if ((side->surfaceFlags & SURF_SLICK) ||
-			    (!(side->surfaceFlags & SURF_NODRAW) && !(side->surfaceFlags & SURF_SKY) && angleSlick(side->plane))) {
+					(!(side->surfaceFlags & SURF_NODRAW) && !(side->surfaceFlags & SURF_SKY) && angleSlick(side->plane))) {
 				gen_visible_brush(i, vec3_origin, SLICK_BRUSH, slick_color);
 				break;
 			}
@@ -271,12 +388,14 @@ static void gen_visible_brush(int brushnum, const vec3_t origin, visBrushType_t 
 	if ( !brush->numsides )
 		return;
 
-	node = malloc(sizeof(visBrushNode_t));
+	node = visArena_Alloc(&visArena, sizeof(visBrushNode_t));
 	node->numFaces = brush->numsides;
-	node->faces = malloc(node->numFaces * sizeof(visFace_t));
+	node->faces = visArena_Alloc(&visArena, node->numFaces * sizeof(visFace_t));
+
 	for (i = 0; i < node->numFaces; i++) {
 		node->faces[i].numVerts = 0;
-		node->faces[i].verts = malloc(MAX_FACE_VERTS * sizeof(polyVert_t));
+		node->faces[i].cap = 0;
+		node->faces[i].verts = NULL;
 	}
 
 	for (i = 0; i < brush->numsides; i++) {
@@ -351,6 +470,8 @@ static void gen_visible_brush(int brushnum, const vec3_t origin, visBrushType_t 
 	/*case LANDMINE_BRUSH:
 		head = &landmine_head;
 		break;*/
+	default:
+		break;
 	};
 	assert(head);
 	node->next = *head;
@@ -428,8 +549,30 @@ static int winding_cmp(const void *a, const void *b) {
 }
 
 static void add_vert_to_face(visFace_t *face, const vec3_t vert, const vec4_t color, const vec2_t tex_coords) {
-	if (face->numVerts >= MAX_FACE_VERTS)
+	if (face->numVerts >= MAX_FACE_VERTS) {
 		return;
+	}
+
+	// allocate memory if needed - if current number of verts is equal to cap,
+	// we either have not allocated anything yet (both are 0), or we need to
+	// grow the buffer
+	// each growth doubles the cap, up to 'MAX_FACE_VERTS', starting at 8
+	if (face->numVerts == face->cap) {
+		int newCap = face->cap ? face->cap * 2 : 8;
+
+		if (newCap > MAX_FACE_VERTS) {
+			newCap = MAX_FACE_VERTS;
+		}
+
+		{
+			polyVert_t *newVerts = visArena_Alloc(&visArena, (size_t)newCap * sizeof(polyVert_t));
+			if (face->verts != NULL) {
+				memcpy(newVerts, face->verts, (size_t)face->numVerts * sizeof(polyVert_t));
+			}
+			face->verts = newVerts;
+		}
+		face->cap = newCap;
+	}
 
 	VectorCopy(vert, face->verts[face->numVerts].xyz);
 	Vector4Copy(color, face->verts[face->numVerts].modulate);
@@ -454,18 +597,6 @@ static float *get_uv_coords(vec2_t uv, const vec3_t vert, const vec3_t normal) {
 	}
 
 	return uv;
-}
-
-static void free_vis_brushes(visBrushNode_t *brushes) {
-	while (brushes != NULL) {
-		visBrushNode_t *next = brushes->next;
-		int i;
-		for (i = 0; i < brushes->numFaces; i++)
-			free(brushes->faces[i].verts);
-		free(brushes->faces);
-		free(brushes);
-		brushes = next;
-	}
 }
 
 static qboolean CullFace(const visFace_t *face) {
