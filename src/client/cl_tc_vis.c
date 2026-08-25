@@ -13,7 +13,13 @@
 #define MAX_FACE_VERTS 64
 #define MIN_WALK_NORMAL 0.7f
 
-typedef enum {TRIGGER_BRUSH = 0, CLIP_BRUSH, SLICK_BRUSH/*, LANDMINE_BRUSH*/} visBrushType_t;
+typedef enum {
+	TRIGGER_BRUSH = 0,
+	CLIP_BRUSH,
+	SLICK_BRUSH,
+	//LANDMINE_BRUSH,
+	NUM_VIS_BRUSH_TYPES,
+} visBrushType_t;
 
 typedef struct {
 	int numVerts;
@@ -49,6 +55,8 @@ typedef struct visArenaBlock_s {
 typedef struct {
 	visArenaBlock_t *head;
 	visArenaBlock_t *tail;
+	size_t totalSize;  /* sum of all block payload capacities */
+	size_t totalUsed;  /* sum of payload bytes handed out */
 } visArena_t;
 
 static visArena_t visArena;
@@ -81,11 +89,13 @@ static void *visArena_Alloc(visArena_t *arena, size_t size) {
 		else
 			arena->head = blk;
 		arena->tail = blk;
+		arena->totalSize += blkSize;
 	}
 
 	{
 		byte *p = (byte *)blk + payloadOffset + blk->used;
 		blk->used += payload;
+		arena->totalUsed += payload;
 		return p;
 	}
 }
@@ -99,6 +109,8 @@ static void visArena_FreeAll(visArena_t *arena) {
 	}
 	arena->head = NULL;
 	arena->tail = NULL;
+	arena->totalSize = 0;
+	arena->totalUsed = 0;
 }
 
 static void add_triggers(void);
@@ -112,11 +124,16 @@ static int winding_cmp(const void *a, const void *b);
 static void add_vert_to_face(visFace_t *face, const vec3_t vert, const vec4_t color, const vec2_t tex_coords);
 static float *get_uv_coords(vec2_t uv, const vec3_t vert, const vec3_t normal);
 static void draw(visBrushNode_t *brush, qhandle_t shader);
+static void tc_vis_meminfo_f(void);
 
 static visBrushNode_t *trigger_head = NULL;
 static visBrushNode_t *clip_head = NULL;
 static visBrushNode_t *slick_head = NULL;
 //static visBrushNode_t *landmine_head = NULL;
+
+static size_t visBrushTypeAlloc[NUM_VIS_BRUSH_TYPES];
+static const char * const visBrushTypeNames[NUM_VIS_BRUSH_TYPES] = { "trigger", "clip", "slick" };
+static qboolean tcVisMemInfoRegistered = qfalse;
 
 /* needed for winding_cmp */
 static vec3_t w_center, w_normal, w_ref_vec;
@@ -148,6 +165,13 @@ static const vec4_t slick_color = { 0, 64, 128, 255 };
 static const cplane_t *frustum;
 
 void tc_vis_init(void) {
+	size_t usedBefore;
+
+	if (!tcVisMemInfoRegistered) {
+		Cmd_AddCommand("tcVisMemInfo", tc_vis_meminfo_f);
+		tcVisMemInfoRegistered = qtrue;
+	}
+
 	visArena_FreeAll(&visArena);
 	trigger_head = NULL;
 	clip_head = NULL;
@@ -173,9 +197,17 @@ void tc_vis_init(void) {
 	//	return;
 	//}
 
+	usedBefore = visArena.totalUsed;
 	add_triggers();
+	visBrushTypeAlloc[TRIGGER_BRUSH] = visArena.totalUsed - usedBefore;
+
+	usedBefore = visArena.totalUsed;
 	add_clips();
+	visBrushTypeAlloc[CLIP_BRUSH] = visArena.totalUsed - usedBefore;
+
+	usedBefore = visArena.totalUsed;
 	add_slicks();
+	visBrushTypeAlloc[SLICK_BRUSH] = visArena.totalUsed - usedBefore;
 	//add_landmines();
 }
 
@@ -198,6 +230,28 @@ void tc_vis_render(void) {
 	/*if (landmines_draw->integer) {
 		draw(landmine_head, landmine_shader);
 	}*/
+}
+
+static void tc_vis_meminfo_f(void) {
+	int i, blocks = 0;
+	size_t totalBrushes = 0;
+	visArenaBlock_t *blk;
+
+	for (blk = visArena.head; blk != NULL; blk = blk->next) {
+		blocks++;
+	}
+
+	Com_Printf( "visible brush geometry:\n" );
+	for (i = 0; i < NUM_VIS_BRUSH_TYPES; i++) {
+		Com_Printf( "%9zu bytes (%6.2f MB) in %s brushes\n", visBrushTypeAlloc[i], visBrushTypeAlloc[i] / Square(1024.0), visBrushTypeNames[i] );
+		totalBrushes += visBrushTypeAlloc[i];
+	}
+	Com_Printf( "%9zu bytes (%6.2f MB) total in visible brushes\n", totalBrushes, totalBrushes / Square(1024.0) );
+	Com_Printf( "\n" );
+	Com_Printf( "%9zu bytes (%6.2f MB) total arena\n", visArena.totalSize, visArena.totalSize / Square(1024.0) );
+	Com_Printf( "%9zu bytes (%6.2f MB) arena used\n", visArena.totalUsed, visArena.totalUsed / Square(1024.0) );
+	Com_Printf( "%9zu bytes (%6.2f MB) arena unused\n", visArena.totalSize - visArena.totalUsed, (visArena.totalSize - visArena.totalUsed) / Square(1024.0) );
+	Com_Printf( "%i arena blocks\n", blocks );
 }
 
 // ripped from breadsticks
@@ -416,6 +470,8 @@ static void gen_visible_brush(int brushnum, const vec3_t origin, visBrushType_t 
 	/*case LANDMINE_BRUSH:
 		head = &landmine_head;
 		break;*/
+	default:
+		break;
 	};
 	assert(head);
 	node->next = *head;
