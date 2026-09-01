@@ -26,8 +26,8 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 
-#ifndef __TR_PUBLIC_H
-#define __TR_PUBLIC_H
+#ifndef __TR_PUBLIC_H__
+#define __TR_PUBLIC_H__
 
 #include "tr_types.h"
 #include "vulkan/vulkan.h"
@@ -135,8 +135,6 @@ typedef struct {
 
 	qboolean ( *inPVS )( const vec3_t p1, const vec3_t p2 );
 
-	void ( *purgeCache )( void );
-
 	//bani
 	qboolean ( *LoadDynamicShader )( const char *shadername, const char *shadertext );
 	// fretn
@@ -160,6 +158,8 @@ typedef struct {
 
 	const cplane_t *(*GetFrustum)( void );
 
+	qboolean (*IsMainScene)( void );
+
 	void* (*GetImageBuffer)(int size, bufferMemType_t bufferType);
 
 
@@ -170,10 +170,10 @@ typedef struct {
 //
 typedef struct {
 	// print message on the local console
-	void	(QDECL *Printf)( printParm_t printLevel, const char *fmt, ... ) FORMAT_PRINTF(2, 3);
+	void	(QDECL *Printf)( printParm_t printLevel, const char *fmt, ... ) Q_PRINTF_FUNC(2, 3);
 
 	// abort the game
-	void	(QDECL *Error)( errorParm_t errorLevel, const char *fmt, ... ) NORETURN_PTR FORMAT_PRINTF(2, 3);
+	void	(QDECL *Error)( errorParm_t errorLevel, const char *fmt, ... ) Q_NO_RETURN_PTR Q_PRINTF_FUNC(2, 3);
 
 	// milliseconds should only be used for profiling, never
 	// for anything game related.  Get time from the refdef
@@ -183,17 +183,16 @@ typedef struct {
 
 	// stack based memory allocation for per-level things that
 	// won't be freed
-	void ( *Hunk_Clear )( void );
 #ifdef HUNK_DEBUG
-	void    *( *Hunk_AllocDebug )( int size, ha_pref pref, char *label, char *file, int line );
+	void	*(*Hunk_AllocDebug)( size_t size, ha_pref pref, const char *label, const char *file, int line );
 #else
-	void    *( *Hunk_Alloc )( int size, ha_pref pref );
+	void	*(*Hunk_Alloc)( size_t size, ha_pref pref );
 #endif
-	void    *( *Hunk_AllocateTempMemory )( int size );
-	void ( *Hunk_FreeTempMemory )( void *block );
+	void	*(*Hunk_AllocateTempMemory)( size_t size );
+	void	(*Hunk_FreeTempMemory)( void *block );
 
 	// dynamic memory allocator for things that need to be freed
-	void	*(*Malloc)( int bytes );
+	void	*(*Malloc)( size_t bytes );
 	void	(*Free)( void *buf );
 	void	(*Tag_Free)( void );
 
@@ -260,7 +259,6 @@ typedef struct {
 
 	void	(*Sys_SetClipboardBitmap)( const byte *bitmap, int size );
 	qboolean(*Sys_LowPhysicalMemory)( void );
-	const void *(*Sys_OmnibotRender)( const void *data );
 
 	int		(*Com_RealTime)( qtime_t *qtime );
 	int		(*Com_Filter)( const char *filter, const char *name );

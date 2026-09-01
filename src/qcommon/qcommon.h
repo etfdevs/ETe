@@ -190,7 +190,11 @@ typedef enum {
 } netsrc_t;
 
 
-#define NET_ADDRSTRMAXLEN 48	// maximum length of an IPv6 address string including trailing '\0'
+#ifdef USE_IPV6
+#define NET_ADDRSTRMAXLEN 64	// maximum length of an IPv6 address string including trailing '\0'
+#else
+#define NET_ADDRSTRMAXLEN 16	// maximum length of an IPv4 address string including trailing '\0'
+#endif
 
 typedef struct {
 	netadrtype_t	type;
@@ -202,15 +206,18 @@ typedef struct {
 	} ipv;
 	uint16_t	port;
 #ifdef USE_IPV6
-	uint32_t scope_id;	// Needed for IPv6 link-local addresses
+	uint32_t	scope_id;	// Needed for IPv6 link-local addresses
 #endif
 } netadr_t;
 
 void		NET_Init( void );
 //void		NET_Shutdown( void );
-void		NET_FlushPacketQueue(void);
+
+
+void		NET_FlushPacketQueue( int time_diff );
+void		NET_QueuePacket( netsrc_t sock, int length, const void *data, const netadr_t *to, int offset );
 void		NET_SendPacket( netsrc_t sock, int length, const void *data, const netadr_t *to );
-void		QDECL NET_OutOfBandPrint( netsrc_t net_socket, const netadr_t *adr, const char *format, ...) FORMAT_PRINTF(3, 4);
+void		QDECL NET_OutOfBandPrint( netsrc_t net_socket, const netadr_t *adr, const char *format, ...) Q_PRINTF_FUNC(3, 4);
 void		NET_OutOfBandCompress( netsrc_t sock, const netadr_t *adr, const byte *data, int len );
 
 qboolean	NET_CompareAdr( const netadr_t *a, const netadr_t *b );
@@ -220,7 +227,9 @@ qboolean	NET_IsLocalAddress( const netadr_t *adr );
 const char	*NET_AdrToString( const netadr_t *a );
 const char	*NET_AdrToStringwPort( const netadr_t *a );
 int         NET_StringToAdr( const char *s, netadr_t *a, netadrtype_t family );
+#ifndef DEDICATED
 qboolean	NET_GetLoopPacket( netsrc_t sock, netadr_t *net_from, msg_t *net_message );
+#endif
 #ifdef USE_IPV6
 void		NET_JoinMulticast6( void );
 void		NET_LeaveMulticast6( void );
@@ -285,6 +294,7 @@ void Netchan_Setup( netsrc_t sock, netchan_t *chan, const netadr_t *adr, int por
 
 void Netchan_Transmit( netchan_t *chan, int length, const byte *data );
 void Netchan_TransmitNextFragment( netchan_t *chan );
+void Netchan_Enqueue( netchan_t *chan, int length, const byte *data );
 
 qboolean Netchan_Process( netchan_t *chan, msg_t *msg );
 
@@ -331,30 +341,6 @@ extern const int demo_protocols[];
 	#define MASTER_SERVER_NAME      "etmaster.idsoftware.com"
 #endif
 #define MOTD_SERVER_NAME        "etmaster.idsoftware.com"    //"etmotd.idsoftware.com"			// ?.?.?.?
-
-// TTimo: override autoupdate server for testing
-#ifndef AUTOUPDATE_SERVER_NAME
-//	#define AUTOUPDATE_SERVER_NAME "127.0.0.1"
-	#define AUTOUPDATE_SERVER_NAME "au2rtcw2.activision.com"
-#endif
-
-// TTimo: allow override for easy dev/testing..
-// FIXME: not planning to support more than 1 auto update server
-// see cons -- update_server=myhost
-#define MAX_AUTOUPDATE_SERVERS  5
-#if !defined( AUTOUPDATE_SERVER_NAME )
-  #define AUTOUPDATE_SERVER1_NAME   "au2rtcw1.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER2_NAME   "au2rtcw2.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER3_NAME   "au2rtcw3.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER4_NAME   "au2rtcw4.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER5_NAME   "au2rtcw5.activision.com"            // DHM - Nerve
-#else
-  #define AUTOUPDATE_SERVER1_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER2_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER3_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER4_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER5_NAME   AUTOUPDATE_SERVER_NAME
-#endif
 
 #define PORT_MASTER         27950
 #define PORT_MOTD           27951
@@ -527,7 +513,7 @@ then searches for a command or variable that matches the first token.
 */
 
 typedef void (*xcommand_t) (void);
-typedef void (*xcommandCompFunc_t)( char *args, int argNum );
+typedef void (*xcommandCompFunc_t)( const char *args, int argNum );
 
 typedef struct cmdListItem_s {
 	const char	*name;
@@ -562,8 +548,8 @@ void	Cmd_RemoveCommandSafe( const char *cmd_name );
 void	Cmd_CommandCompletion( void(*callback)(const char *s) );
 // callback with each valid string
 void	Cmd_SetCommandCompletionFunc( const char *command, xcommandCompFunc_t complete );
-qboolean Cmd_CompleteArgument( const char *command, char *args, int argNum );
-void	Cmd_CompleteWriteCfgName( char *args, int argNum );
+qboolean Cmd_CompleteArgument( const char *command, const char *args, int argNum );
+void	Cmd_CompleteWriteCfgName( const char *args, int argNum );
 
 int			Cmd_Argc( void );
 void		Cmd_Clear( void );
@@ -724,6 +710,12 @@ issues.
 #define FS_GENERAL_REF	0x01
 #define FS_UI_REF		0x02
 #define FS_CGAME_REF	0x04
+#define FS_QAGAME_REF	0x08
+
+#define FS_PURE_REF		( FS_GENERAL_REF | FS_UI_REF | FS_CGAME_REF )
+#define FS_ALL_REF		( FS_PURE_REF | FS_QAGAME_REF )
+#define FS_LOCK_REF		( FS_UI_REF | FS_CGAME_REF | FS_QAGAME_REF )
+
 // number of id paks that will never be autodownloaded from baseq3
 #define NUM_ID_PAKS     9
 
@@ -736,12 +728,15 @@ typedef enum {
 	H_MAX
 } handleOwner_t;
 
-#define FS_MATCH_EXTERN (1<<0)
-#define FS_MATCH_PURE   (1<<1)
-#define FS_MATCH_UNPURE (1<<2)
-#define FS_MATCH_STICK  (1<<3)
-#define FS_MATCH_PK3s   (FS_MATCH_PURE | FS_MATCH_UNPURE)
-#define FS_MATCH_ANY    (FS_MATCH_EXTERN | FS_MATCH_PURE | FS_MATCH_UNPURE)
+#define FS_MATCH_EXTERN    (1<<0)
+#define FS_MATCH_PURE      (1<<1)
+#define FS_MATCH_UNPURE    (1<<2)
+#define FS_MATCH_STICK     (1<<3)
+#define FS_MATCH_SUBDIRS   (1<<4)
+#define FS_MATCH_PK3s      (FS_MATCH_PURE | FS_MATCH_UNPURE)
+#define FS_MATCH_ANY       (FS_MATCH_EXTERN | FS_MATCH_PURE | FS_MATCH_UNPURE)
+
+#define FS_MAX_SUBDIRS		8 /* should be enough for practical use with FS_MATCH_SUBDIRS */
 
 #define	MAX_FILE_HANDLES	64
 #define	FS_INVALID_HANDLE	0
@@ -803,7 +798,7 @@ int		FS_GetFileList(  const char *path, const char *extension, char *listbuf, in
 
 fileHandle_t	FS_FOpenFileWrite( const char *qpath );
 fileHandle_t	FS_FOpenFileAppend( const char *filename );
-// will properly create any needed paths and deal with seperater character issues
+// will properly create any needed paths and deal with separator character issues
 
 qboolean FS_ResetReadOnlyAttribute( const char *filename );
 
@@ -882,7 +877,7 @@ int		FS_FTell( fileHandle_t f );
 
 void	FS_Flush( fileHandle_t f );
 
-void 	QDECL FS_Printf( fileHandle_t f, const char *fmt, ... ) FORMAT_PRINTF(2, 3);
+void 	QDECL FS_Printf( fileHandle_t f, const char *fmt, ... ) Q_PRINTF_FUNC(2, 3);
 // like fprintf
 
 int		FS_FOpenFileByMode( const char *qpath, fileHandle_t *f, fsMode_t mode );
@@ -930,8 +925,7 @@ void FS_Rename( const char *from, const char *to );
 void FS_Remove( const char *osPath );
 void FS_HomeRemove( const char *homePath );
 
-void	FS_FilenameCompletion( const char *dir, const char *ext,
-		qboolean stripExt, void(*callback)(const char *s), int flags );
+void	FS_FilenameCompletion( const char *dir, const char *ext, qboolean stripExt, void(*callback)(const char *s), int flags );
 
 int FS_VM_OpenFile( const char *qpath, fileHandle_t *f, fsMode_t mode, handleOwner_t owner );
 int FS_VM_ReadFile( void *buffer, int len, fileHandle_t f, handleOwner_t owner );
@@ -1034,7 +1028,7 @@ void Field_CompleteKeyBind( int key );
 void Field_CompleteFilename( const char *dir, const char *ext, qboolean stripExt, int flags );
 void Field_CompleteStringList( const char **strings, int numstrings );
 void Field_CompleteIntRange( const int minval, const int maxval );
-void Field_CompleteCommand( char *cmd, qboolean doCommands, qboolean doCvars );
+void Field_CompleteCommand( const char *cmd, qboolean doCommands, qboolean doCvars );
 
 void Con_ResetHistory( void );
 void Con_SaveField( const field_t *field );
@@ -1071,6 +1065,18 @@ extern	int	CPU_Flags;
 // ALTIVEC
 #define CPU_ALTIVEC 0x800
 
+#if id386
+#define USE_X87
+#endif
+
+#ifdef USE_X87
+void Q_GetFPUCW( unsigned short *cw );
+void Q_SetFPUCW( unsigned short *cw );
+extern int32_t x87_cw_orig;	// double precision, round to nearest - global/syscalls
+extern int32_t x87_cw_rint;	// single precision, round to nearest - qvm/snapvector
+extern int32_t x87_cw_cvfi;	// single precision, truncate to zero - ftol()
+#endif
+
 typedef struct gameInfo_s {
 	qboolean spEnabled;
 	int spGameTypes;
@@ -1097,9 +1103,9 @@ void		Info_Print( const char *s );
 
 void		Com_BeginRedirect (char *buffer, int buffersize, void (*flush)(const char *));
 void		Com_EndRedirect( void );
-void 		QDECL Com_Printf( const char *fmt, ... ) FORMAT_PRINTF(1, 2);
-void 		QDECL Com_DPrintf( const char *fmt, ... ) FORMAT_PRINTF(1, 2);
-void 		NORETURN QDECL Com_Error( errorParm_t code, const char *fmt, ... ) FORMAT_PRINTF(2, 3);
+void 		QDECL Com_Printf( const char *fmt, ... ) Q_PRINTF_FUNC(1, 2);
+void 		QDECL Com_DPrintf( const char *fmt, ... ) Q_PRINTF_FUNC(1, 2);
+void 		Q_NO_RETURN QDECL Com_Error( errorParm_t code, const char *fmt, ... ) Q_PRINTF_FUNC(2, 3);
 void 		Com_Quit_f( void );
 void		Com_GameRestart( int checksumFeed, qboolean clientRestart );
 
@@ -1267,16 +1273,16 @@ temp file loading
 #endif
 
 #ifdef ZONE_DEBUG
-#define Z_TagMalloc(size, tag)			Z_TagMallocDebug(size, tag, #size, __FILE__, __LINE__)
-#define Z_Malloc(size)					Z_MallocDebug(size, #size, __FILE__, __LINE__)
-#define S_Malloc(size)					S_MallocDebug(size, #size, __FILE__, __LINE__)
-void *Z_TagMallocDebug( int size, memtag_t tag, char *label, char *file, int line );	// NOT 0 filled memory
-void *Z_MallocDebug( int size, char *label, char *file, int line );			// returns 0 filled memory
-void *S_MallocDebug( int size, char *label, char *file, int line );			// returns 0 filled memory
+#define Z_TagMalloc(size, tag)			Z_TagMallocDebug(size, tag, #size, RELATIVE_FILENAME, __LINE__)
+#define Z_Malloc(size)					Z_MallocDebug(size, #size, RELATIVE_FILENAME, __LINE__)
+#define S_Malloc(size)					S_MallocDebug(size, #size, RELATIVE_FILENAME, __LINE__)
+void *Z_TagMallocDebug( size_t size, memtag_t tag, const char *label, const char *file, int line );	// NOT 0 filled memory
+void *Z_MallocDebug( size_t size, const char *label, const char *file, int line );			// returns 0 filled memory
+void *S_MallocDebug( size_t size, const char *label, const char *file, int line );			// returns 0 filled memory
 #else
-void *Z_TagMalloc( int size, memtag_t tag );	// NOT 0 filled memory
-void *Z_Malloc( int size );			// returns 0 filled memory
-void *S_Malloc( int size );			// NOT 0 filled memory only for small allocations
+void *Z_TagMalloc( size_t size, memtag_t tag );	// NOT 0 filled memory
+void *Z_Malloc( size_t size );			// returns 0 filled memory
+void *S_Malloc( size_t size );			// NOT 0 filled memory only for small allocations
 #endif
 void Z_Free( void *ptr );
 int Z_FreeTags( memtag_t tag );
@@ -1288,7 +1294,7 @@ void Hunk_ClearToMark( void );
 void Hunk_SetMark( void );
 qboolean Hunk_CheckMark( void );
 void Hunk_ClearTempMemory( void );
-void *Hunk_AllocateTempMemory( int size );
+void *Hunk_AllocateTempMemory( size_t size );
 void Hunk_FreeTempMemory( void *buf );
 int	Hunk_MemoryRemaining( void );
 void Hunk_Log( void);
@@ -1400,7 +1406,6 @@ void SV_RemoveDedicatedCommands( void );
 // UI interface
 //
 qboolean UI_GameCommand( void );
-qboolean UI_usesUniqueCDKey(void);
 
 /*
 ==============================================================
@@ -1410,6 +1415,7 @@ NON-PORTABLE SYSTEM SERVICES
 ==============================================================
 */
 
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 typedef enum {
 	AXIS_SIDE,
 	AXIS_FORWARD,
@@ -1419,6 +1425,9 @@ typedef enum {
 	AXIS_PITCH,
 	MAX_JOYSTICK_AXIS
 } joystickAxis_t;
+#else
+#define MAX_JOYSTICK_AXIS 16
+#endif
 
 typedef enum {
   // bk001129 - make sure SE_NONE is zero
@@ -1445,6 +1454,7 @@ void	Sys_SendKeyEvents( void );
 void	Sys_Sleep( int msec );
 char	*Sys_ConsoleInput( void );
 
+qboolean	Sys_IsKeyModActive( int modnum );
 qboolean	Sys_IsNumLockDown( void );
 
 int Sys_GetPID( void );
@@ -1452,20 +1462,25 @@ int Sys_GetPID( void );
 // general development dll loading for virtual machine testing
 void	*QDECL Sys_LoadGameDll( const char *name, vmMain_t *entryPoint, dllSyscall_t systemcalls );
 
-void	NORETURN QDECL Sys_Error( const char *error, ...) FORMAT_PRINTF(1, 2);
-void	NORETURN Sys_Quit (void);
-char	*Sys_GetClipboardData( void );	// note that this isn't journaled...
+const char *Sys_GetDLLName(const char *name);
+
+void	Q_NO_RETURN QDECL Sys_Error( const char *error, ...) Q_PRINTF_FUNC(1, 2);
+void	Q_NO_RETURN Sys_Quit (void);
+char	*Sys_GetClipboardText( void );	// note that this isn't journaled...
+void	Sys_FreeClipboardText( char *data );
 void	Sys_SetClipboardBitmap( const byte *bitmap, int length );
 
 void	Sys_Print( const char *msg );
 
 // dedicated console status, win32-only at the moment
-void	QDECL Sys_SetStatus( const char *format, ...) FORMAT_PRINTF(1, 2);
+void	QDECL Sys_SetStatus( const char *format, ...) Q_PRINTF_FUNC(1, 2);
 
 #ifdef USE_AFFINITY_MASK
 uint64_t Sys_GetAffinityMask( void );
 qboolean Sys_SetAffinityMask( const uint64_t mask );
 #endif
+
+qboolean Sys_IsSteamOverlayAttached( void );
 
 // Sys_Milliseconds should only be used for profiling purposes,
 // any game related timing information should come from event timestamps
@@ -1500,14 +1515,11 @@ const char *Sys_SteamPath( void );
 const char *Sys_GogPath( void );
 const char *Sys_MicrosoftStorePath( void );
 
-char **Sys_ListFiles( const char *directory, const char *extension, const char *filter, int *numfiles, qboolean wantsubs );
+char **Sys_ListFiles( const char *directory, const char *extension, const char *filter, int *numfiles, int subdirs );
 void Sys_FreeFileList( char **list );
 
 qboolean Sys_GetFileStats( const char *filename, fileOffset_t *size, fileTime_t *mtime, fileTime_t *ctime );
 int Sys_PathIsDir( const char *path );
-
-void Sys_BeginProfiling( void );
-void Sys_EndProfiling( void );
 
 qboolean Sys_LowPhysicalMemory( void );
 
@@ -1520,20 +1532,9 @@ typedef struct {
 	int commandId;
 } renderOmnibot_t;
 
-void	Sys_OmnibotLoad();
-void	Sys_OmnibotUnLoad();
-const void * Sys_OmnibotRender( const void *data );
-
-#ifndef DEDICATED
-void Sys_SteamInit();
-void Sys_SteamShutdown();
-#endif
-
 // NOTE TTimo - on win32 the cwd is prepended .. non portable behaviour
 void Sys_StartProcess( const char *exeName, qboolean doexit );            // NERVE - SMF
 void Sys_OpenURL( const char *url, qboolean doexit );                       // NERVE - SMF
-int Sys_GetHighQualityCPU();
-float Sys_GetCPUSpeed( void );
 
 #ifndef _WIN32
 // TTimo only on linux .. maybe on Mac too?

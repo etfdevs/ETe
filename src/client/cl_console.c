@@ -138,7 +138,7 @@ static void Con_MessageMode2_f( void ) {
 	chat_team = qtrue;
 	Field_Clear( &chatField );
 	chatField.widthInChars = 25;
-	Key_SetCatcher( Key_GetCatcher( ) ^ KEYCATCH_MESSAGE );
+	Key_SetCatcher( Key_GetCatcher() ^ KEYCATCH_MESSAGE );
 }
 
 
@@ -372,7 +372,7 @@ void Con_CheckResize( void )
 Cmd_CompleteTxtName
 ==================
 */
-static void Cmd_CompleteTxtName( char *args, int argNum ) {
+static void Cmd_CompleteTxtName( const char *args, int argNum ) {
 	if ( argNum == 2 ) {
 		Field_CompleteFilename( "", "txt", qfalse, FS_MATCH_EXTERN | FS_MATCH_STICK );
 	}
@@ -988,7 +988,7 @@ void Con_RunConsole( void )
 	if ( Key_GetCatcher( ) & KEYCATCH_CONSOLE )
 		con.finalFrac = con.desiredFrac;	// half-screen or custom
 	else
-		con.finalFrac = 0;		// none visible
+		con.finalFrac = 0.0;	// none visible
 	
 	// scroll towards the destination height
 	if ( con.finalFrac < con.displayFrac )
@@ -1054,6 +1054,6 @@ void Con_Close( void )
 	Field_Clear( &g_consoleField );
 	Con_ClearNotify();
 	Key_SetCatcher( Key_GetCatcher( ) & ~KEYCATCH_CONSOLE );
-	con.finalFrac = 0;				// none visible
-	con.displayFrac = 0;
+	con.finalFrac = 0.0;			// none visible
+	con.displayFrac = 0.0;
 }

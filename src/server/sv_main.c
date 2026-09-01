@@ -172,8 +172,8 @@ void SV_AddServerCommand( client_t *client, const char *cmd ) {
 		Com_Printf( "===== pending server commands =====\n" );
 		n = client->reliableSequence - client->reliableAcknowledge;
 		for ( i = 0; i < n; i++ ) {
-			const int j = client->reliableAcknowledge + 1 + i;
-			Com_Printf( "cmd %5d: %s\n", i, client->reliableCommands[ j & ( MAX_RELIABLE_COMMANDS - 1 ) ] );
+			const int idx = client->reliableAcknowledge + 1 + i;
+			Com_Printf( "cmd %5d: %s\n", i, client->reliableCommands[ idx & ( MAX_RELIABLE_COMMANDS - 1 ) ] );
 		}
 		Com_Printf( "cmd %5d: %s\n", i, cmd );
 		SV_DropClient( client, "Server command overflow" );
@@ -193,7 +193,7 @@ the client game module: "cp", "print", "chat", etc
 A NULL client will broadcast to all clients
 =================
 */
-void FORMAT_PRINTF(2,3) QDECL SV_SendServerCommand( client_t *cl, const char *fmt, ... ) {
+void Q_PRINTF_FUNC(2,3) QDECL SV_SendServerCommand( client_t *cl, const char *fmt, ... ) {
 	va_list		argptr;
 	char		message[MAX_STRING_CHARS+128]; // slightly larger than allowed, to detect overflows
 	client_t	*client;
@@ -218,7 +218,7 @@ void FORMAT_PRINTF(2,3) QDECL SV_SendServerCommand( client_t *cl, const char *fm
 	}
 
 	// send the data to all relevant clients
-	for ( j = 0, client = svs.clients; j < sv_maxclients->integer ; j++, client++ ) {
+	for ( j = 0, client = svs.clients; j < sv.maxclients ; j++, client++ ) {
 		if ( currentGameMod == GAMEMOD_ETJUMP && client->state < CS_PRIMED ) {
 			continue;
 		}
@@ -334,7 +334,7 @@ static void SV_MasterHeartbeat( const char *message )
 		Com_Printf ("Sending heartbeat to %s\n", sv_master[i]->string );
 
 		// this command should be changed if the server info / status format
-		// ever incompatably changes
+		// ever changes incompatibly
 
 		if(adr[i][0].type != NA_BAD)
 			NET_OutOfBandPrint( NS_SERVER, &adr[i][0], "heartbeat %s\n", message);
@@ -424,7 +424,7 @@ void SV_MasterGameCompleteStatus( void ) {
 		Com_Printf ("Sending gameCompleteStatus to %s\n", sv_master[i]->string );
 
 		// this command should be changed if the server info / status format
-		// ever incompatably changes
+		// ever changes incompatibly
 
 		if(adr[i][0].type != NA_BAD)
 			SVC_GameCompleteStatus( &adr[i][0] );
@@ -837,13 +837,13 @@ static void SVC_Status( const netadr_t *from ) {
 
 	// echo back the parameter to status. so master servers can use it as a challenge
 	// to prevent timed spoofed reply packets that add ghost servers
-	Info_SetValueForKey( infostring, "challenge", Cmd_Argv( 1 ) );
+	Info_SetValueForKey_s( infostring, sizeof( infostring ), "challenge", Cmd_Argv( 1 ) );
 
 	s = status;
 	status[0] = '\0';
 	statusLength = strlen( infostring ) + 16; // strlen( "statusResponse\n\n" )
 
-	for ( i = 0 ; i < sv_maxclients->integer ; i++ ) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		cl = &svs.clients[i];
 		if ( cl->state >= CS_CONNECTED ) {
 			ps = SV_GameClientNum( i );
@@ -922,13 +922,13 @@ void SVC_GameCompleteStatus( const netadr_t *from ) {
 
 	// echo back the parameter to status. so master servers can use it as a challenge
 	// to prevent timed spoofed reply packets that add ghost servers
-	Info_SetValueForKey( infostring, "challenge", Cmd_Argv( 1 ) );
+	Info_SetValueForKey_s( infostring, sizeof( infostring ), "challenge", Cmd_Argv( 1 ) );
 
 	s = status;
 	status[0] = '\0';
 	statusLength = strlen( infostring ) + 20; // strlen( "gameCompleteStatus\n\n" )
 
-	for ( i = 0 ; i < sv_maxclients->integer ; i++ ) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		cl = &svs.clients[i];
 		if ( cl->state >= CS_CONNECTED ) {
 			ps = SV_GameClientNum( i );
@@ -1003,7 +1003,7 @@ static void SVC_Info( const netadr_t *from ) {
 
 	// don't count privateclients
 	count = humans = 0;
-	for ( i = sv_privateClients->integer ; i < sv_maxclients->integer ; i++ ) {
+	for ( i = sv_privateClients->integer; i < sv.maxclients; i++ ) {
 		if ( svs.clients[i].state >= CS_CONNECTED ) {
 			count++;
 			if (svs.clients[i].netchan.remoteAddress.type != NA_BOT) {
@@ -1024,13 +1024,13 @@ static void SVC_Info( const netadr_t *from ) {
 	Info_SetValueForKey( infostring, "mapname", sv_mapname->string );
 	Info_SetValueForKey( infostring, "clients", va("%i", count) );
 	Info_SetValueForKey( infostring, "humans", va("%i", humans) );
-	Info_SetValueForKey( infostring, "sv_maxclients", va( "%i", sv_maxclients->integer - sv_privateClients->integer ) );
+	Info_SetValueForKey( infostring, "sv_maxclients", va( "%i", sv.maxclients - sv_privateClients->integer ) );
 	Info_SetValueForKey( infostring, "sv_privateclients", va( "%i", sv_privateClients->integer ) );
 	Info_SetValueForKey( infostring, "gametype", Cvar_VariableString( "g_gametype" ) );
-	Info_SetValueForKey( infostring, "pure", va( "%i", sv_pure->integer ) );
+	Info_SetValueForKey( infostring, "pure", va( "%i", sv.pure ) );
 
 	str = Cvar_VariableString( "fs_game" );
-	if ( *str ) {
+	if ( *str != '\0' ) {
 		Info_SetValueForKey( infostring, "game", str );
 	}
 
@@ -1041,22 +1041,22 @@ static void SVC_Info( const netadr_t *from ) {
 
 	// TTimo
 	str = Cvar_VariableString( "g_antilag" );
-	if ( *str ) {
+	if ( *str != '\0' ) {
 		Info_SetValueForKey( infostring, "g_antilag", str );
 	}
 
 	str = Cvar_VariableString( "g_heavyWeaponRestriction" );
-	if ( *str ) {
+	if ( *str != '\0' ) {
 		Info_SetValueForKey( infostring, "weaprestrict", str );
 	}
 
 	str = Cvar_VariableString( "g_balancedteams" );
-	if ( *str ) {
+	if ( *str != '\0' ) {
 		Info_SetValueForKey( infostring, "balancedteams", str );
 	}
 
 	str = Cvar_VariableString( "g_oss" );
-	if ( *str ) {
+	if ( *str != '\0' ) {
 		Info_SetValueForKey( infostring, "oss", str );
 	}
 
@@ -1183,7 +1183,7 @@ static void SV_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 	if ( !memcmp( "connect ", msg->data + 4, 8 ) ) {
 		if ( msg->cursize > MAX_INFO_STRING*2 ) { // if we assume 200% compression ratio on userinfo
 			if ( com_developer->integer ) {
-				Com_Printf( "%s : connect packet is too long - %i\n", NET_AdrToString( from ), msg->cursize );
+				Com_Printf( S_COLOR_DEVEL "%s : connect packet is too long - %i\n", NET_AdrToString( from ), msg->cursize );
 			}
 			return;
 		}
@@ -1222,7 +1222,7 @@ static void SV_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 		// sequenced messages to the old client
 	} else {
 		if ( com_developer->integer ) {
-			Com_Printf( "bad connectionless packet from %s:\n%s\n",
+			Com_Printf( S_COLOR_DEVEL "bad connectionless packet from %s:\n%s\n",
 				NET_AdrToString( from ), s );
 		}
 	}
@@ -1260,8 +1260,8 @@ void SV_PacketEvent( const netadr_t *from, msg_t *msg ) {
 	qport = MSG_ReadShort( msg ) & 0xffff;
 
 	// find which client the message is from
-	for (i=0, cl=svs.clients ; i < sv_maxclients->integer ; i++,cl++) {
-		if (cl->state == CS_FREE) {
+	for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
+		if ( cl->state == CS_FREE ) {
 			continue;
 		}
 		if ( !NET_CompareBaseAdr( from, &cl->netchan.remoteAddress ) ) {
@@ -1269,23 +1269,23 @@ void SV_PacketEvent( const netadr_t *from, msg_t *msg ) {
 		}
 		// it is possible to have multiple clients from a single IP
 		// address, so they are differentiated by the qport variable
-		if (cl->netchan.qport != qport) {
+		if ( cl->netchan.qport != qport ) {
 			continue;
 		}
 
 		// make sure it is a valid, in sequence packet
-		if (SV_Netchan_Process(cl, msg)) {
+		if ( SV_Netchan_Process( cl, msg ) ) {
 			// the IP port can't be used to differentiate clients, because
 			// some address translating routers periodically change UDP
 			// port assignments
-			if (cl->netchan.remoteAddress.port != from->port) {
+			if ( cl->netchan.remoteAddress.port != from->port ) {
 				Com_Printf( "SV_PacketEvent: fixing up a translated port\n" );
 				cl->netchan.remoteAddress.port = from->port;
 			}
 			// zombie clients still need to do the Netchan_Process
 			// to make sure they don't need to retransmit the final
 			// reliable message, but they don't do any other processing
-			if (cl->state != CS_ZOMBIE) {
+			if ( cl->state != CS_ZOMBIE ) {
 				cl->lastPacketTime = svs.time;	// don't timeout
 				SV_ExecuteClientMessage( cl, msg );
 			}
@@ -1313,7 +1313,7 @@ static void SV_CalcPings( void ) {
 	int			delta;
 	playerState_t	*ps;
 
-	for (i=0 ; i < sv_maxclients->integer ; i++) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		cl = &svs.clients[i];
 		if ( cl->state != CS_ACTIVE ) {
 			cl->ping = 999;
@@ -1375,7 +1375,7 @@ static void SV_CheckTimeouts( void ) {
 	droppoint = svs.time - 1000 * sv_timeout->integer;
 	zombiepoint = svs.time - 1000 * sv_zombietime->integer;
 
-	for ( i = 0, cl = svs.clients ; i < sv_maxclients->integer ; i++, cl++ ) {
+	for ( i = 0, cl = svs.clients ; i < sv.maxclients; i++, cl++ ) {
 		if ( cl->state == CS_FREE ) {
 			continue;
 		}
@@ -1386,7 +1386,7 @@ static void SV_CheckTimeouts( void ) {
 
 		if ( cl->state == CS_ZOMBIE && cl->lastPacketTime - zombiepoint < 0 ) {
 			// using the client id cause the cl->name is empty at this point
-			Com_DPrintf( "Going from CS_ZOMBIE to CS_FREE for client %d\n", i );
+			SV_PrintClientStateChange( cl, CS_FREE );
 			cl->state = CS_FREE;	// can now be reused
 			continue;
 		}
@@ -1432,7 +1432,7 @@ static qboolean SV_CheckPaused( void ) {
 
 	// only pause if there is just a single client connected
 	count = 0;
-	for (i=0,cl=svs.clients ; i < sv_maxclients->integer ; i++,cl++) {
+	for ( i = 0, cl = svs.clients ; i < sv.maxclients; i++, cl++ ) {
 		if ( cl->state >= CS_CONNECTED && cl->netchan.remoteAddress.type != NA_BOT ) {
 			count++;
 		}
@@ -1463,10 +1463,8 @@ int SV_FrameMsec( void )
 {
 	if ( sv_fps )
 	{
-		int frameMsec;
-		
-		frameMsec = 1000.0f / sv_fps->value;
-		
+		const int frameMsec = 1000 / sv_fps->integer;
+
 		if ( frameMsec < sv.timeResidual )
 			return 0;
 		else
@@ -1502,7 +1500,7 @@ void SV_TrackCvarChanges( void )
 	if ( sv.state == SS_DEAD || !svs.clients )
 		return;
 
-	for ( i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++ ) {
+	for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
 		if ( cl->state >= CS_CONNECTED ) {
 			SV_UserinfoChanged( cl, qfalse, qfalse ); // do not update userinfo, do not run filter
 		}
@@ -1522,7 +1520,7 @@ static void SV_Restart( const char *reason ) {
 
 	if ( svs.clients ) {
 		// check if we can reset map time without full server shutdown
-		for ( i = 0; i < sv_maxclients->integer; i++ ) {
+		for ( i = 0; i < sv.maxclients; i++ ) {
 			if ( svs.clients[i].state >= CS_CONNECTED ) {
 				sv_shutdown = qtrue;
 				break;
@@ -1615,13 +1613,13 @@ void SV_Frame( int msec ) {
 	// try to do silent restart earlier if possible
 	if ( sv.time > (12*3600*1000) && ( sv_levelTimeReset->integer == 0 || sv.time > 0x40000000 ) ) {
 		if ( svs.clients ) {
-			for ( i = 0; i < sv_maxclients->integer; i++ ) {
+			for ( i = 0; i < sv.maxclients; i++ ) {
 				// FIXME: deal with bots (reconnect?)
 				if ( svs.clients[i].state != CS_FREE && svs.clients[i].netchan.remoteAddress.type != NA_BOT ) {
 					break;
 				}
 			}
-			if ( i == sv_maxclients->integer ) {
+			if ( i == sv.maxclients ) {
 				SV_Restart( "Restarting server" );
 				return;
 			}

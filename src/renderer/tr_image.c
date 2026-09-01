@@ -690,9 +690,9 @@ Upload32
 static void Upload32( byte *data, int x, int y, int width, int height, image_t *image, qboolean subImage )
 {
 	qboolean allowCompression = !(image->flags & IMGFLAG_NO_COMPRESSION);
-	qboolean lightMap = image->flags & IMGFLAG_LIGHTMAP;
-	qboolean mipmap = image->flags & IMGFLAG_MIPMAP;
-	qboolean picmip = image->flags & IMGFLAG_PICMIP;
+	qboolean lightMap = (image->flags & IMGFLAG_LIGHTMAP) ? qtrue : qfalse;
+	qboolean mipmap = (image->flags & IMGFLAG_MIPMAP) ? qtrue : qfalse;
+	qboolean picmip = (image->flags & IMGFLAG_PICMIP) ? qtrue : qfalse;
 	byte		*resampledBuffer = NULL;
 	int			scaled_width, scaled_height;
 
@@ -891,8 +891,7 @@ image_t *R_CreateImage( const char *name, const char *name2, byte *pic, int widt
 		ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit" );
 	}
 
-	// Ridah
-	image = R_CacheImageAlloc( sizeof( *image ) + namelen + namelen2 );
+	image = ri.Hunk_Alloc( sizeof( *image ) + namelen + namelen2, h_low );
 	image->imgName = (char *)( image + 1 );
 	strcpy( image->imgName, name );
 	if ( namelen2 ) {
@@ -988,7 +987,6 @@ typedef struct
 // when there are multiple images of different formats available
 static const imageExtToLoaderMap_t imageLoaders[] =
 {
-	{ "svg",  R_LoadSVG },
 	{ "png",  R_LoadPNG },
 	{ "tga",  R_LoadTGA },
 	{ "jpg",  R_LoadJPG },
@@ -1003,7 +1001,7 @@ static const int numImageLoaders = ARRAY_LEN( imageLoaders );
 =================
 R_LoadImage
 
-Loads any of the supported image types into a cannonical
+Loads any of the supported image types into a canonical
 32 bit format.
 =================
 */
@@ -1018,22 +1016,6 @@ static const char *R_LoadImage( const char *name, byte **pic, int *width, int *h
 	*pic = NULL;
 	*width = 0;
 	*height = 0;
-
-	// Always try SVG first before specified
-	{
-		COM_StripExtension( name, localName, sizeof( localName ) );
-
-		altName = va( "%s.svg", localName );
-
-		// Load
-		R_LoadSVG( altName, pic, width, height );
-
-		if ( *pic )
-		{
-			Q_strncpyz( localName, altName, sizeof( localName ) );
-			return localName;
-		}
-	}
 
 	Q_strncpyz( localName, name, sizeof( localName ) );
 
@@ -1072,7 +1054,7 @@ static const char *R_LoadImage( const char *name, byte **pic, int *width, int *h
 
 	// Try and find a suitable match using all
 	// the image formats supported
-	for ( i = 1; i < numImageLoaders; i++ )
+	for ( i = 0; i < numImageLoaders; i++ )
 	{
 		if ( i == orgLoader )
 			continue;
@@ -1123,11 +1105,6 @@ image_t	*R_FindImageFile( const char *name, imgFlags_t flags )
 
 	hash = generateHashValue( name );
 
-	// Ridah, caching
-	if ( r_cacheGathering->integer ) {
-		ri.Cmd_ExecuteText( EXEC_NOW, va( "cache_usedfile image %s %i\n", name, flags ) );
-	}
-
 	//
 	// see if the image is already loaded
 	//
@@ -1155,16 +1132,6 @@ image_t	*R_FindImageFile( const char *name, imgFlags_t flags )
 				//}
 				return image;
 			}
-		}
-	}
-
-	// Ridah, check the cache
-	// TTimo: assignment used as truth value
-	// ydnar: don't do this for lightmaps
-	if ( !(flags & IMGFLAG_LIGHTMAP) ) {
-		image = R_FindCachedImage( name, hash );
-		if ( image != NULL ) {
-			return image;
 		}
 	}
 
@@ -1600,10 +1567,6 @@ void R_InitImages( void ) {
 
 	// create default texture and white texture
 	R_CreateBuiltinImages();
-
-	// Ridah, load the cache media, if they were loaded previously, they'll be restored from the backupImages
-	R_LoadCacheImages();
-	// done.
 }
 
 
@@ -1613,11 +1576,14 @@ R_DeleteTextures
 ===============
 */
 void R_DeleteTextures( void ) {
-	image_t *img;
 	int i;
 
+	if ( tr.numImages == 0 ) {
+		return;
+	}
+
 	for ( i = 0; i < tr.numImages; i++ ) {
-		img = tr.images[ i ];
+		image_t *img = tr.images[ i ];
 		qglDeleteTextures( 1, &img->texnum );
 	}
 
@@ -1651,7 +1617,7 @@ SKINS
 CommaParse
 
 This is unfortunate, but the skin files aren't
-compatable with our normal parsing rules.
+compatible with our normal parsing rules.
 ==================
 */
 static char *CommaParse( const char **data_p ) {
@@ -1827,7 +1793,7 @@ qhandle_t RE_GetShaderFromModel( qhandle_t modelid, int surfnum, int withlightma
 				hash = generateHashValue( surf->shader->name );
 				for ( image = hashTable[hash]; image; image = image->next ) {
 					if ( !Q_stricmp( surf->shader->name, image->imgName ) ) {
-						mip = (image->flags & IMGFLAG_MIPMAP);
+						mip = (image->flags & IMGFLAG_MIPMAP) ? qtrue : qfalse;
 						break;
 					}
 				}
@@ -2053,377 +2019,6 @@ void	R_SkinList_f( void ) {
 	ri.Printf (PRINT_ALL, "------------------\n");
 }
 
-// Ridah, utility for automatically cropping and numbering a bunch of images in a directory
-#if 0
-/*
-=============
-SaveTGA
-
-  saves out to 24 bit uncompressed format (no alpha)
-=============
-*/
-void SaveTGA( char *name, byte **pic, int width, int height ) {
-	byte    *inpixel, *outpixel;
-	byte    *outbuf, *b;
-
-	outbuf = ri.Hunk_AllocateTempMemory( width * height * 4 + 18 );
-	b = outbuf;
-
-	memset( b, 0, 18 );
-	b[2] = 2;       // uncompressed type
-	b[12] = width & 255;
-	b[13] = width >> 8;
-	b[14] = height & 255;
-	b[15] = height >> 8;
-	b[16] = 24; // pixel size
-
-	{
-		int row, col;
-		int rows, cols;
-
-		rows = ( height );
-		cols = ( width );
-
-		outpixel = b + 18;
-
-		for ( row = ( rows - 1 ); row >= 0; row-- )
-		{
-			inpixel = ( ( *pic ) + ( row * cols ) * 4 );
-
-			for ( col = 0; col < cols; col++ )
-			{
-				*outpixel++ = *( inpixel + 2 );   // blue
-				*outpixel++ = *( inpixel + 1 );   // green
-				*outpixel++ = *( inpixel + 0 );   // red
-				//*outpixel++ = *(inpixel + 3);	// alpha
-
-				inpixel += 4;
-			}
-		}
-	}
-
-	ri.FS_WriteFile( name, outbuf, (int)( outpixel - outbuf ) );
-
-	ri.Hunk_FreeTempMemory( outbuf );
-
-}
-#endif
-
-/*
-=============
-SaveTGAAlpha
-
-  saves out to 32 bit uncompressed format (with alpha)
-=============
-*/
-/*void SaveTGAAlpha( char *name, byte **pic, int width, int height ) {
-	byte    *inpixel, *outpixel;
-	byte    *outbuf, *b;
-
-	outbuf = ri.Hunk_AllocateTempMemory( width * height * 4 + 18 );
-	b = outbuf;
-
-	memset( b, 0, 18 );
-	b[2] = 2;       // uncompressed type
-	b[12] = width & 255;
-	b[13] = width >> 8;
-	b[14] = height & 255;
-	b[15] = height >> 8;
-	b[16] = 32; // pixel size
-
-	{
-		int row, col;
-		int rows, cols;
-
-		rows = ( height );
-		cols = ( width );
-
-		outpixel = b + 18;
-
-		for ( row = ( rows - 1 ); row >= 0; row-- )
-		{
-			inpixel = ( ( *pic ) + ( row * cols ) * 4 );
-
-			for ( col = 0; col < cols; col++ )
-			{
-				*outpixel++ = *( inpixel + 2 );   // blue
-				*outpixel++ = *( inpixel + 1 );   // green
-				*outpixel++ = *( inpixel + 0 );   // red
-				*outpixel++ = *( inpixel + 3 );   // alpha
-
-				inpixel += 4;
-			}
-		}
-	}
-
-	ri.FS_WriteFile( name, outbuf, (int)( outpixel - outbuf ) );
-
-	ri.Hunk_FreeTempMemory( outbuf );
-
-}*/
-#if 0
-/*
-==============
-R_CropImage
-==============
-*/
-#define CROPIMAGES_ENABLED
-//#define FUNNEL_HACK
-#define RESIZE
-//#define QUICKTIME_BANNER
-#define TWILTB2_HACK
-
-qboolean R_CropImage( char *name, byte **pic, int border, int *width, int *height, int lastBox[2] ) {
-	return qtrue;   // shutup the compiler
-}
-
-
-/*
-===============
-R_CropAndNumberImagesInDirectory
-===============
-*/
-void    R_CropAndNumberImagesInDirectory( char *dir, char *ext, int maxWidth, int maxHeight, int withAlpha ) {
-}
-
-/*
-==============
-R_CropImages_f
-==============
-*/
-void R_CropImages_f( void ) {
-}
-// done.
-#endif
-
-//==========================================================================================
-// Ridah, caching system
-
-static int numBackupImages = 0;
-static image_t  *backupHashTable[FILE_HASH_SIZE];
-
-//%	static image_t	*texnumImages[MAX_DRAWIMAGES*2];
-
-/*
-===============
-R_CacheImageAlloc
-
-  this will only get called to allocate the image_t structures, not that actual image pixels
-===============
-*/
-void *R_CacheImageAlloc( int size ) {
-	if ( r_cache->integer && r_cacheShaders->integer ) {
-//		return ri.Z_Malloc( size );
-		return malloc( size );  // ri.Z_Malloc causes load times about twice as long?... Gordon
-//DAJ TEST		return ri.Malloc( size );	//DAJ was CO
-	} else {
-		return ri.Hunk_Alloc( size, h_low );
-	}
-}
-
-/*
-===============
-R_CacheImageFree
-===============
-*/
-void R_CacheImageFree( void *ptr ) {
-	if ( r_cache->integer && r_cacheShaders->integer ) {
-//		ri.Free( ptr );
-		free( ptr );
-//DAJ TEST		ri.Free( ptr );	//DAJ was CO
-	}
-}
-
-/*
-===============
-R_TouchImage
-
-  remove this image from the backupHashTable and make sure it doesn't get overwritten
-===============
-*/
-qboolean R_TouchImage( image_t *inImage ) {
-	image_t *bImage, *bImagePrev;
-	int hash;
-	//char *name;
-
-	if ( inImage == tr.dlightImage ||
-		 inImage == tr.whiteImage ||
-		 inImage == tr.defaultImage ||
-		 inImage->imgName[0] == '*' ) { // can't use lightmaps since they might have the same name, but different maps will have different actual lightmap pixels
-		return qfalse;
-	}
-
-	hash = inImage->hash;
-	//name = inImage->imgName;
-
-	bImage = backupHashTable[hash];
-	bImagePrev = NULL;
-	while ( bImage ) {
-
-		if ( bImage == inImage ) {
-			// add it to the current images
-			if ( tr.numImages == MAX_DRAWIMAGES ) {
-				ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit" );
-			}
-
-			tr.images[tr.numImages] = bImage;
-
-			// remove it from the backupHashTable
-			if ( bImagePrev ) {
-				bImagePrev->next = bImage->next;
-			} else {
-				backupHashTable[hash] = bImage->next;
-			}
-
-			// add it to the hashTable
-			bImage->next = hashTable[hash];
-			hashTable[hash] = bImage;
-
-			// get the new texture
-			tr.numImages++;
-
-			return qtrue;
-		}
-
-		bImagePrev = bImage;
-		bImage = bImage->next;
-	}
-
-	return qtrue;
-}
-
-/*
-===============
-R_PurgeImage
-===============
-*/
-void R_PurgeImage( image_t *image ) {
-	qglDeleteTextures( 1, &image->texnum );
-
-	R_CacheImageFree( image );
-
-	memset( glState.currenttextures, 0, sizeof( glState.currenttextures ) );
-	if ( qglActiveTextureARB ) {
-		GL_SelectTexture( 1 );
-		qglBindTexture( GL_TEXTURE_2D, 0 );
-		GL_SelectTexture( 0 );
-		qglBindTexture( GL_TEXTURE_2D, 0 );
-	} else {
-		qglBindTexture( GL_TEXTURE_2D, 0 );
-	}
-}
-
-
-/*
-===============
-R_PurgeBackupImages
-
-  Can specify the number of Images to purge this call (used for background purging)
-===============
-*/
-void R_PurgeBackupImages( int purgeCount ) {
-	int i, cnt;
-	static int lastPurged = 0;
-	image_t *image;
-
-	if ( !numBackupImages ) {
-		// nothing to purge
-		lastPurged = 0;
-		return;
-	}
-
-	//R_IssuePendingRenderCommands();
-
-	cnt = 0;
-	for ( i = lastPurged; i < FILE_HASH_SIZE; ) {
-		lastPurged = i;
-		image = backupHashTable[i];
-		if ( image ) {
-			// kill it
-			backupHashTable[i] = image->next;
-			R_PurgeImage( image );
-			cnt++;
-
-			if ( cnt >= purgeCount ) {
-				return;
-			}
-		} else {
-			i++;    // no images in this slot, so move to the next one
-		}
-	}
-
-	// all done
-	numBackupImages = 0;
-	lastPurged = 0;
-}
-
-/*
-===============
-R_BackupImages
-===============
-*/
-void R_BackupImages( void ) {
-
-	if ( !r_cache->integer ) {
-		return;
-	}
-	if ( !r_cacheShaders->integer ) {
-		return;
-	}
-
-	// backup the hashTable
-	memcpy( backupHashTable, hashTable, sizeof( backupHashTable ) );
-
-	// pretend we have cleared the list
-	numBackupImages = tr.numImages;
-	tr.numImages = 0;
-
-	memset( glState.currenttextures, 0, sizeof( glState.currenttextures ) );
-	if ( qglActiveTextureARB ) {
-		GL_SelectTexture( 1 );
-		qglBindTexture( GL_TEXTURE_2D, 0 );
-		GL_SelectTexture( 0 );
-		qglBindTexture( GL_TEXTURE_2D, 0 );
-	} else {
-		qglBindTexture( GL_TEXTURE_2D, 0 );
-	}
-}
-
-/*
-=============
-R_FindCachedImage
-=============
-*/
-image_t *R_FindCachedImage( const char *name, long hash ) {
-	image_t *bImage;
-
-	if ( !r_cacheShaders->integer ) {
-		return NULL;
-	}
-
-	if ( !numBackupImages ) {
-		return NULL;
-	}
-
-	bImage = backupHashTable[hash];
-	while ( bImage ) {
-
-		if ( !Q_stricmp( name, bImage->imgName ) ) {
-			// add it to the current images
-			if ( tr.numImages == MAX_DRAWIMAGES ) {
-				ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit" );
-			}
-
-			R_TouchImage( bImage );
-			return bImage;
-		}
-
-		bImage = bImage->next;
-	}
-
-	return NULL;
-}
-
 //bani
 /*
 R_GetTextureId
@@ -2443,40 +2038,3 @@ int R_GetTextureId( const char *name ) {
 //	ri.Printf( PRINT_ALL, "Image not found.\n" );
 	return -1;
 }
-
-/*
-===============
-R_LoadCacheImages
-===============
-*/
-void R_LoadCacheImages( void ) {
-	int len;
-	byte *buf;
-	const char    *token, *pString;
-	char name[MAX_QPATH];
-	int flags;
-
-	if ( numBackupImages ) {
-		return;
-	}
-
-	len = ri.FS_ReadFile( "image.cache", NULL );
-
-	if ( len <= 0 ) {
-		return;
-	}
-
-	buf = (byte *)ri.Hunk_AllocateTempMemory( len );
-	ri.FS_ReadFile( "image.cache", (void **)&buf );
-	pString = (const char *)buf;
-
-	while ( ( token = COM_ParseExt( &pString, qtrue ) ) != NULL && token[0] ) {
-		Q_strncpyz( name, token, sizeof( name ) );
-		flags = atoi( COM_ParseExt( &pString, qfalse ) );
-		R_FindImageFile( name, flags );
-	}
-
-	ri.Hunk_FreeTempMemory( buf );
-}
-// done.
-//==========================================================================================

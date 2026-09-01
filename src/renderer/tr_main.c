@@ -29,8 +29,6 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "tr_local.h"
 
-#include <string.h> // memcpy
-
 trGlobals_t		tr;
 
 static const float s_flipMatrix[16] = {
@@ -667,7 +665,7 @@ void R_SetFrameFog( void ) {
 			tr.world->fogs[tr.world->globalFog].shader->fogParms.color[ 1 ] = tr.world->globalTransStartFog[ 1 ] + ( ( tr.world->globalTransEndFog[ 1 ] - tr.world->globalTransStartFog[ 1 ] ) * lerpPos );
 			tr.world->fogs[tr.world->globalFog].shader->fogParms.color[ 2 ] = tr.world->globalTransStartFog[ 2 ] + ( ( tr.world->globalTransEndFog[ 2 ] - tr.world->globalTransStartFog[ 2 ] ) * lerpPos );
 
-			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt = ColorBytes4( tr.world->fogs[tr.world->globalFog].shader->fogParms.color[ 0 ] * tr.identityLight,
+			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt.u32 = ColorBytes4( tr.world->fogs[tr.world->globalFog].shader->fogParms.color[ 0 ] * tr.identityLight,
 																						 tr.world->fogs[tr.world->globalFog].shader->fogParms.color[ 1 ] * tr.identityLight,
 																						 tr.world->fogs[tr.world->globalFog].shader->fogParms.color[ 2 ] * tr.identityLight, 1.0 );
 
@@ -676,7 +674,7 @@ void R_SetFrameFog( void ) {
 		} else {
 			// transition complete
 			VectorCopy( tr.world->globalTransEndFog, tr.world->fogs[tr.world->globalFog].shader->fogParms.color );
-			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt = ColorBytes4( tr.world->globalTransEndFog[ 0 ] * tr.identityLight,
+			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt.u32 = ColorBytes4( tr.world->globalTransEndFog[ 0 ] * tr.identityLight,
 																						 tr.world->globalTransEndFog[ 1 ] * tr.identityLight,
 																						 tr.world->globalTransEndFog[ 2 ] * tr.identityLight, 1.0 );
 			tr.world->fogs[tr.world->globalFog].shader->fogParms.depthForOpaque = tr.world->globalTransEndFog[ 3 ];
@@ -1921,7 +1919,7 @@ static void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 
 #ifdef USE_PMLIGHT
 #ifdef USE_LEGACY_DLIGHTS
-	if ( r_dlightMode->integer ) 
+	if ( R_GetDlightMode() )
 #endif
 	{
 		dlight_t *dl;
@@ -2066,7 +2064,7 @@ static void R_GenerateDrawSurfs( void ) {
 	R_CullDecalProjectors();
 /*#ifdef USE_LEGACY_DLIGHTS
 #ifdef USE_PMLIGHT
-	if ( !r_dlightMode->integer )
+	if ( !R_GetDlightMode() )
 #endif // USE_PMLIGHT
 		R_CullDlights();
 #endif // USE_LEGACY_DLIGHTS*/
@@ -2106,21 +2104,6 @@ void R_RenderView( const viewParms_t *parms ) {
 	if ( parms->viewportWidth <= 0 || parms->viewportHeight <= 0 ) {
 		return;
 	}
-
-	// Ridah, purge media that were left over from the last level
-	if ( r_cache->integer ) {
-		extern void R_PurgeBackupImages( int purgeCount );
-		static int lastTime;
-
-		if ( ( lastTime > tr.refdef.time ) || ( lastTime < ( tr.refdef.time - 200 ) ) ) {
-			R_FreeImageBuffer();    // clear all image buffers
-			R_PurgeShaders( 10 );
-			R_PurgeBackupImages( 1 );
-			R_PurgeModels( 1 );
-			lastTime = tr.refdef.time;
-		}
-	}
-	// done.
 
 	tr.viewCount++;
 

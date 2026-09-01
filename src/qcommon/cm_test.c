@@ -322,8 +322,8 @@ PVS
 */
 
 byte    *CM_ClusterPVS( int cluster ) {
-	if ( cluster < 0 || cluster >= cm.numClusters || !cm.vised ) {
-		return cm.visibility;
+	if ( cluster < 0 || cluster >= cm.numClusters || !cm.visibility ) {
+		return cm.novis;
 	}
 
 	return cm.visibility + cluster * cm.clusterBytes;
@@ -479,7 +479,7 @@ int CM_WriteAreaBits( byte *buffer, int area ) {
 		floodnum = cm.areas[area].floodnum;
 		for ( i = 0 ; i < cm.numAreas ; i++ )
 		{
-			if ( cm.areas[i].floodnum == floodnum || area == -1 ) {
+			if ( cm.areas[i].floodnum == floodnum ) {
 				buffer[i >> 3] |= 1 << ( i & 7 );
 			}
 		}

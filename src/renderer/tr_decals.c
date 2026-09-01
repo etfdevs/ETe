@@ -756,10 +756,10 @@ static void ProjectDecalOntoWinding(decalProjector_t *dp, int numPoints, vec3_t 
 		}
 
 		// set color
-		vert->modulate[0] = (byte)(pd * alpha * dp->color[0]);
-		vert->modulate[1] = (byte)(pd * alpha * dp->color[1]);
-		vert->modulate[2] = (byte)(pd * alpha * dp->color[2]);
-		vert->modulate[3] = (byte)(alpha * dp->color[3]);
+		vert->modulate.rgba[0] = (byte)(pd * alpha * dp->color[0]);
+		vert->modulate.rgba[1] = (byte)(pd * alpha * dp->color[1]);
+		vert->modulate.rgba[2] = (byte)(pd * alpha * dp->color[2]);
+		vert->modulate.rgba[3] = (byte)(alpha * dp->color[3]);
 	}
 }
 
@@ -951,10 +951,10 @@ void R_AddDecalSurface(decal_t *decal)
 
 		for (i = 0; i < decal->numVerts; i++)
 		{
-			decal->verts[i].modulate[0] *= fade;
-			decal->verts[i].modulate[1] *= fade;
-			decal->verts[i].modulate[2] *= fade;
-			decal->verts[i].modulate[3] *= fade;
+			decal->verts[i].modulate.rgba[0] *= fade;
+			decal->verts[i].modulate.rgba[1] *= fade;
+			decal->verts[i].modulate.rgba[2] *= fade;
+			decal->verts[i].modulate.rgba[3] *= fade;
 		}
 	}
 

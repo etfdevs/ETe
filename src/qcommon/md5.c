@@ -24,7 +24,7 @@ typedef struct MD5Context {
 	uint32_t buf[4];
 	uint32_t bits[2];
 	union {
-		unsigned char b[ MD5_BLOCK_SIZE ];
+		uint8_t b[ MD5_BLOCK_SIZE ];
 		uint32_t u32[ MD5_BLOCK_SIZE / 4 ];
 	} in;
 } MD5_CTX;
@@ -32,18 +32,18 @@ typedef struct MD5Context {
 #ifndef Q3_BIG_ENDIAN
 	#define byteReverse(buf, len)	/* Nothing */
 #else
-	static void byteReverse(unsigned char *buf, unsigned longs);
+	static void byteReverse(uint8_t *buf, uint32_t longs);
 
 	/*
 	* Note: this code is harmless on little-endian machines.
 	*/
-	static void byteReverse(unsigned char *buf, unsigned longs)
+	static void byteReverse(uint8_t *buf, uint32_t longs)
 	{
 		uint32_t t;
 		do {
 			t = (uint32_t)
-				((unsigned) buf[3] << 8 | buf[2]) << 16 |
-				((unsigned) buf[1] << 8 | buf[0]);
+				((uint32_t) buf[3] << 8 | buf[2]) << 16 |
+				((uint32_t) buf[1] << 8 | buf[0]);
 				*(uint32_t *) buf = t;
 				buf += 4;
 		} while (--longs);
@@ -175,8 +175,7 @@ static void MD5Transform( uint32_t buf[4], uint32_t const in[16] )
  * Update context to reflect the concatenation of another buffer full
  * of bytes.
  */
-static void MD5Update(struct MD5Context *ctx, unsigned char const *buf,
-	unsigned len)
+static void MD5Update(struct MD5Context *ctx, uint8_t const *buf, uint32_t len)
 {
 	uint32_t t;
 
@@ -192,7 +191,7 @@ static void MD5Update(struct MD5Context *ctx, unsigned char const *buf,
 	/* Handle any leading odd-sized chunks */
 
 	if (t) {
-		unsigned char *p = ctx->in.b + t;
+		uint8_t *p = ctx->in.b + t;
 
 		t = 64 - t;
 		if (len < t) {
@@ -225,10 +224,10 @@ static void MD5Update(struct MD5Context *ctx, unsigned char const *buf,
  * Final wrapup - pad to 64-byte boundary with the bit pattern 
  * 1 0* (64-bit count of bits processed, MSB-first)
  */
-static void MD5Final(struct MD5Context *ctx, unsigned char *digest)
+static void MD5Final(struct MD5Context *ctx, uint8_t *digest)
 {
-	unsigned count;
-	unsigned char *p;
+	uint32_t count;
+	uint8_t *p;
 
 	/* Compute number of bytes mod 64 */
 	count = (ctx->bits[0] >> 3) & 0x3F;
@@ -261,7 +260,7 @@ static void MD5Final(struct MD5Context *ctx, unsigned char *digest)
 	ctx->in.u32[15] = ctx->bits[1];
 
 	MD5Transform(ctx->buf, ctx->in.u32);
-	byteReverse((unsigned char *) ctx->buf, 4);
+	byteReverse((uint8_t *) ctx->buf, 4);
 
 	if (digest!=NULL)
 		memcpy( digest, ctx->buf, MD5_DIGEST_SIZE );
@@ -273,7 +272,7 @@ static void MD5Final(struct MD5Context *ctx, unsigned char *digest)
 char *Com_MD5File( const char *fn, int length, const char *prefix, int prefix_len )
 {
 	static char final[MD5_DIGEST_SIZE*2+1];
-	unsigned char digest[MD5_DIGEST_SIZE];
+	uint8_t digest[MD5_DIGEST_SIZE];
 	fileHandle_t f;
 	MD5_CTX md5;
 	byte buffer[2048];
@@ -302,7 +301,7 @@ char *Com_MD5File( const char *fn, int length, const char *prefix, int prefix_le
 	MD5Init( &md5 );
 
 	if ( prefix_len && *prefix )
-		MD5Update( &md5, (unsigned char *)prefix, prefix_len );
+		MD5Update( &md5, (uint8_t *)prefix, prefix_len );
 
 	for ( ;; ) {
 		r = FS_Read( buffer, sizeof( buffer ), f );
@@ -330,17 +329,17 @@ char *Com_MD5File( const char *fn, int length, const char *prefix, int prefix_le
 char *Com_MD5Buf( const char *data, int length, const char *data2, int length2 )
 {
 	static char final_buf[MD5_DIGEST_SIZE*2+1];
-	unsigned char digest[MD5_DIGEST_SIZE];
-	unsigned i;
+	uint8_t digest[MD5_DIGEST_SIZE];
+	uint32_t i;
 	MD5_CTX md5;
 
 	MD5Init( &md5 );
 
 	if ( data && length > 0 )
-		MD5Update( &md5 , (unsigned char *)data, length );
+		MD5Update( &md5 , (uint8_t *)data, length );
 
 	if (data2 && length2 > 0)
-		MD5Update( &md5 , (unsigned char *)data2, length2 );
+		MD5Update( &md5 , (uint8_t *)data2, length2 );
 
 	MD5Final( &md5, digest );
 
@@ -375,7 +374,7 @@ static char *CalculateMD5ForSeed(const char *key, int seed)
 	int               i;
 	static char       hash[33];
 	static const char hex[17] = "0123456789abcdef";
-	unsigned char     digest[MD5_DIGEST_SIZE];
+	uint8_t     digest[MD5_DIGEST_SIZE];
 
 	MD5InitSeed(&ctx, seed);
 	MD5Update(&ctx, ( const byte * ) key, strlen(key));
@@ -415,7 +414,7 @@ char *Com_PBMD5File(const char *filename)
 	} fbuffer;
 	int  len;
 
-	len = FS_ReadFile( filename, &fbuffer.v );
+	len = FS_SV_ReadFile( filename, &fbuffer.v );
 	if (fbuffer.c)
 	{
 		if (len >= 28)

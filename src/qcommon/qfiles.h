@@ -44,29 +44,6 @@ If you have questions concerning this license or the applicable additional terms
 /*
 ========================================================================
 
-QVM files
-
-========================================================================
-*/
-
-#define VM_MAGIC    0x12721444
-typedef struct {
-	int vmMagic;
-
-	int instructionCount;
-
-	int codeOffset;
-	int codeLength;
-
-	int dataOffset;
-	int dataLength;
-	int litLength;              // ( dataLength - litLength ) should be byteswapped on load
-	int bssLength;              // zero filled memory appended to datalength
-} vmHeader_t;
-
-/*
-========================================================================
-
 .MD3 triangle model file format
 
 ========================================================================
@@ -137,7 +114,7 @@ typedef struct {
 } md3Shader_t;
 
 typedef struct {
-	int			indexes[3];
+	uint32_t		indexes[3];
 } md3Triangle_t;
 
 typedef struct {
@@ -682,12 +659,14 @@ typedef struct {
 #define MIN_WORLD_COORD     ( -128 * 1024 )
 #define WORLD_SIZE          ( MAX_WORLD_COORD - MIN_WORLD_COORD )
 
+#define VIS_HEADER			8
+
 //=============================================================================
 
 
 typedef struct {
-	int32_t fileofs;
-	int32_t filelen;
+	uint32_t fileofs;
+	uint32_t filelen;
 } lump_t;
 
 #define LUMP_ENTITIES       0
@@ -778,15 +757,11 @@ typedef struct {
 	float st[2];
 	float lightmap[2];
 	vec3_t normal;
-#ifdef USE_VULKAN
-	color4ub_t	color;
-#else
-	byte color[4];
-#endif
+	color4ub_t color;
 } drawVert_t;
 
 typedef enum {
-	MST_BAD,
+	MST_BAD = 0,
 	MST_PLANAR,
 	MST_PATCH,
 	MST_TRIANGLE_SOUP,

@@ -1,0 +1,5 @@
+include(libraries/curl)
+include(libraries/jpeg)
+#include(libraries/discord)
+#include(libraries/openal)
+include(libraries/sdl)

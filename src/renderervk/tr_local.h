@@ -20,8 +20,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 
-#ifndef TR_LOCAL_H
-#define TR_LOCAL_H
+#ifndef __TR_LOCAL_H__
+#define __TR_LOCAL_H__
 
 #define USE_VBO				// store static world geometry in VBO
 #define USE_FOG_ONLY
@@ -31,12 +31,18 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 //#define USE_LEGACY_DLIGHTS	// vet dynamic lights
-#define USE_PMLIGHT		// promode dynamic lights via \r_dlightMode 1|2
+#define USE_PMLIGHT			// promode dynamic lights via \r_dlightMode 1|2
 #define MAX_REAL_DLIGHTS	(MAX_DLIGHTS*2)
 #define MAX_LITSURFS		(MAX_DRAWSURFS)
 #define	MAX_FLARES			256
 
 #define MAX_TEXTURE_SIZE	2048 // must be less or equal to 32768
+
+#define USE_BUFFER_CLEAR	/* clear attachments on render pass begin */
+
+#ifdef USE_VBO
+#define USE_VBO_GRID		/* put SF_GRID to VBO */
+#endif
 
 //#define USE_TESS_NEEDS_NORMAL
 //#define USE_TESS_NEEDS_ST2
@@ -296,24 +302,33 @@ typedef struct {
 typedef struct {
 	texMod_t		type;
 
-	// used for TMOD_TURBULENT and TMOD_STRETCH
-	waveForm_t		wave;
+	union {
 
-	// used for TMOD_TRANSFORM
-	float			matrix[2][2];		// s' = s * m[0][0] + t * m[1][0] + trans[0]
-	float			translate[2];		// t' = s * m[0][1] + t * m[0][1] + trans[1]
+		// used for TMOD_TURBULENT and TMOD_STRETCH
+		waveForm_t		wave;
 
-	// used for TMOD_SCALE
-	float			scale[2];			// s *= scale[0]
+		// used for TMOD_TRANSFORM
+		struct {
+			float		matrix[2][2];	// s' = s * m[0][0] + t * m[1][0] + trans[0]
+			float		translate[2];	// t' = s * m[0][1] + t * m[0][1] + trans[1]
+		};
+
+		// used for TMOD_SCALE
+		struct {
+			float			scale[2];			// s *= scale[0]
 	                                    // t *= scale[1]
+			//float		offset[2];		// t' = t * scale[1] + offset[1]
+		};
 
-	// used for TMOD_SCROLL
-	float			scroll[2];			// s' = s + scroll[0] * time
+		// used for TMOD_SCROLL
+		float			scroll[2];		// s' = s + scroll[0] * time
 										// t' = t + scroll[1] * time
+		// used for TMOD_ROTATE
+		// + = clockwise
+		// - = counterclockwise
+		float			rotateSpeed;
 
-	// + = clockwise
-	// - = counterclockwise
-	float			rotateSpeed;
+	};
 
 } texModInfo_t;
 
@@ -348,7 +363,8 @@ typedef struct {
 	int				videoMapHandle;
 	qboolean		isLightmap;
 	qboolean		isVideoMap;
-	qboolean		isScreenMap;
+	unsigned int 	isScreenMap : 1;
+	unsigned int 	dlight : 1;
 } textureBundle_t;
 
 #ifdef USE_VULKAN
@@ -490,8 +506,6 @@ typedef struct shader_s {
 #endif
 
 	int			hasScreenMap;
-
-	float		lightmapOffset[2];	// within merged lightmap
 
 	void	(*optimalStageIteratorFunc)( void );
 
@@ -637,7 +651,7 @@ typedef struct image_s {
 //=================================================================================
 
 // max surfaces per-skin
-// This is an arbitry limit. Vanilla Q3 only supported 32 surfaces in skins but failed to
+// This is an arbitrary limit. Vanilla Q3 only supported 32 surfaces in skins but failed to
 // enforce the maximum limit when reading skin files. It was possile to use more than 32
 // surfaces which accessed out of bounds memory past end of skin->surfaces hunk block.
 #define MAX_SKIN_SURFACES	256
@@ -768,7 +782,7 @@ typedef struct litSurf_s {
 #define MAX_FACE_POINTS     1024
 
 #define	MAX_PATCH_SIZE		32			// max dimensions of a patch mesh in map file
-#define	MAX_GRID_SIZE		65			// max dimensions of a grid mesh in memory
+#define	MAX_GRID_SIZE		(128+1)			// max dimensions of a grid mesh in memory
 
 // when cgame directly specifies a polygon, it becomes a srfPoly_t
 // as soon as it is called
@@ -1489,8 +1503,6 @@ typedef struct {
 
 	int						numImages;
 	image_t					*images[MAX_DRAWIMAGES];
-	// Ridah
-	int numCacheImages;
 
 	// shader indexes from other modules will be looked up in tr.shaders[]
 	// shader indexes from drawsurfs will be looked up in sortedShaders[]
@@ -1663,13 +1675,6 @@ extern	cvar_t	*r_debugSort;
 
 extern	cvar_t	*r_printShaders;
 
-// Ridah
-extern cvar_t  *r_cache;
-extern cvar_t  *r_cacheShaders;
-extern cvar_t  *r_cacheModels;
-
-extern cvar_t  *r_cacheGathering;
-
 //extern cvar_t	*r_marksOnTriangleMeshes;
 
 extern cvar_t  *r_bonesDebug;
@@ -1706,7 +1711,7 @@ void R_AddLitSurf( surfaceType_t *surface, shader_t *shader, int fogIndex );
 #define	CULL_IN		0		// completely unclipped
 #define	CULL_CLIP	1		// clipped by one or more planes
 #define	CULL_OUT	2		// completely outside the clipping planes
-void R_LocalNormalToWorld( const vec3_t local, vec3_t world );
+
 void R_LocalPointToWorld( const vec3_t local, vec3_t world );
 int R_CullLocalBox( const vec3_t bounds[2] );
 int R_CullPointAndRadius( const vec3_t origin, float radius );
@@ -1814,6 +1819,8 @@ skin_t	*R_GetSkinByHandle( qhandle_t hSkin );
 void    RB_DebugText( const vec3_t org, float r, float g, float b, const char *text, qboolean neverOcclude );
 const void *RB_TakeVideoFrameCmd( const void *data );
 
+float R_ClampDenorm( float v );
+
 //
 // tr_shader.c
 //
@@ -1824,7 +1831,6 @@ qhandle_t RE_RegisterShaderFromImage( const char *name, int lightmapIndex, image
 
 shader_t	*R_FindShader( const char *name, int lightmapIndex, qboolean mipRawImage );
 shader_t	*R_GetShaderByHandle( qhandle_t hShader );
-shader_t	*R_GetShaderByState( int index, long *cycleTime );
 shader_t	*R_FindShaderByName( const char *name );
 void		R_InitShaders( void );
 void		R_ShaderList_f( void );
@@ -1836,7 +1842,6 @@ void RE_RenderToTexture( int textureid, int x, int y, int w, int h );
 // bani
 void RE_Finish( void );
 int R_GetTextureId( const char *name );
-void RE_RenderOmnibot( void );
 
 //
 // tr_surface.c
@@ -1860,17 +1865,17 @@ typedef struct stageVars
 
 typedef struct shaderCommands_s
 {
-#pragma pack(push,16)
-	glIndex_t	indexes[SHADER_MAX_INDEXES] QALIGN(16);
-	vec4_t		xyz[SHADER_MAX_VERTEXES*2] QALIGN(16); // 2x needed for shadows
-	vec4_t		normal[SHADER_MAX_VERTEXES] QALIGN(16);
-	vec2_t		texCoords[2][SHADER_MAX_VERTEXES] QALIGN(16);
-	vec2_t		texCoords00[SHADER_MAX_VERTEXES] QALIGN(16);
-	color4ub_t	vertexColors[SHADER_MAX_VERTEXES] QALIGN(16);
-	stageVars_t	svars QALIGN(16);
+//#pragma pack(push,16)
+	Q_ALIGNAS(16) glIndex_t	indexes[SHADER_MAX_INDEXES] Q_ALIGN(16);
+	Q_ALIGNAS(16) vec4_t		xyz[SHADER_MAX_VERTEXES*2] Q_ALIGN(16); // 2x needed for shadows
+	Q_ALIGNAS(16) vec4_t		normal[SHADER_MAX_VERTEXES] Q_ALIGN(16);
+	Q_ALIGNAS(16) vec2_t		texCoords[2][SHADER_MAX_VERTEXES] Q_ALIGN(16);
+	Q_ALIGNAS(16) vec2_t		texCoords00[SHADER_MAX_VERTEXES] Q_ALIGN(16);
+	Q_ALIGNAS(16) color4ub_t	vertexColors[SHADER_MAX_VERTEXES] Q_ALIGN(16);
+	Q_ALIGNAS(16) stageVars_t	svars Q_ALIGN(16);
 
-	color4ub_t	constantColor255[SHADER_MAX_VERTEXES] QALIGN(16);
-#pragma pack(pop)
+	Q_ALIGNAS(16) color4ub_t	constantColor255[SHADER_MAX_VERTEXES] Q_ALIGN(16);
+//#pragma pack(pop)
 
 #ifdef USE_VBO
 	surfaceType_t	surfType;
@@ -2000,7 +2005,7 @@ SKIES
 */
 
 void R_InitSkyTexCoords( float cloudLayerHeight );
-void R_DrawSkyBox( shaderCommands_t *shader );
+//void R_DrawSkyBox( shaderCommands_t *shader );
 void RB_DrawSun( void );
 
 /*
@@ -2339,39 +2344,6 @@ const glconfig_t *RE_GetConfig( void );
 
 void R_FontList_f(void);
 
-
-void *R_CacheModelAlloc( int size );
-void R_CacheModelFree( void *ptr );
-void R_PurgeModels( int count );
-void R_BackupModels( void );
-qboolean R_FindCachedModel( const char *name, model_t *newmod );
-void R_LoadCacheModels( void );
-
-void *R_CacheImageAlloc( int size );
-void R_CacheImageFree( void *ptr );
-qboolean R_TouchImage( image_t *inImage );
-image_t *R_FindCachedImage( const char *name, int hash );
-void R_FindFreeTexnum( image_t *image );
-void R_LoadCacheImages( void );
-void R_PurgeBackupImages( int purgeCount );
-void R_BackupImages( void );
-
-//void *R_CacheShaderAlloc( int size );
-//void R_CacheShaderFree( void *ptr );
-
-void R_CacheShaderFreeExt( const char* name, void *ptr, const char* file, int line );
-void* R_CacheShaderAllocExt( const char* name, int size, const char* file, int line );
-
-#define R_CacheShaderAlloc( name, size ) R_CacheShaderAllocExt( name, size, __FILE__, __LINE__ )
-#define R_CacheShaderFree( name, ptr ) R_CacheShaderFreeExt( name, ptr, __FILE__, __LINE__ )
-
-shader_t *R_FindCachedShader( const char *name, int lightmapIndex, int hash );
-void R_BackupShaders( void );
-void R_PurgeShaders( int count );
-void R_PurgeLightmapShaders( void );
-void R_LoadCacheShaders( void );
-// done.
-
 //------------------------------------------------------------------------------
 // Ridah, mesh compression
 #define NUMMDCVERTEXNORMALS  256
@@ -2429,10 +2401,6 @@ extern void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b,
 
 extern int skyboxportal;
 
-
-// Ridah, virtual memory
-void *R_Hunk_Begin( void );
-void R_Hunk_End( void );
 void R_FreeImageBuffer( void );
 
 #ifndef USE_VULKAN

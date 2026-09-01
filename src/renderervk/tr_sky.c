@@ -377,7 +377,7 @@ static qboolean CullPoints( vec4_t v[], const int count )
 				break;
 			}
 		}
-		// all points is completely behind at least of one frustum plane
+		// all points are completely behind at least of one frustum plane
 		if ( j == count ) {
 			return qtrue;
 		}
@@ -754,7 +754,7 @@ static void FillCloudBox( void )
 /*
 ** R_BuildCloudData
 */
-static void R_BuildCloudData( shaderCommands_t *input )
+static void R_BuildCloudData( const shaderCommands_t *input )
 {
 	const shader_t *shader;
 
@@ -906,7 +906,7 @@ void RB_DrawSun( void ) {
 	if ( !r_drawSun->integer )
 		return;
 
-	sunColor.u32 = 0xFFFFFFFF;
+	sunColor.u32 = ~0U;
 
 #ifdef USE_VULKAN
 	vk_update_mvp( NULL );
@@ -991,8 +991,8 @@ Other things could be stuck in here, like birds in the sky, etc
 */
 void RB_StageIteratorSky( void ) {
 
-#ifdef USE_VULKAN
-	if ( r_fastsky->integer && vk.fastSky ) {
+#if defined (USE_VULKAN) && !defined (USE_BUFFER_CLEAR)
+	if ( r_fastsky->integer && vk.clearAttachment ) {
 #else
 	if ( r_fastsky->integer ) {
 #endif

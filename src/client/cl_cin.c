@@ -1312,9 +1312,9 @@ static void RoQShutdown( void ) {
 	Com_DPrintf( "finished cinematic\n" );
 	cinTable[currentHandle].status = FMV_IDLE;
 
-	if ( cinTable[currentHandle].iFile ) {
+	if ( cinTable[currentHandle].iFile != FS_INVALID_HANDLE ) {
 		FS_FCloseFile( cinTable[currentHandle].iFile );
-		cinTable[currentHandle].iFile = 0;
+		cinTable[currentHandle].iFile = FS_INVALID_HANDLE;
 	}
 
 	if ( cinTable[currentHandle].alterGameState ) {
@@ -1678,7 +1678,7 @@ void CIN_DrawCinematic( int handle ) {
 CL_CompleteCinematicName
 ====================
 */
-void CL_CompleteCinematicName( char *args, int argNum )
+void CL_CompleteCinematicName( const char *args, int argNum )
 {
 	if ( argNum == 2 )
 	{

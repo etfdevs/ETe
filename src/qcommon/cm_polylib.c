@@ -67,7 +67,7 @@ static winding_t *AllocWinding( int points )
 
 	s = sizeof( *w ) - sizeof( w->p ) + sizeof( w->p[0] ) * points;
 	w = Z_Malloc( s );
-	Com_Memset( w, 0, s );
+
 	return w;
 }
 
@@ -214,63 +214,113 @@ winding_t *BaseWindingForPlane (vec3_t normal, vec_t dist)
 {
 	int		i, x;
 	vec_t	max, v;
-	vec3_t	org, vright, vup;
-	winding_t	*w;
-	double	dot;
-	
+	vec3_t	org;
+#ifdef USE_FIXED_PRECISION
+	double dvup[3];
+	double dvright[3];
+	double ddot;
+	double p[4][3];
+#else
+	vec3_t vright, vup;
+	float   dot;
+#endif
+	winding_t *w;
+
 	// find the major axis
 	max = -MAX_MAP_BOUNDS;
 	x = -1;
 	for (i=0 ; i<3; i++)
 	{
-		v = fabs(normal[i]);
+		v = fabsf( normal[i] );
 		if (v > max)
 		{
 			x = i;
 			max = v;
 		}
 	}
-	if (x==-1)
-		Com_Error (ERR_DROP, "BaseWindingForPlane: no axis found");
+
+	if ( x < 0 )
+		Com_Error( ERR_DROP, "BaseWindingForPlane: no axis found" );
 		
-	VectorCopy (vec3_origin, vup);
+#ifdef USE_FIXED_PRECISION
+	VectorCopy( vec3_origin, dvup );
+#else
+	VectorCopy( vec3_origin, vup );
+#endif
+
 	switch (x)
 	{
 	case 0:
 	case 1:
-		vup[2] = 1;
+#ifdef USE_FIXED_PRECISION
+		dvup[2] = 1.0;
+#else
+		vup[2] = 1.0;
+#endif
 		break;
 	case 2:
-		vup[0] = 1;
+#ifdef USE_FIXED_PRECISION
+		dvup[0] = 1.0;
+#else
+		vup[0] = 1.0;
+#endif
 		break;
 	}
 
-	dot = DotProductDP( vup, normal );
+#ifdef USE_FIXED_PRECISION
+	ddot = DotProduct( dvup, normal );
+	VectorMA( dvup, -ddot, normal, dvup );
+	VectorNormalizeDP( dvup );
+#else
+	dot = DotProduct( vup, normal );
 	VectorMA( vup, -dot, normal, vup );
-	VectorNormalizeDP( vup );
-		
-	VectorScale (normal, dist, org);
+	VectorNormalize( vup );
+#endif
+
+	VectorScale( normal, dist, org );
+
+#ifdef USE_FIXED_PRECISION
+	// slightly change order: scale up dvup first then do cross-product for dvright
+	// this will save one VectorScale() operation
+	VectorScale( dvup, MAX_MAP_BOUNDS, dvup );
+	CrossProduct_( dvup, normal, dvright );
+#else
+	CrossProduct( vup, normal, vright );
+	VectorScale( vup, MAX_MAP_BOUNDS, vup );
+	VectorScale( vright, MAX_MAP_BOUNDS, vright );
+#endif
+
+	// project a really big	axis aligned box onto the plane
+	w = AllocWinding( 4 );
+
+#ifdef USE_FIXED_PRECISION
+	VectorSubtract(org, dvright, p[0]);
+	VectorAdd(p[0], dvup, p[0]);
 	
-	CrossProductDP( vup, normal, vright );
+	VectorAdd(org, dvright, p[1]);
+	VectorAdd(p[1], dvup, p[1]);
 	
-	VectorScale (vup, MAX_MAP_BOUNDS, vup);
-	VectorScale (vright, MAX_MAP_BOUNDS, vright);
+	VectorAdd(org, dvright, p[2]);
+	VectorSubtract(p[2], dvup, p[2]);
+	
+	VectorSubtract(org, dvright, p[3]);
+	VectorSubtract(p[3], dvup, p[3]);
+	for ( i = 0; i < 4; i++ ) {
+		VectorCopy(p[i], w->p[i]);
+	}
+#else
+	VectorSubtract( org, vright, w->p[0] );
+	VectorAdd( w->p[0], vup, w->p[0] );
 
-// project a really big	axis aligned box onto the plane
-	w = AllocWinding (4);
+	VectorAdd( org, vright, w->p[1] );
+	VectorAdd( w->p[1], vup, w->p[1] );
 
-	VectorSubtract (org, vright, w->p[0]);
-	VectorAdd (w->p[0], vup, w->p[0]);
+	VectorAdd( org, vright, w->p[2] );
+	VectorSubtract( w->p[2], vup, w->p[2] );
 
-	VectorAdd (org, vright, w->p[1]);
-	VectorAdd (w->p[1], vup, w->p[1]);
-
-	VectorAdd (org, vright, w->p[2]);
-	VectorSubtract (w->p[2], vup, w->p[2]);
-
-	VectorSubtract (org, vright, w->p[3]);
-	VectorSubtract (w->p[3], vup, w->p[3]);
-
+	VectorSubtract( org, vright, w->p[3] );
+	VectorSubtract( w->p[3], vup, w->p[3] );
+#endif
 	w->numpoints = 4;
 
 	return w;
@@ -298,7 +348,8 @@ winding_t *CopyWinding( const winding_t *w )
 ReverseWinding
 ==================
 */
-winding_t	*ReverseWinding (winding_t *w)
+#if 0
+winding_t	*ReverseWinding (const winding_t *w)
 {
 	int			i;
 	winding_t	*c;
@@ -311,7 +362,7 @@ winding_t	*ReverseWinding (winding_t *w)
 	c->numpoints = w->numpoints;
 	return c;
 }
-
+#endif
 
 /*
 =============
@@ -323,10 +374,15 @@ static void ClipWindingEpsilon( winding_t *in, vec3_t normal, vec_t dist, vec_t 
 	vec_t	dists[MAX_POINTS_ON_WINDING+4];
 	int		sides[MAX_POINTS_ON_WINDING+4];
 	int		counts[3];
+#ifdef USE_FIXED_PRECISION
 	double	dot;
+	double	d1, d2;
+#else
+	float	dot;
+	float	d1, d2;
+#endif
 	int		i, j;
 	vec_t	*p1, *p2;
-	double	d1, d2;
 	vec3_t	mid;
 	winding_t	*f, *b;
 	int		maxpts;
@@ -338,17 +394,20 @@ static void ClipWindingEpsilon( winding_t *in, vec3_t normal, vec_t dist, vec_t 
 	// determine sides for each point
 	for (i=0 ; i<in->numpoints ; i++)
 	{
-		dot = DotProductDPf( in->p[i], normal ) - dist;
-		//dot -= dist;
+#ifdef USE_FIXED_PRECISION
+		dot = DotProductDP( in->p[i], normal ) - dist;
+#else
+		dot = DotProduct( in->p[i], normal ) - dist;
+#endif
 		dists[i] = dot;
-		if (dot > epsilon)
+
+		if ( dot > epsilon )
 			sides[i] = SIDE_FRONT;
-		else if (dot < -epsilon)
+		else if ( dot < -epsilon )
 			sides[i] = SIDE_BACK;
 		else
-		{
 			sides[i] = SIDE_ON;
-		}
+
 		counts[sides[i]]++;
 	}
 	sides[i] = sides[0];
@@ -367,7 +426,7 @@ static void ClipWindingEpsilon( winding_t *in, vec3_t normal, vec_t dist, vec_t 
 		return;
 	}
 
-	maxpts = in->numpoints+4;	// cant use counts[0]+2 because
+	maxpts = in->numpoints+4;	// can't use counts[0]+2 because
 								// of fp grouping errors
 
 	*front = f = AllocWinding (maxpts);
@@ -437,14 +496,21 @@ ChopWindingInPlace
 void ChopWindingInPlace( winding_t **inout, const vec3_t normal, vec_t dist, vec_t epsilon )
 {
 	winding_t	*in;
-	vec_t	dists[MAX_POINTS_ON_WINDING+4];
-	int		sides[MAX_POINTS_ON_WINDING+4];
-	int		counts[3];
+#ifdef USE_FIXED_PRECISION
+	double	dists[MAX_POINTS_ON_WINDING + 4];
+	double	mid[3];
 	double	d1, d2;
 	double	dot;
+#else
+	vec_t	dists[MAX_POINTS_ON_WINDING + 4];
+	vec3_t	mid;
+	float	d1, d2;
+	float	dot;
+#endif
+	int		sides[MAX_POINTS_ON_WINDING+4];
+	int		counts[3];
 	int		i, j;
 	vec_t	*p1, *p2;
-	vec3_t	mid;
 	winding_t	*f;
 	int		maxpts;
 
@@ -456,19 +522,21 @@ void ChopWindingInPlace( winding_t **inout, const vec3_t normal, vec_t dist, vec
 	// determine sides for each point
 	for (i=0 ; i<in->numpoints ; i++)
 	{
+#ifdef USE_FIXED_PRECISION
 		dot = DotProductDPf( in->p[i], normal ) - dist;
-		//dot -= dist;
+#else
+		dot = DotProduct( in->p[i], normal ) - dist;
+#endif
 		dists[i] = dot;
 		if (dot > epsilon)
 			sides[i] = SIDE_FRONT;
 		else if (dot < -epsilon)
 			sides[i] = SIDE_BACK;
 		else
-		{
 			sides[i] = SIDE_ON;
-		}
 		counts[sides[i]]++;
 	}
+
 	sides[i] = sides[0];
 	dists[i] = dists[0];
 
@@ -481,7 +549,7 @@ void ChopWindingInPlace( winding_t **inout, const vec3_t normal, vec_t dist, vec
 	if (!counts[1])
 		return;		// inout stays the same
 
-	maxpts = in->numpoints+4;	// cant use counts[0]+2 because
+	maxpts = in->numpoints+4;	// can't use counts[0]+2 because
 								// of fp grouping errors
 
 	f = AllocWinding (maxpts);
@@ -543,7 +611,7 @@ void ChopWindingInPlace( winding_t **inout, const vec3_t normal, vec_t dist, vec
 ChopWinding
 
 Returns the fragment of in that is on the front side
-of the cliping plane.  The original is freed.
+of the clipping plane.  The original is freed.
 =================
 */
 winding_t	*ChopWinding (winding_t *in, vec3_t normal, vec_t dist)
@@ -597,7 +665,7 @@ void CheckWinding (winding_t *w)
 		if (d < -ON_EPSILON || d > ON_EPSILON)
 			Com_Error (ERR_DROP, "CheckWinding: point off plane");
 	
-		// check the edge isnt degenerate
+		// check the edge is not degenerate
 		p2 = w->p[j];
 		VectorSubtract (p2, p1, dir);
 		

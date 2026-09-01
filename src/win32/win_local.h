@@ -110,7 +110,7 @@ const char *WtoA( const LPWSTR s );
 #endif
 
 qboolean IN_MouseActive( void );
-void	IN_Win32MouseEvent( int x, int y, int mstate );
+void	IN_Win32MouseEvent( int mstate );
 void	IN_RawMouseEvent( LPARAM lParam );
 
 void	Sys_CreateConsole( const char *title, int xPos, int yPos, qboolean usePos );
@@ -139,24 +139,21 @@ void SNDDMA_Activate( void );
 
 typedef struct
 {
-	HWND			hWnd;
 	HINSTANCE		hInstance;
+	HWND			hWnd;
+
+	// Multi-monitor tracking
+	RECT			conRect;
+#ifndef DEDICATED
+	RECT			winRect;
+	qboolean		winRectValid;
+
 	int				borderless;
 
 	// when we get a windows message, we store the time off so keyboard processing
 	// can know the exact time of an event
 	unsigned		sysMsgTime;
-
-	// Multi-monitor tracking
-	RECT			conRect;
-	RECT			winRect;
-	qboolean		winRectValid;
-
-	int raw_mx;
-	int raw_my;
-
-	POINT mouse;
-	
+#endif
 } WinVars_t;
 
 extern WinVars_t	g_wv;

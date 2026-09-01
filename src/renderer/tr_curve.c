@@ -61,10 +61,10 @@ static void LerpDrawVert( drawVert_t *a, drawVert_t *b, drawVert_t *out ) {
 	out->lightmap[0] = 0.5f * ( a->lightmap[0] + b->lightmap[0] );
 	out->lightmap[1] = 0.5f * ( a->lightmap[1] + b->lightmap[1] );
 
-	out->color[0] = ( a->color[0] + b->color[0] ) >> 1;
-	out->color[1] = ( a->color[1] + b->color[1] ) >> 1;
-	out->color[2] = ( a->color[2] + b->color[2] ) >> 1;
-	out->color[3] = ( a->color[3] + b->color[3] ) >> 1;
+	out->color.rgba[0] = (a->color.rgba[0] + b->color.rgba[0]) >> 1;
+	out->color.rgba[1] = (a->color.rgba[1] + b->color.rgba[1]) >> 1;
+	out->color.rgba[2] = (a->color.rgba[2] + b->color.rgba[2]) >> 1;
+	out->color.rgba[3] = (a->color.rgba[3] + b->color.rgba[3]) >> 1;
 }
 
 /*
@@ -128,9 +128,7 @@ static void MakeMeshNormals( int width, int height, drawVert_t ctrl[MAX_GRID_SIZ
 	qboolean	good[8];
 	qboolean	wrapWidth, wrapHeight;
 	float		len;
-static	int	neighbors[8][2] = {
-	{0,1}, {1,1}, {1,0}, {1,-1}, {0,-1}, {-1,-1}, {-1,0}, {-1,1}
-	};
+	static const int neighbors[8][2] = { {0,1}, {1,1}, {1,0}, {1,-1}, {0,-1}, {-1,-1}, {-1,0}, {-1,1} };
 
 	wrapWidth = qfalse;
 	for ( i = 0 ; i < height ; i++ ) {
@@ -210,9 +208,13 @@ static	int	neighbors[8][2] = {
 			}
 
 			VectorNormalize2( sum, dv->normal );
+			for ( k = 0; k < 3; k++ ) {
+				dv->normal[k] = R_ClampDenorm( dv->normal[k] );
+			}
 		}
 	}
 }
+
 
 /*
 ============
@@ -423,7 +425,7 @@ srfGridMesh_t *R_SubdividePatchToGrid( int width, int height,
 				}
 			}
 
-			maxLen = sqrt(maxLen);
+			maxLen = sqrtf( maxLen );
 
 			// if all the points are on the lines, remove the entire columns
 			if ( maxLen < 0.1f ) {

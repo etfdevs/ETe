@@ -2,9 +2,8 @@
 #define VULKAN_H_ 1
 
 /*
-** Copyright 2015-2022 The Khronos Group Inc.
-**
-** SPDX-License-Identifier: Apache-2.0
+** Copyright 2015-2026 The Khronos Group Inc.
+** SPDX-License-Identifier: Apache-2.0 OR MIT
 */
 
 #include "vk_platform.h"
@@ -38,7 +37,6 @@
 
 
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-#include <wayland-client.h>
 #include "vulkan_wayland.h"
 #endif
 
@@ -85,8 +83,20 @@
 #include "vulkan_screen.h"
 #endif
 
+
+#ifdef VK_USE_PLATFORM_SCI
+#include <nvscisync.h>
+#include <nvscibuf.h>
+#include "vulkan_sci.h"
+#endif
+
+
 #ifdef VK_ENABLE_BETA_EXTENSIONS
 #include "vulkan_beta.h"
+#endif
+
+#ifdef VK_USE_PLATFORM_OHOS
+#include "vulkan_ohos.h"
 #endif
 
 #endif // VULKAN_H_

@@ -96,6 +96,22 @@ static void HSVtoRGB( float h, float s, float v, float rgb[3] )
 
 /*
 ===============
+R_ClampDenorm
+
+Clamp fp values that may result in denormalization after further multiplication
+===============
+*/
+float R_ClampDenorm( float v ) {
+	if ( fabsf( v ) > 0.0f && fabsf( v ) < 1e-9f ) {
+		return 0.0f;
+	} else {
+		return v;
+	}
+}
+
+
+/*
+===============
 R_ColorShiftLightingBytes
 ===============
 */
@@ -359,10 +375,10 @@ R_LoadVisibility
 =================
 */
 static void R_LoadVisibility( const lump_t *l ) {
-	int		len;
+	unsigned numClusters, clusterBytes, len;
 	byte	*buf;
 
-	len = PAD( s_worldData.numClusters, 64 );
+	len = PAD( s_worldData.numClusters, 64 ) >> 3;
 	s_worldData.novis = ri.Hunk_Alloc( len, h_low );
 	Com_Memset( s_worldData.novis, 0xff, len );
 
@@ -370,10 +386,30 @@ static void R_LoadVisibility( const lump_t *l ) {
 	if ( !len ) {
 		return;
 	}
-	buf = fileBase + l->fileofs;
 
-	s_worldData.numClusters = LittleLong( ((int *)buf)[0] );
-	s_worldData.clusterBytes = LittleLong( ((int *)buf)[1] );
+	if ( len < VIS_HEADER ) {
+		Com_Error( ERR_DROP, "%s: lump too short", __func__ );
+	}
+
+	buf = fileBase + l->fileofs;
+	numClusters = LittleLong( ((int *)buf)[0] );
+	clusterBytes = LittleLong( ((int *)buf)[1] );
+
+	buf += VIS_HEADER;
+	len -= VIS_HEADER;
+
+	if ( (uint64_t)numClusters * clusterBytes > len ) {
+		Com_Error( ERR_DROP, "%s: lump too short", __func__ );
+	}
+	if ( numClusters < s_worldData.numClusters ) {
+		Com_Error( ERR_DROP, "%s: bad numClusters", __func__ );
+	}
+	if ( clusterBytes < (numClusters + 7) >> 3 ) {
+		Com_Error( ERR_DROP, "%s: bad clusterBytes", __func__ );
+	}
+
+	s_worldData.numClusters = numClusters;
+	s_worldData.clusterBytes = clusterBytes;
 
 	// CM_Load should have given us the vis data to share, so
 	// we don't need to allocate another copy
@@ -382,8 +418,8 @@ static void R_LoadVisibility( const lump_t *l ) {
 	} else {
 		byte	*dest;
 
-		dest = ri.Hunk_Alloc( len - 8, h_low );
-		Com_Memcpy( dest, buf + 8, len - 8 );
+		dest = ri.Hunk_Alloc( len, h_low );
+		Com_Memcpy( dest, buf, len );
 		s_worldData.vis = dest;
 	}
 }
@@ -396,15 +432,15 @@ static void R_LoadVisibility( const lump_t *l ) {
 ShaderForShaderNum
 ===============
 */
-static shader_t *ShaderForShaderNum( int shaderNum, int lightmapNum ) {
+static shader_t *ShaderForShaderNum( const int shaderNum, int lightmapNum ) {
 	shader_t	*shader;
 	const dshader_t *dsh;
 
-	int _shaderNum = LittleLong( shaderNum );
-	if ( _shaderNum < 0 || _shaderNum >= s_worldData.numShaders ) {
-		ri.Error( ERR_DROP, "ShaderForShaderNum: bad num %i", _shaderNum );
+	if ( shaderNum < 0 || shaderNum >= s_worldData.numShaders ) {
+		ri.Error( ERR_DROP, "ShaderForShaderNum: bad num %i", shaderNum );
 	}
-	dsh = &s_worldData.shaders[ _shaderNum ];
+
+	dsh = &s_worldData.shaders[ shaderNum ];
 
 	if ( glConfig.hardwareType == GLHW_PERMEDIA2 ) {
 		lightmapNum = LIGHTMAP_BY_VERTEX;
@@ -414,6 +450,10 @@ static shader_t *ShaderForShaderNum( int shaderNum, int lightmapNum ) {
 
 	// if the shader had errors, just use default shader
 	if ( shader->defaultShader ) {
+		return tr.defaultShader;
+	}
+
+	if ( r_singleShader->integer && !shader->isSky ) {
 		return tr.defaultShader;
 	}
 
@@ -692,35 +732,21 @@ ParseFace
 ParseMesh
 ===============
 */
-static void ParseMesh( const dsurface_t *ds, const drawVert_t *verts, msurface_t *surf ) {
+static void ParseMesh( const dsurface_t *ds, const drawVert_t *verts, int numVerts, msurface_t *surf ) {
 	srfGridMesh_t	*grid;
 	int				i, j;
-	int				width, height, numPoints;
+	unsigned		width, height, numPoints;
 	drawVert_t points[MAX_PATCH_SIZE*MAX_PATCH_SIZE];
 	int				lightmapNum;
-//	float			lightmapX, lightmapY;
 	vec3_t			bounds[2];
 	vec3_t			tmpVec;
 	static surfaceType_t	skipData = SF_SKIP;
 
 	lightmapNum = LittleLong( ds->lightmapNum );
-/*	if ( lightmapNum >= 0 && r_mergeLightmaps->integer ) {
-		lightmapNum = GetLightmapCoords( lightmapNum, &lightmapX, &lightmapY );
-	} else {
-		lightmapX = lightmapY = 0;
-	}*/
 
-	// get fog volume
-	surf->fogIndex = LittleLong( ds->fogNum ) + 1;
 
 	// get shader value
-	surf->shader = ShaderForShaderNum( ds->shaderNum, lightmapNum );
-	if ( r_singleShader->integer && !surf->shader->isSky ) {
-		surf->shader = tr.defaultShader;
-	}
-
-//	surf->shader->lightmapOffset[0] = lightmapX;
-//	surf->shader->lightmapOffset[1] = lightmapY;
+	surf->shader = ShaderForShaderNum( LittleLong( ds->shaderNum ), lightmapNum );
 
 	// we may have a nodraw surface, because they might still need to
 	// be around for movement clipping
@@ -732,23 +758,26 @@ static void ParseMesh( const dsurface_t *ds, const drawVert_t *verts, msurface_t
 	width = LittleLong( ds->patchWidth );
 	height = LittleLong( ds->patchHeight );
 
-	verts += LittleLong( ds->firstVert );
+	// mirror CM_GeneratePatchCollide() checks
+	if (width <= 2 || height <= 2 || !(width & 1) || !(height & 1) ||
+		width > MAX_GRID_SIZE || height > MAX_GRID_SIZE ||
+		width * height > ARRAY_LEN(points))
+		ri.Error( ERR_DROP, "%s: bad patch size", __func__ );
+
 	numPoints = width * height;
+	if (numPoints > numVerts)
+		ri.Error( ERR_DROP, "%s: verts out of range", __func__ );
+
 	for ( i = 0 ; i < numPoints ; i++ ) {
 		for ( j = 0 ; j < 3 ; j++ ) {
 			points[i].xyz[j] = LittleFloat( verts[i].xyz[j] );
-			points[i].normal[j] = LittleFloat( verts[i].normal[j] );
+			points[i].normal[j] = R_ClampDenorm( LittleFloat( verts[i].normal[j] ) );
 		}
 		for ( j = 0 ; j < 2 ; j++ ) {
 			points[i].st[j] = LittleFloat( verts[i].st[j] );
 			points[i].lightmap[j] = LittleFloat( verts[i].lightmap[j] );
 		}
 		R_ColorShiftLightingBytes( verts[i].color.rgba, points[i].color.rgba, qtrue );
-	/*	if ( lightmapNum >= 0 && r_mergeLightmaps->integer ) {
-			// adjust lightmap coords
-			points[i].lightmap[0] = points[i].lightmap[0] * tr.lightmapScale[0] + lightmapX;
-			points[i].lightmap[1] = points[i].lightmap[1] * tr.lightmapScale[1] + lightmapY;
-		}*/
 	}
 
 	// pre-tesseleate
@@ -777,37 +806,16 @@ static void ParseMesh( const dsurface_t *ds, const drawVert_t *verts, msurface_t
 ParseTriSurf
 ===============
 */
-static void ParseTriSurf( const dsurface_t *ds, const drawVert_t *verts, msurface_t *surf, int *indexes ) {
+static void ParseTriSurf( const dsurface_t *ds, const drawVert_t *verts, int numVerts, msurface_t *surf, int *indexes, int numIndexes ) {
 	srfTriangles_t	*tri;
 	int				i, j;
-	int				numVerts, numIndexes;
 	int				lightmapNum;
-	//float			lightmapX, lightmapY;
 
 	// get lightmap num
 	lightmapNum = LittleLong( ds->lightmapNum );
 
-	// get fog volume
-	surf->fogIndex = LittleLong( ds->fogNum ) + 1;
-
 	// get shader
-	surf->shader = ShaderForShaderNum( ds->shaderNum, lightmapNum );    //%	LIGHTMAP_BY_VERTEX );
-	if ( r_singleShader->integer && !surf->shader->isSky ) {
-		surf->shader = tr.defaultShader;
-	}
-
-	/*lightmapNum = LittleLong( ds->lightmapNum );
-	if ( lightmapNum >= 0 && r_mergeLightmaps->integer ) {
-		lightmapNum = GetLightmapCoords( lightmapNum, &lightmapX, &lightmapY );
-	} else {
-		lightmapX = lightmapY = 0;
-	}*/
-
-	//surf->shader->lightmapOffset[0] = lightmapX;
-	//surf->shader->lightmapOffset[1] = lightmapY;
-
-	numVerts = LittleLong( ds->numVerts );
-	numIndexes = LittleLong( ds->numIndexes );
+	surf->shader = ShaderForShaderNum( LittleLong( ds->shaderNum ), lightmapNum );  //%	LIGHTMAP_BY_VERTEX );
 
 	//tri = ri.Hunk_Alloc( sizeof( *tri ) + numVerts * sizeof( tri->verts[0] )
 	//	+ numIndexes * sizeof( tri->indexes[0] ) );
@@ -824,11 +832,10 @@ static void ParseTriSurf( const dsurface_t *ds, const drawVert_t *verts, msurfac
 
 	// copy vertexes
 	ClearBounds( tri->bounds[0], tri->bounds[1] );
-	verts += LittleLong( ds->firstVert );
 	for ( i = 0 ; i < numVerts ; i++ ) {
 		for ( j = 0 ; j < 3 ; j++ ) {
 			tri->verts[i].xyz[j] = LittleFloat( verts[i].xyz[j] );
-			tri->verts[i].normal[j] = LittleFloat( verts[i].normal[j] );
+			tri->verts[i].normal[j] = R_ClampDenorm( LittleFloat( verts[i].normal[j] ) );
 		}
 		AddPointToBounds( tri->verts[i].xyz, tri->bounds[0], tri->bounds[1] );
 		for ( j = 0 ; j < 2 ; j++ ) {
@@ -837,15 +844,9 @@ static void ParseTriSurf( const dsurface_t *ds, const drawVert_t *verts, msurfac
 		}
 
 		R_ColorShiftLightingBytes( verts[i].color.rgba, tri->verts[i].color.rgba, qtrue );
-		/*if ( lightmapNum >= 0 && r_mergeLightmaps->integer ) {
-			// adjust lightmap coords
-			tri->verts[i].lightmap[0] = tri->verts[i].lightmap[0] * tr.lightmapScale[0] + lightmapX;
-			tri->verts[i].lightmap[1] = tri->verts[i].lightmap[1] * tr.lightmapScale[1] + lightmapY;
-		}*/
 	}
 
 	// copy indexes
-	indexes += LittleLong( ds->firstIndex );
 	for ( i = 0 ; i < numIndexes ; i++ ) {
 		tri->indexes[i] = LittleLong( indexes[i] );
 		if ( tri->indexes[i] < 0 || tri->indexes[i] >= numVerts ) {
@@ -863,31 +864,22 @@ ParseFoliage() - ydnar
 parses a foliage drawsurface
 */
 
-static void ParseFoliage( const dsurface_t *ds, const drawVert_t *verts, msurface_t *surf, int *indexes ) {
+static void ParseFoliage( const dsurface_t *ds, const drawVert_t *verts, int numVerts, msurface_t *surf, int *indexes, int numIndexes ) {
 	srfFoliage_t    *foliage;
-	int i, j, numVerts, numIndexes, numInstances, size;
+	int i, j, numInstances, size;
 //	vec4_t          *xyz, *normal /*, *origin*/;
 //	fcolor4ub_t		*color;
 	vec3_t bounds[ 2 ], boundsTranslated[ 2 ];
 	float scale;
 
-
-	// get fog volume
-	surf->fogIndex = LittleLong( ds->fogNum ) + 1;
-
 	// get shader
 	surf->shader = ShaderForShaderNum( ds->shaderNum, LIGHTMAP_BY_VERTEX );
-	if ( r_singleShader->integer && !surf->shader->isSky ) {
-		surf->shader = tr.defaultShader;
-	}
 
 	// foliage surfaces have their actual vert count in patchHeight
 	// and the instance count in patchWidth
 	// the instances are just additional drawverts
 
 	// get counts
-	numVerts = LittleLong( ds->patchHeight );
-	numIndexes = LittleLong( ds->numIndexes );
 	numInstances = LittleLong( ds->patchWidth );
 
 	// calculate size
@@ -923,16 +915,14 @@ static void ParseFoliage( const dsurface_t *ds, const drawVert_t *verts, msurfac
 
 	// copy vertexes
 	ClearBounds( bounds[ 0 ], bounds[ 1 ] );
-	verts += LittleLong( ds->firstVert );
-	//xyz = foliage->xyz;
-	//normal = foliage->normal;
+
 	for ( i = 0; i < numVerts; i++ )
 	{
 		// copy xyz and normal
 		for ( j = 0; j < 3; j++ )
 		{
 			foliage->xyz[ i ][ j ] = LittleFloat( verts[ i ].xyz[ j ] );
-			foliage->normal[ i ][ j ] = LittleFloat( verts[ i ].normal[ j ] );
+			foliage->normal[ i ][ j ] = R_ClampDenorm( LittleFloat( verts[ i ].normal[ j ] ) );
 		}
 
 		// scale height
@@ -951,7 +941,6 @@ static void ParseFoliage( const dsurface_t *ds, const drawVert_t *verts, msurfac
 	}
 
 	// copy indexes
-	indexes += LittleLong( ds->firstIndex );
 	for ( i = 0; i < numIndexes; i++ )
 	{
 		foliage->indexes[ i ] = LittleLong( indexes[ i ] );
@@ -987,18 +976,12 @@ static void ParseFoliage( const dsurface_t *ds, const drawVert_t *verts, msurfac
 ParseFlare
 ===============
 */
-static void ParseFlare( const dsurface_t *ds, const drawVert_t *verts, msurface_t *surf, int *indexes ) {
+static void ParseFlare( const dsurface_t *ds, msurface_t *surf ) {
 	srfFlare_t		*flare;
 	int				i;
 
-	// get fog volume
-	surf->fogIndex = LittleLong( ds->fogNum ) + 1;
-
 	// get shader
-	surf->shader = ShaderForShaderNum( ds->shaderNum, LIGHTMAP_BY_VERTEX );
-	if ( r_singleShader->integer && !surf->shader->isSky ) {
-		surf->shader = tr.defaultShader;
-	}
+	surf->shader = ShaderForShaderNum( LittleLong( ds->shaderNum ), LIGHTMAP_BY_VERTEX );
 
 	flare = ri.Hunk_Alloc( sizeof( *flare ), h_low );
 	flare->surfaceType = SF_FLARE;
@@ -1008,7 +991,7 @@ static void ParseFlare( const dsurface_t *ds, const drawVert_t *verts, msurface_
 	for ( i = 0 ; i < 3 ; i++ ) {
 		flare->origin[i] = LittleFloat( ds->lightmapOrigin[i] );
 		flare->color[i] = LittleFloat( ds->lightmapVecs[0][i] );
-		flare->normal[i] = LittleFloat( ds->lightmapVecs[2][i] );
+		flare->normal[i] = R_ClampDenorm( LittleFloat( ds->lightmapVecs[2][i] ) );
 	}
 }
 
@@ -1688,7 +1671,7 @@ R_MovePatchSurfacesToHunk
 ===============
 */
 static void R_MovePatchSurfacesToHunk( void ) {
-	int i, size;
+	int i, j, k, n, size;
 	srfGridMesh_t *grid, *hunkgrid;
 
 	for ( i = 0; i < s_worldData.numsurfaces; i++ ) {
@@ -1698,7 +1681,15 @@ static void R_MovePatchSurfacesToHunk( void ) {
 		if ( grid->surfaceType != SF_GRID )
 			continue;
 		//
-		size = (grid->width * grid->height - 1) * sizeof( drawVert_t ) + sizeof( *grid );
+		n = grid->width * grid->height - 1;
+		size = n * sizeof( drawVert_t ) + sizeof( *grid );
+
+		for (j = 0; j < n; j++) {
+			for (k = 0; k < 3; k++) {
+				grid->verts[j].normal[k] = R_ClampDenorm( grid->verts[j].normal[k] );
+			}
+		}
+
 		hunkgrid = ri.Hunk_Alloc( size, h_low );
 		Com_Memcpy(hunkgrid, grid, size);
 
@@ -1720,13 +1711,14 @@ static void R_MovePatchSurfacesToHunk( void ) {
 R_LoadSurfaces
 ===============
 */
-static void R_LoadSurfaces( const lump_t *surfs, const lump_t *verts, const lump_t *indexLump ) {
-	const dsurface_t *in;
-	msurface_t	*out;
-	const drawVert_t *dv;
-	int			*indexes;
-	int			count;
-	int			numFaces, numMeshes, numTriSurfs, numFlares, numFoliage;
+static void R_LoadSurfaces( const lump_t *surfs, const lump_t *verts, const lump_t *indexLump, const lump_t *fogLump ) {
+	const dsurface_t  *in;
+	msurface_t  *out;
+	const drawVert_t  *dv;
+	int         *indexes;
+	int			count, totalVerts, totalIndexes, totalFogs;
+	int numFaces, numMeshes, numTriSurfs, numFlares, numFoliage;
+	unsigned	firstVert, numVerts, firstIndex, numIndexes;
 	int			i;
 
 	numFaces = 0;
@@ -1743,10 +1735,18 @@ static void R_LoadSurfaces( const lump_t *surfs, const lump_t *verts, const lump
 	dv = (void *)(fileBase + verts->fileofs);
 	if (verts->filelen % sizeof(*dv))
 		ri.Error( ERR_DROP, "%s(): funny lump size in %s", __func__, s_worldData.name );
+	totalVerts = verts->filelen / sizeof(*dv);
 
 	indexes = (void *)(fileBase + indexLump->fileofs);
 	if ( indexLump->filelen % sizeof(*indexes))
 		ri.Error( ERR_DROP, "%s(): funny lump size in %s", __func__, s_worldData.name );
+	totalIndexes = indexLump->filelen / sizeof(*indexes);
+
+	if ( fogLump->filelen % sizeof( dfog_t ) ) {
+		totalFogs = 0;
+	} else {
+		totalFogs = (fogLump->filelen / sizeof( dfog_t ) + 1);
+	}
 
 	out = ri.Hunk_Alloc( count * sizeof(*out), h_low );
 
@@ -1757,33 +1757,78 @@ static void R_LoadSurfaces( const lump_t *surfs, const lump_t *verts, const lump
 	// look for memory for each surface, we allocate a big block and just chew it up
 	// as we go
 	R_InitSurfMemory();
+	// shut up compiler
+	firstVert = numVerts = 0;
+	firstIndex = numIndexes = 0;
 
 	for ( i = 0 ; i < count ; i++, in++, out++ ) {
-		switch ( LittleLong( in->surfaceType ) ) {
+		unsigned type = LittleLong( in->surfaceType );
+		unsigned fogIndex;
+
+		// todo MST_FOLIAGE VALIDATION and the proper in values
+		if ( type != MST_FLARE ) {
+			firstVert = LittleLong( in->firstVert );
+			if ( type == MST_PATCH ) {
+				numVerts = 0;	// use patch size
+			} else if ( type == MST_FOLIAGE ) {
+				// Foliage stores its vertex count in patchHeight, plus instance count in patchWidth
+				numVerts = LittleLong( in->patchHeight ) + LittleLong( in->patchWidth );
+			} else {
+				numVerts = LittleLong( in->numVerts );
+			}
+			if ( (uint64_t)firstVert + numVerts > totalVerts )
+				ri.Error( ERR_DROP, "%s: bad verts", __func__ );
+
+			if ( type != MST_PATCH ) {
+				firstIndex = LittleLong( in->firstIndex );
+				numIndexes = LittleLong( in->numIndexes );
+				if ( (uint64_t)firstIndex + numIndexes > totalIndexes )
+					ri.Error( ERR_DROP, "%s: bad indexes", __func__ );
+
+				// don't allow partial triangles
+				if ( numIndexes % 3 ) {
+					ri.Printf( PRINT_WARNING, "%s: odd number of indexes: %u\n", __func__, numIndexes );
+					numIndexes -= numIndexes % 3;
+				}
+			}
+		}
+
+		// get fog volume
+		fogIndex = LittleLong( in->fogNum ) + 1U;
+		if ( fogIndex >= totalFogs ) {
+			if ( type != MST_FLARE )
+				ri.Printf( PRINT_WARNING, "%s: bad fog index: %u on surface type %u\n", __func__, fogIndex, type );
+			fogIndex = 0;
+		}
+		out->fogIndex = fogIndex;
+
+		switch ( type ) {
 		case MST_PATCH:
-			ParseMesh( in, dv, out );
+			ParseMesh( in, dv + firstVert, totalVerts - firstVert, out );
 			numMeshes++;
 			break;
 		case MST_TRIANGLE_SOUP:
-			ParseTriSurf( in, dv, out, indexes );
+			ParseTriSurf( in, dv + firstVert, numVerts, out, indexes + firstIndex, numIndexes );
 			numTriSurfs++;
 			break;
 		case MST_PLANAR:
 			// ydnar: faces and triangle surfaces are now homogenous
 			//%	ParseFace( in, dv, out, indexes );
-			ParseTriSurf( in, dv, out, indexes );
+			ParseTriSurf( in, dv + firstVert, numVerts, out, indexes + firstIndex, numIndexes );
 			numFaces++;
 			break;
 		case MST_FLARE:
-			ParseFlare( in, dv, out, indexes );
+			ParseFlare( in, out );
 			numFlares++;
 			break;
 		case MST_FOLIAGE:   // ydnar
-			ParseFoliage( in, dv, out, indexes );
+			//ParseFoliage( in, dv, out, indexes );
+			ParseFoliage( in, dv + firstVert, LittleLong( in->patchHeight ), out, indexes + firstIndex, numIndexes );
+			// todo?
 			numFoliage++;
 			break;
 		default:
-			ri.Error( ERR_DROP, "Bad surfaceType %i", LittleLong( in->surfaceType ) );
+			ri.Error( ERR_DROP, "%s: bad surfaceType: %u", __func__, type );
 		}
 	}
 
@@ -1811,6 +1856,7 @@ static void R_LoadSubmodels( const lump_t *l ) {
 	const dmodel_t *in;
 	bmodel_t	*out;
 	int			i, j, count;
+	unsigned	firstSurface, numSurfaces;
 
 	in = (void *)(fileBase + l->fileofs);
 	if (l->filelen % sizeof(*in))
@@ -1839,8 +1885,14 @@ static void R_LoadSubmodels( const lump_t *l ) {
 			out->bounds[1][j] = LittleFloat (in->maxs[j]);
 		}
 
-		out->firstSurface = s_worldData.surfaces + LittleLong( in->firstSurface );
-		out->numSurfaces = LittleLong( in->numSurfaces );
+		firstSurface = LittleLong( in->firstSurface );
+		numSurfaces = LittleLong( in->numSurfaces );
+		if ( (uint64_t)firstSurface + numSurfaces > s_worldData.numsurfaces ) {
+			ri.Error( ERR_DROP, "%s: bad surfaces", __func__ );
+		}
+
+		out->firstSurface = s_worldData.surfaces + firstSurface;
+		out->numSurfaces = numSurfaces;
 
 		// ydnar: for attaching fog brushes to models
 		out->firstBrush = LittleLong( in->firstBrush );
@@ -1864,6 +1916,8 @@ R_SetParent
 */
 static void R_SetParent( mnode_t *node, mnode_t *parent )
 {
+	if ( node->parent )
+		ri.Error( ERR_DROP, "%s: cycle encountered", __func__ );
 	node->parent = parent;
 
 	// handle leaf nodes
@@ -1873,7 +1927,6 @@ static void R_SetParent( mnode_t *node, mnode_t *parent )
 			int c;
 			msurface_t      **mark;
 			srfGeneric_t    *gen;
-
 
 			// add node surfaces to bounds
 			mark = node->firstmarksurface;
@@ -1916,7 +1969,8 @@ R_LoadNodesAndLeafs
 =================
 */
 static void R_LoadNodesAndLeafs( const lump_t *nodeLump, const lump_t *leafLump ) {
-	int			i, j, p;
+	int			i, j;
+	unsigned	p, firstmarksurface, nummarksurfaces;
 	const dnode_t		*in;
 	dleaf_t		*inLeaf;
 	mnode_t 	*out;
@@ -1954,6 +2008,9 @@ static void R_LoadNodesAndLeafs( const lump_t *nodeLump, const lump_t *leafLump 
 		VectorCopy( out->maxs, out->surfMaxs );
 
 		p = LittleLong( in->planeNum );
+		if ( p >= s_worldData.numplanes ) {
+			ri.Error( ERR_DROP, "%s: bad planeNum", __func__ );
+		}
 		out->plane = s_worldData.planes + p;
 
 		out->contents = CONTENTS_NODE;  // differentiate from leafs
@@ -1961,10 +2018,17 @@ static void R_LoadNodesAndLeafs( const lump_t *nodeLump, const lump_t *leafLump 
 		for ( j = 0 ; j < 2 ; j++ )
 		{
 			p = LittleLong( in->children[j] );
-			if ( p >= 0 ) {
-				out->children[j] = s_worldData.nodes + p;
+			if (p & 0x80000000) {
+				p = ~p;
+				if ( p >= numLeafs ) {
+					ri.Error( ERR_DROP, "%s: bad leaf", __func__ );
+				}
+				out->children[j] = s_worldData.nodes + numNodes + p;
 			} else {
-				out->children[j] = s_worldData.nodes + numNodes + ( -1 - p );
+				if ( p >= numNodes ) {
+					ri.Error( ERR_DROP, "%s: bad node", __func__ );
+				}
+				out->children[j] = s_worldData.nodes + p;
 			}
 		}
 	}
@@ -1983,16 +2047,26 @@ static void R_LoadNodesAndLeafs( const lump_t *nodeLump, const lump_t *leafLump 
 		ClearBounds( out->surfMins, out->surfMaxs );
 
 		out->cluster = LittleLong( inLeaf->cluster );
-		out->area = LittleLong( inLeaf->area );
+		if ( out->cluster + 1U > INT_MAX - 63U )
+			Com_Error( ERR_DROP, "%s: bad cluster", __func__ );
+
+		out->area = LittleLong(inLeaf->area);
+		if ( out->area + 1U > MAX_MAP_AREAS )
+			Com_Error( ERR_DROP, "%s: bad area", __func__ );
 
 		if ( out->cluster >= s_worldData.numClusters ) {
 			s_worldData.numClusters = out->cluster + 1;
 		}
 
-		out->firstmarksurface = s_worldData.marksurfaces +
-								LittleLong( inLeaf->firstLeafSurface );
-		out->nummarksurfaces = LittleLong( inLeaf->numLeafSurfaces );
-	}
+		firstmarksurface = LittleLong(inLeaf->firstLeafSurface);
+		nummarksurfaces = LittleLong(inLeaf->numLeafSurfaces);
+		if ( (uint64_t)firstmarksurface + nummarksurfaces > s_worldData.nummarksurfaces ) {
+			ri.Error( ERR_DROP, "%s: bad marksurfaces", __func__ );
+		}
+
+		out->firstmarksurface = s_worldData.marksurfaces + firstmarksurface;
+		out->nummarksurfaces = nummarksurfaces;
+	}	
 
 	// chain descendants
 	R_SetParent( s_worldData.nodes, NULL );
@@ -2071,7 +2145,7 @@ R_LoadMarksurfaces
 */
 static void R_LoadMarksurfaces( const lump_t *l )
 {	
-	int		i, j, count;
+	int		i, count;
 	int		*in;
 	msurface_t **out;
 	
@@ -2086,7 +2160,14 @@ static void R_LoadMarksurfaces( const lump_t *l )
 
 	for ( i=0 ; i<count ; i++)
 	{
-		j = LittleLong(in[i]);
+		unsigned j = LittleLong(in[i]);
+		if ( j >= s_worldData.numsurfaces ) {
+			if ( j == 0xFFFFFFFF ) {
+				j = 0; // fix for ut43_azurea_b1 map
+			} else {
+				ri.Error( ERR_DROP, "%s: bad surface", __func__ );
+			}
+		}
 		out[i] = s_worldData.surfaces + j;
 	}
 }
@@ -2155,10 +2236,9 @@ static void R_LoadFogs( const lump_t *l, const lump_t *brushesLump, const lump_t
 	const dbrush_t 	*brushes, *brush;
 	const dbrushside_t	*sides;
 	int count, brushesCount, sidesCount;
-	int sideNum;
-	int planeNum;
+	unsigned	sideNum, planeNum, firstSide;
 	shader_t    *shader;
-	int firstSide = 0;
+	float		d;
 
 	fogs = (void *)(fileBase + l->fileofs);
 	if (l->filelen % sizeof(*fogs)) {
@@ -2166,7 +2246,7 @@ static void R_LoadFogs( const lump_t *l, const lump_t *brushesLump, const lump_t
 	}
 	count = l->filelen / sizeof(*fogs);
 
-	// create fog strucutres for them
+	// create fog structures for them
 	s_worldData.numfogs = count + 1;
 	s_worldData.fogs = ri.Hunk_Alloc( s_worldData.numfogs * sizeof( *out ), h_low );
 	out = s_worldData.fogs + 1;
@@ -2189,6 +2269,9 @@ static void R_LoadFogs( const lump_t *l, const lump_t *brushesLump, const lump_t
 		ri.Error( ERR_DROP, "%s(): funny lump size in %s", __func__, s_worldData.name );
 	}
 	sidesCount = sidesLump->filelen / sizeof(*sides);
+	if (sidesCount < 6) {
+		ri.Error( ERR_DROP, "%s(): sides lump too short in %s", __func__, s_worldData.name );
+	}
 
 	for ( i=0 ; i<count ; i++, fogs++) {
 		out->originalBrushNumber = LittleLong( fogs->brushNum );
@@ -2218,34 +2301,20 @@ static void R_LoadFogs( const lump_t *l, const lump_t *brushesLump, const lump_t
 
 			firstSide = LittleLong( brush->firstSide );
 
-			if ( (unsigned)firstSide > sidesCount - 6 ) {
+			if ( firstSide > sidesCount - 6 ) {
 				ri.Error( ERR_DROP, "fog brush sideNumber out of range" );
 			}
 
 			// brushes are always sorted with the axial sides first
-			sideNum = firstSide + 0;
-			planeNum = LittleLong( sides[ sideNum ].planeNum );
-			out->bounds[0][0] = -s_worldData.planes[ planeNum ].dist;
-
-			sideNum = firstSide + 1;
-			planeNum = LittleLong( sides[ sideNum ].planeNum );
-			out->bounds[1][0] = s_worldData.planes[ planeNum ].dist;
-
-			sideNum = firstSide + 2;
-			planeNum = LittleLong( sides[ sideNum ].planeNum );
-			out->bounds[0][1] = -s_worldData.planes[ planeNum ].dist;
-
-			sideNum = firstSide + 3;
-			planeNum = LittleLong( sides[ sideNum ].planeNum );
-			out->bounds[1][1] = s_worldData.planes[ planeNum ].dist;
-
-			sideNum = firstSide + 4;
-			planeNum = LittleLong( sides[ sideNum ].planeNum );
-			out->bounds[0][2] = -s_worldData.planes[ planeNum ].dist;
-
-			sideNum = firstSide + 5;
-			planeNum = LittleLong( sides[ sideNum ].planeNum );
-			out->bounds[1][2] = s_worldData.planes[ planeNum ].dist;
+			for ( j = 0; j < 6; j++ ) {
+				sideNum = firstSide + j;
+				planeNum = LittleLong( sides[ sideNum ].planeNum );
+				if ( planeNum >= s_worldData.numplanes ) {
+					ri.Error( ERR_DROP, "fog brush planeNum out of range" );
+				}
+				d = s_worldData.planes[ planeNum ].dist;
+				out->bounds[j & 1][j >> 1] = (j & 1) ? d : -d;
+			}
 		}
 
 		// get information from the shader for fog parameters
@@ -2266,18 +2335,18 @@ static void R_LoadFogs( const lump_t *l, const lump_t *brushesLump, const lump_t
 		// set the gradient vector
 		sideNum = LittleLong( fogs->visibleSide );
 
-		// ydnar: made this check a little more strenuous (was sideNum == -1)
-		//if ( sideNum < 0 || sideNum >= sidesCount ) {
 		if ( sideNum == -1 ) {
 			out->hasSurface = qfalse;
 		} else {
-			int sideOffset = firstSide + sideNum;
-			if ( (unsigned)sideOffset >= sidesCount ) {
-				ri.Printf( PRINT_WARNING, "bad fog side offset %i\n", sideOffset );
+			if ( sideNum >= sidesCount - firstSide ) {
+				ri.Printf( PRINT_WARNING, "bad fog side offset\n" );
 				out->hasSurface = qfalse;
 			} else {
 				out->hasSurface = qtrue;
-				planeNum = LittleLong( sides[ sideOffset /*firstSide + sideNum*/ ].planeNum );
+				planeNum = LittleLong( sides[ firstSide + sideNum ].planeNum );
+				if ( planeNum >= s_worldData.numplanes ) {
+					ri.Error( ERR_DROP, "fog brush planeNum out of range" );
+				}
 				VectorSubtract( vec3_origin, s_worldData.planes[ planeNum ].normal, out->surface );
 				out->surface[3] = -s_worldData.planes[ planeNum ].dist;
 			}
@@ -2285,7 +2354,6 @@ static void R_LoadFogs( const lump_t *l, const lump_t *brushesLump, const lump_t
 
 		out++;
 	}
-
 }
 
 
@@ -2295,15 +2363,23 @@ R_LoadLightGrid
 ================
 */
 static void R_LoadLightGrid( const lump_t *l ) {
-	int i;
-	vec3_t maxs;
-	int numGridPoints;
-	world_t *w = &s_worldData;
+	int		i;
+	vec3_t	maxs;
+	unsigned bounds[3];
+	unsigned numGridPoints;
+	world_t	*w;
 	float	*wMins, *wMaxs;
 
-	w->lightGridInverseSize[0] = 1.0 / w->lightGridSize[0];
-	w->lightGridInverseSize[1] = 1.0 / w->lightGridSize[1];
-	w->lightGridInverseSize[2] = 1.0 / w->lightGridSize[2];
+	w = &s_worldData;
+
+	if ( !l->filelen ) {
+		w->lightGridData = NULL;
+		return;
+	}
+
+	w->lightGridInverseSize[0] = 1.0f / w->lightGridSize[0];
+	w->lightGridInverseSize[1] = 1.0f / w->lightGridSize[1];
+	w->lightGridInverseSize[2] = 1.0f / w->lightGridSize[2];
 
 	wMins = w->bmodels[0].bounds[0];
 	wMaxs = w->bmodels[0].bounds[1];
@@ -2311,15 +2387,26 @@ static void R_LoadLightGrid( const lump_t *l ) {
 	for ( i = 0 ; i < 3 ; i++ ) {
 		w->lightGridOrigin[i] = w->lightGridSize[i] * ceil( wMins[i] / w->lightGridSize[i] );
 		maxs[i] = w->lightGridSize[i] * floor( wMaxs[i] / w->lightGridSize[i] );
-		w->lightGridBounds[i] = (maxs[i] - w->lightGridOrigin[i])/w->lightGridSize[i] + 1;
+		bounds[i] = (maxs[i] - w->lightGridOrigin[i])/w->lightGridSize[i] + 1;
 	}
 
-	numGridPoints = w->lightGridBounds[0] * w->lightGridBounds[1] * w->lightGridBounds[2];
+	if ( (uint64_t)bounds[0] * bounds[1] > INT_MAX ||
+		 (uint64_t)bounds[0] * bounds[1] * bounds[2] > INT_MAX) {
+		ri.Printf( PRINT_WARNING, "WARNING: bad light grid bounds\n" );
+		w->lightGridData = NULL;
+		return;
+	}
 
-	if ( l->filelen != numGridPoints * 8 ) {
+	numGridPoints = bounds[0] * bounds[1] * bounds[2];
+
+	if ( l->filelen % 8 || l->filelen / 8 != numGridPoints ) {
 		ri.Printf( PRINT_WARNING, "WARNING: light grid mismatch\n" );
 		w->lightGridData = NULL;
 		return;
+	}
+
+	for ( i = 0 ; i < 3 ; i++ ) {
+		w->lightGridBounds[i] = bounds[i];
 	}
 
 	w->lightGridData = ri.Hunk_Alloc( l->filelen, h_low );
@@ -2339,7 +2426,8 @@ R_LoadEntities
 ================
 */
 static void R_LoadEntities( const lump_t *l ) {
-	const char *p, *token, *s;
+	const char *p, *token;
+	char *s;
 	char keyname[MAX_TOKEN_CHARS];
 	char value[MAX_TOKEN_CHARS], *v[3];
 	world_t	*w;
@@ -2349,13 +2437,13 @@ static void R_LoadEntities( const lump_t *l ) {
 	w->lightGridSize[1] = 64;
 	w->lightGridSize[2] = 128;
 
-	p = (const char *)(fileBase + l->fileofs);
-
 	// store for reference by the cgame
 	w->entityString = ri.Hunk_Alloc( l->filelen + 1, h_low );
-	strcpy( w->entityString, p );
+	memcpy( w->entityString, fileBase + l->fileofs, l->filelen );
+	w->entityString[l->filelen] = '\0';
 	w->entityParsePoint = w->entityString;
 
+	p = w->entityString;
 	token = COM_ParseExt( &p, qtrue );
 	if (*token != '{') {
 		return;
@@ -2382,12 +2470,12 @@ static void R_LoadEntities( const lump_t *l ) {
 		// check for remapping of shaders
 		s = "remapshader";
 		if (!Q_strncmp(keyname, s, (int)strlen(s)) ) {
-			char *vs = strchr(value, ';');
-			if (!vs) {
+			s = strchr(value, ';');
+			if (!s) {
 				ri.Printf( PRINT_WARNING, "WARNING: no semi colon in shaderremap '%s'\n", value );
 				break;
 			}
-			*vs++ = '\0';
+			*s++ = '\0';
 			RE_RemapShader(value, s, "0");
 			continue;
 		}
@@ -2399,6 +2487,16 @@ static void R_LoadEntities( const lump_t *l ) {
 			w->lightGridSize[1] = Q_atof( v[1] );
 			w->lightGridSize[2] = Q_atof( v[2] );
 			continue;
+		}
+		if (!Q_stricmp(keyname, "_texturenpot")) {
+			if( atoi(value) > 0 ) {
+			//	tr.mapNonPowerTwo = qtrue;
+			}
+		}
+		if (!Q_stricmp(keyname, "_nobloom")) {
+			if( atoi(value) > 0 ) {
+		//		tr.mapNoBloom = qtrue;
+			}
 		}
 	}
 }
@@ -2513,9 +2611,9 @@ void RE_LoadWorldMap( const char *name ) {
 	}
 
 	for ( i = 0; i < HEADER_LUMPS; i++ ) {
-		int32_t ofs = header->lumps[i].fileofs;
-		int32_t len = header->lumps[i].filelen;
-		if ( (uint32_t)ofs > MAX_QINT || (uint32_t)len > MAX_QINT || ofs + len > size || ofs + len < 0 ) {
+		uint32_t ofs = header->lumps[i].fileofs;
+		uint32_t len = header->lumps[i].filelen;
+		if ( (uint64_t)ofs + len > size ) {
 			ri.Error( ERR_DROP, "%s: %s has wrong lump[%i] size/offset", __func__, name, i );
 		}
 	}
@@ -2532,7 +2630,7 @@ void RE_LoadWorldMap( const char *name ) {
 	ri.SCR_UpdateScreen();
 	//%	R_LoadFogs( &header->lumps[LUMP_FOGS], &header->lumps[LUMP_BRUSHES], &header->lumps[LUMP_BRUSHSIDES] );
 	//%	ri.SCR_UpdateScreen();
-	R_LoadSurfaces( &header->lumps[LUMP_SURFACES], &header->lumps[LUMP_DRAWVERTS], &header->lumps[LUMP_DRAWINDEXES] );
+	R_LoadSurfaces( &header->lumps[LUMP_SURFACES], &header->lumps[LUMP_DRAWVERTS], &header->lumps[LUMP_DRAWINDEXES], &header->lumps[LUMP_FOGS] ); // added fog lump to surfs for finding count to verify
 	ri.SCR_UpdateScreen();
 	R_LoadMarksurfaces( &header->lumps[LUMP_LEAFSURFACES] );
 	ri.SCR_UpdateScreen();
@@ -2573,4 +2671,6 @@ void RE_LoadWorldMap( const char *name ) {
 
 //----(SA)	end
 	ri.FS_FreeFile( buffer.v );
+
+	vk_set_clearcolor();
 }

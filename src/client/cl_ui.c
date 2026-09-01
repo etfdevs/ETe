@@ -76,6 +76,7 @@ static void LAN_LoadCachedServers( void ) {
 		return;
 	}
 
+	size = 0;
 	FS_Read( &cls.numglobalservers, sizeof(int), fileIn );
 	FS_Read( &cls.numfavoriteservers, sizeof(int), fileIn );
 	FS_Read( &size, sizeof(int), fileIn );
@@ -709,9 +710,7 @@ CL_GetClipboardData
 ====================
 */
 static void CL_GetClipboardData( char *buf, int buflen ) {
-	char	*cbd;
-
-	cbd = Sys_GetClipboardData();
+	char	*cbd = Sys_GetClipboardText();
 
 	if ( !cbd ) {
 		*buf = '\0';
@@ -720,7 +719,7 @@ static void CL_GetClipboardData( char *buf, int buflen ) {
 
 	Q_strncpyz( buf, cbd, buflen );
 
-	Z_Free( cbd );
+	Sys_FreeClipboardText( cbd );
 }
 
 
@@ -801,33 +800,33 @@ static qboolean CL_UI_GetValue( char* value, int valueSize, const char* key ) {
 		return qtrue;
 	}
 
-	if ( !Q_stricmp( key, "trap_RemoveCommand") ) {
+	if ( !Q_stricmp( key, "ete::func::removecommand" ) || !Q_stricmp( key, "trap_RemoveCommand_ETE" ) || !Q_stricmp( key, "trap_RemoveCommand") ) {
 		Com_sprintf( value, valueSize, "%i", UI_REMOVECOMMAND );
 		return qtrue;
 	}
 
+	if ( !Q_stricmp( key, "ete::func::flashwindow" ) || !Q_stricmp( key, "trap_SysFlashWindow_Legacy" ) || !Q_stricmp( key, "trap_FlashWindow_ETE" ) ) {
+		Com_sprintf( value, valueSize, "%i", UI_FLASHWINDOW );
+		return qtrue;
+	}
+
 	// UTF-8 not yet supported
-	if ( !Q_stricmp( key, "cap_UTF8" ) ) {
+	if ( !Q_stricmp( key, "cap::enc::utf8" ) || !Q_stricmp( key, "cap_UTF8" ) ) {
 		Com_sprintf( value, valueSize, "%i", 0 );
 		return qtrue;
 	}
 
-	if ( !Q_stricmp( key, "cap_TTF_RegisterFont" ) ) {
+	if ( !Q_stricmp( key, "cap::font::ttf" ) || !Q_stricmp( key, "cap_TTF_RegisterFont" ) ) {
 		Com_sprintf( value, valueSize, "%i", 0 );
 		return qtrue;
 	}
 
-	if ( !Q_stricmp( key, "cap_SVG" ) ) {
+	if ( !Q_stricmp( key, "cap::image::png" ) || !Q_stricmp( key, "cap_PNG" ) ) {
 		Com_sprintf( value, valueSize, "%i", 1 );
 		return qtrue;
 	}
 
-	if ( !Q_stricmp( key, "cap_PNG" ) ) {
-		Com_sprintf( value, valueSize, "%i", 1 );
-		return qtrue;
-	}
-
-	if ( !Q_stricmp( key, "engine_is_ete" ) ) {
+	if ( !Q_stricmp( key, "engine::ete" ) || !Q_stricmp( key, "engine_is_ete" ) ) {
 		Com_sprintf( value, valueSize, "%i", 1 );
 		return qtrue;
 	}
@@ -856,7 +855,7 @@ static qboolean CL_UI_GetValue( char* value, int valueSize, const char* key ) {
 }
 
 
-void SV_CompleteMapName( char *args, int argNum );
+void SV_CompleteMapName( const char *args, int argNum );
 
 /*
 ====================
@@ -1332,6 +1331,13 @@ static intptr_t CL_UISystemCalls( intptr_t *args ) {
 		Cmd_RemoveCommandSafe( VMA(1) );
 		return 0;
 
+	case UI_KEY_ISMODACTIVE:
+		return Sys_IsKeyModActive( args[1] );
+
+	case UI_FLASHWINDOW:
+		GLimp_FlashWindow( args[1] );
+		return 0;
+
 	case UI_TRAP_GETVALUE:
 		return CL_UI_GetValue( VMA(1), args[2], VMA(3) );
 
@@ -1444,14 +1450,6 @@ void CL_InitUI( void ) {
 	}
 }
 
-
-qboolean UI_usesUniqueCDKey() {
-	if ( uivm ) {
-		return ( VM_Call( uivm, UI_HASUNIQUECDKEY ) == qtrue );
-	} else {
-		return qfalse;
-	}
-}
 
 qboolean UI_checkKeyExec( int key ) {
 	if ( uivm ) {

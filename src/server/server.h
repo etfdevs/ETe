@@ -79,12 +79,11 @@ typedef struct snapshotFrame_s {
 typedef struct {
 	serverState_t state;
 	qboolean restarting;                // if true, send configstring changes during SS_LOADING
+	int				pure;				// fixed at level spawn
+	int				maxclients;			// fixed at level spawn
 	int serverId;                       // changes each server start
-	int restartedServerId;              // serverId before a map_restart
+	int restartedServerId;              // changes each map restart
 	int checksumFeed;                   // the feed key that we use to compute the pure checksum strings
-	// show_bug.cgi?id=475
-	// the serverId associated with the current checksumFeed (always <= serverId)
-	int checksumFeedServerId;
 	int snapshotCounter;                // incremented for each snapshot built
 	int timeResidual;                   // <= 1000 / sv_frame->value
 	char*           configstrings[MAX_CONFIGSTRINGS];
@@ -149,7 +148,7 @@ typedef enum {
 	CS_FREE = 0,	// can be reused for a new connection
 	CS_ZOMBIE,		// client has been disconnected, but don't reuse
 					// connection for a couple seconds
-	CS_CONNECTED,	// has been assigned to a client_t, but no gamestate yet
+	CS_CONNECTED,	// has been assigned to a client_t, but no gamestate yet or downloading
 	CS_PRIMED,		// gamestate has been sent, but client hasn't sent a usercmd
 	CS_ACTIVE		// client is fully in game
 } clientState_t;
@@ -183,6 +182,12 @@ struct leakyBucket_s {
 	leakyBucket_t *prev, *next;
 };
 
+typedef enum {
+	GSA_INIT = 0,	// gamestate never sent with current sv.serverId
+	GSA_SENT_ONCE,	// gamestate sent once, client can reply with any (messageAcknowledge - gamestateMessageNum) >= 0 and correct serverId
+	GSA_SENT_MANY,	// gamestate sent many times, client must reply with exact gamestateMessageNum == gamestateMessageNum and correct serverId
+	GSA_ACKED		// gamestate acknowledged, no retansmissions needed
+} gameStateAck_t;
 
 typedef struct client_s {
 	clientState_t state;
@@ -207,6 +212,10 @@ typedef struct client_s {
 	char name[MAX_NAME_LENGTH];                     // extracted from userinfo, high bits masked
 	char guid[MAX_GUID_LENGTH];
 
+	gameStateAck_t	gamestateAck;
+	qboolean		downloading;		// set at "download", reset at gamestate retransmission
+	// int				serverId;		// last acknowledged serverId
+
 	// downloading
 	char downloadName[MAX_QPATH];            // if not empty string, we are downloading
 	fileHandle_t download;              // file being downloaded
@@ -228,7 +237,8 @@ typedef struct client_s {
 	qboolean bFallback;    // last www download attempt failed, fallback to regular download
 	// note: this is one-shot, multiple downloads would cause a www download to be attempted again
 
-	int deltaMessage;                   // frame last client usercmd message
+	qboolean		deltaActive;		// delta snapshots enabled
+	int				deltaStart;			// don't delta from messages earlier than this when CS_ACTIVE
 	int lastPacketTime;                 // svs.time when packet was last received
 	int lastConnectTime;                // svs.time when connection started
 	int				lastDisconnectTime;
@@ -422,7 +432,7 @@ void SVC_RateRestoreToxicAddress( const netadr_t *from, int burst, int period );
 void SVC_RateDropAddress( const netadr_t *from, int burst, int period );
 
 void SV_FinalCommand( const char *message, qboolean disconnect ); // ydnar: added disconnect flag so map changes can use this function as well
-void QDECL SV_SendServerCommand( client_t *cl, const char *fmt, ... ) FORMAT_PRINTF(2, 3);
+void QDECL SV_SendServerCommand( client_t *cl, const char *fmt, ... ) Q_PRINTF_FUNC(2, 3);
 
 void SV_AddOperatorCommands( void );
 void SV_RemoveOperatorCommands( void );
@@ -445,7 +455,6 @@ void SV_UpdateConfigstrings( client_t *client );
 void SV_SetUserinfo( int index, const char *val );
 void SV_GetUserinfo( int index, char *buffer, int bufferSize );
 
-void SV_ChangeMaxClients( void );
 void SV_SpawnServer( const char *mapname );
 
 
@@ -457,15 +466,16 @@ void SV_GetChallenge( const netadr_t *from );
 void SV_InitChallenger( void );
 
 void SV_DirectConnect( const netadr_t *from );
+void SV_PrintClientStateChange( const client_t *cl, clientState_t newState );
 
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg );
 void SV_UserinfoChanged( client_t *cl, qboolean updateUserinfo, qboolean runFilter );
 
-void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd );
+void SV_ClientEnterWorld( client_t *client );
 void SV_FreeClient( client_t *client );
 void SV_DropClient( client_t *drop, const char *reason );
 
-qboolean SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean premaprestart );
+qboolean SV_ExecuteClientCommand( client_t *cl, const char *s );
 void SV_ClientThink( client_t *cl, usercmd_t *cmd );
 
 int SV_SendDownloadMessages( void );

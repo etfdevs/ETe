@@ -2417,12 +2417,12 @@ void Cvar_Update( vmCvar_t *vmCvar, int privateFlag ) {
 Cvar_CompleteCvarName
 ==================
 */
-void Cvar_CompleteCvarName( char *args, int argNum )
+void Cvar_CompleteCvarName( const char *args, int argNum )
 {
 	if( argNum == 2 )
 	{
 		// Skip "<cmd> "
-		char *p = Com_SkipTokens( args, 1, " " );
+		const char *p = Com_SkipTokens( args, 1, " " );
 
 		if( p > args )
 			Field_CompleteCommand( p, qfalse, qtrue );
@@ -2433,7 +2433,7 @@ static const char *varFuncHandlers[] = {
 	"add","sub","mul","div","mod","sin","cos", "rand"
 };
 
-static void Cvar_CompleteVarFunc( char *args, int argNum )
+static void Cvar_CompleteVarFunc( const char *args, int argNum )
 {
 	if ( argNum == 2 )
 	{
@@ -2442,7 +2442,7 @@ static void Cvar_CompleteVarFunc( char *args, int argNum )
 	else if ( argNum == 3 )
 	{
 		// Skip "<cmd> <func> "
-		char *p = Com_SkipTokens( args, 2, " " );
+		const char *p = Com_SkipTokens( args, 2, " " );
 
 		if( p > args )
 			Field_CompleteCommand( p, qfalse, qtrue );

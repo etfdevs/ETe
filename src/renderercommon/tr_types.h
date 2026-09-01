@@ -26,8 +26,8 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 
-#ifndef __TR_TYPES_H
-#define __TR_TYPES_H
+#ifndef __TR_TYPES_H__
+#define __TR_TYPES_H__
 
 #define MAX_VIDEO_HANDLES	16
 
@@ -69,16 +69,10 @@ If you have questions concerning this license or the applicable additional terms
 #define RDF_DRAWINGSKY      ( 1 << 5 )
 #define RDF_SNOOPERVIEW     ( 1 << 6 )  //----(SA)	added
 
-#define RDF_RENDEROMNIBOT	(1<<30)
-
 typedef struct {
 	vec3_t xyz;
 	float st[2];
-#ifdef USE_VULKAN
 	color4ub_t	modulate;
-#else
-	byte modulate[4];
-#endif
 } polyVert_t;
 
 typedef struct poly_s {
@@ -143,11 +137,7 @@ typedef struct {
 	qhandle_t customShader;         // use one image for the entire thing
 
 	// misc
-#ifdef USE_VULKAN
-	color4ub_t shader;
-#else
-	byte shaderRGBA[4];             // colors used by rgbgen entity shaders
-#endif
+	color4ub_t shader;				// colors used by rgbgen entity shaders
 	float shaderTexCoord[2];        // texture coordinates used by tcMod entity modifiers
 
 	// subtracted from refdef time to control effect start times
@@ -247,7 +237,7 @@ typedef struct {
 
 
 typedef enum {
-	STEREO_CENTER,
+	STEREO_CENTER = 0,
 	STEREO_LEFT,
 	STEREO_RIGHT
 } stereoFrame_t;
@@ -261,13 +251,13 @@ typedef enum {
 ** subsystem is initialized.
 */
 typedef enum {
-	TC_NONE,
+	TC_NONE = 0,
 	TC_S3TC,  // this is for the GL_S3_s3tc extension.
 	TC_S3TC_ARB  // this is for the GL_EXT_texture_compression_s3tc extension.
 } textureCompression_t;
 
 typedef enum {
-	GLDRV_ICD,                  // driver is integrated with window system
+	GLDRV_ICD = 0,                  // driver is integrated with window system
 								// WARNING: there are tests that check for
 								// > GLDRV_ICD for minidriverness, so this
 								// should always be the lowest value in this
@@ -277,7 +267,7 @@ typedef enum {
 } glDriverType_t;
 
 typedef enum {
-	GLHW_GENERIC,           // where everything works the way it should
+	GLHW_GENERIC = 0,           // where everything works the way it should
 	GLHW_3DFX_2D3D,         // Voodoo Banshee or Voodoo3, relevant since if this is
 							// the hardware type then there can NOT exist a secondary
 							// display adapter
@@ -287,7 +277,7 @@ typedef enum {
 } glHardwareType_t;
 
 typedef enum {
-	BUFFER_IMAGE,
+	BUFFER_IMAGE = 0,
 	BUFFER_SCALED,
 	BUFFER_RESAMPLED,
 	BUFFER_UPLOAD,
@@ -357,11 +347,7 @@ typedef struct {
 typedef struct polyBuffer_s {
 	vec4_t xyz[MAX_PB_VERTS];
 	vec2_t st[MAX_PB_VERTS];
-#ifdef USE_VULKAN
 	color4ub_t color[MAX_PB_VERTS];
-#else
-	byte color[MAX_PB_VERTS][4];
-#endif
 	int numVerts;
 
 	int indicies[MAX_PB_INDICIES];

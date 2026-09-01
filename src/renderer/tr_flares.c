@@ -409,10 +409,10 @@ static void RB_RenderFlare( flare_t *f ) {
 
 	RB_BeginSurface( tr.flareShader, f->fogNum );
 
-	c[0] = color[0] * 255;
-	c[1] = color[1] * 255;
-	c[2] = color[2] * 255;
-	c[3] = f->drawIntensity * 255;
+	c.rgba[0] = color[0] * 255;
+	c.rgba[1] = color[1] * 255;
+	c.rgba[2] = color[2] * 255;
+	c.rgba[3] = f->drawIntensity * 255;
 	
 	RB_AddQuadStamp2( f->windowX - size, f->windowY - size, size * 2, size * 2, 0, 0, 1, 1, c );
 

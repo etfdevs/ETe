@@ -65,6 +65,28 @@ static qboolean mouse_focus;
 
 #define CTRL(a) ((a)-'a'+1)
 
+qboolean Sys_IsKeyModActive( int modnum ) {
+	if ( !SDL_WasInit( SDL_INIT_VIDEO ) ) {
+		return qfalse;
+	}
+	switch( modnum ) {
+	case K_KP_NUMLOCK: return ( SDL_GetModState() & KMOD_NUM ) ? qtrue : qfalse;
+	case K_CAPSLOCK: return ( SDL_GetModState() & KMOD_CAPS ) ? qtrue : qfalse;
+	case K_SCROLLOCK: return ( SDL_GetModState() & KMOD_SCROLL ) ? qtrue : qfalse;
+	case K_SHIFT: return ( SDL_GetModState() & KMOD_SHIFT ) ? qtrue : qfalse;
+	case K_ALT: return ( SDL_GetModState() & KMOD_ALT ) ? qtrue : qfalse;
+	case K_CTRL: return ( SDL_GetModState() & KMOD_CTRL ) ? qtrue : qfalse;
+	default: return qfalse;
+	}
+}
+
+qboolean Sys_IsNumLockDown( void ) {
+	if ( !SDL_WasInit( SDL_INIT_VIDEO ) ) {
+		return qfalse;
+	}
+	return ( SDL_GetModState() & SDL_KMOD_NUM ) ? qtrue : qfalse;
+}	
+
 qboolean Sys_IsNumLockDown( void ) {
 	// note recent SDL builds probably needed for this to fully work
 	if (SDL_GetModState() & KMOD_NUM)
@@ -474,6 +496,8 @@ IN_DeactivateMouse
 */
 static void IN_DeactivateMouse( void )
 {
+	const char* drv = SDL_GetCurrentVideoDriver();
+
 	if ( !mouseAvailable )
 		return;
 
@@ -494,7 +518,9 @@ static void IN_DeactivateMouse( void )
 			if ( glw_state.isFullscreen )
 				SDL_ShowCursor( SDL_TRUE );
 
-			SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+			if ( drv && strcmp( drv, "x11" ) == 0 ) {
+				SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+			}
 		}
 
 		mouseActive = qfalse;
@@ -550,10 +576,10 @@ IN_InitJoystick
 */
 static void IN_InitJoystick( void )
 {
+	cvar_t *cv;
 	int i = 0;
 	int total = 0;
 	char buf[16384] = "";
-	cvar_t *cv;
 
 	if (gamepad)
 		SDL_GameControllerClose(gamepad);
@@ -601,8 +627,8 @@ static void IN_InitJoystick( void )
 		Q_strcat(buf, sizeof(buf), "\n");
 	}
 
-	cv = Cvar_Get( "in_availableJoysticks", "", CVAR_ROM );
-	Cvar_SetDescription( cv, "List of available Joysticks" );
+	cv = Cvar_Get( "in_availableJoysticks", buf, CVAR_ROM );
+	Cvar_SetDescription( cv, "List of available joysticks" );
 
 	// Update cvar on in_restart or controller add/remove.
 	Cvar_Set( "in_availableJoysticks", buf );
@@ -639,7 +665,7 @@ static void IN_InitJoystick( void )
 	Com_DPrintf( "Buttons:    %d\n", SDL_JoystickNumButtons(stick) );
 	Com_DPrintf( "Balls:      %d\n", SDL_JoystickNumBalls(stick) );
 	Com_DPrintf( "Use Analog: %s\n", in_joystickUseAnalog->integer ? "Yes" : "No" );
-	Com_DPrintf( "Threshold: %f\n", in_joystickThreshold->value );
+	Com_DPrintf( "Threshold:  %f\n", in_joystickThreshold->value );
 	Com_DPrintf( "Is gamepad: %s\n", gamepad ? "Yes" : "No" );
 
 	SDL_JoystickEventState(SDL_QUERY);
@@ -1124,6 +1150,23 @@ static const char *eventName( SDL_WindowEventID event )
 
 /*
 ===============
+IN_SyncModifiers
+===============
+*/
+static void IN_SyncModifiers( void ) {
+    SDL_Keymod mod = SDL_GetModState();
+
+    keys[K_CTRL].down  = (mod & KMOD_CTRL)  ? qtrue : qfalse;
+    keys[K_SHIFT].down = (mod & KMOD_SHIFT) ? qtrue : qfalse;
+    keys[K_ALT].down   = (mod & KMOD_ALT)   ? qtrue : qfalse;
+    keys[K_CAPSLOCK].down = (mod & KMOD_CAPS)   ? qtrue : qfalse;
+    keys[K_KP_NUMLOCK].down = (mod & KMOD_NUM)   ? qtrue : qfalse;
+    keys[K_SCROLLOCK].down = (mod & KMOD_SCROLL)   ? qtrue : qfalse;
+}
+
+
+/*
+===============
 HandleEvents
 ===============
 */
@@ -1138,6 +1181,8 @@ void HandleEvents( void )
 			return;
 
 	in_eventTime = Sys_Milliseconds();
+
+	IN_SyncModifiers();
 
 	while ( SDL_PollEvent( &e ) )
 	{
@@ -1163,6 +1208,10 @@ void HandleEvents( void )
 						Com_QueueEvent( in_eventTime, SE_CHAR, key, 0, 0, NULL );
 					else if( keys[K_CTRL].down && key >= 'a' && key <= 'z' )
 						Com_QueueEvent( in_eventTime, SE_CHAR, CTRL(key), 0, 0, NULL );
+#ifdef MACOS_X
+					else if( keys[K_COMMAND].down && key == 'v' )
+						Com_QueueEvent( in_eventTime, SE_CHAR, CTRL(key), 0, 0, NULL );
+#endif
 				}
 
 				lastKeyDown = key;
@@ -1296,8 +1345,8 @@ void HandleEvents( void )
 					case SDL_WINDOWEVENT_RESTORED:
 					case SDL_WINDOWEVENT_MAXIMIZED:		gw_minimized = qfalse; break;
 					// keyboard focus:
-					case SDL_WINDOWEVENT_FOCUS_LOST:	lastKeyDown = 0; Key_ClearStates(); gw_active = qfalse; break;
-					case SDL_WINDOWEVENT_FOCUS_GAINED:	lastKeyDown = 0; Key_ClearStates(); gw_active = qtrue; gw_minimized = qfalse;
+					case SDL_WINDOWEVENT_FOCUS_LOST:	lastKeyDown = 0; Key_ClearStates(); IN_SyncModifiers(); gw_active = qfalse; break;
+					case SDL_WINDOWEVENT_FOCUS_GAINED:	lastKeyDown = 0; Key_ClearStates(); IN_SyncModifiers(); gw_active = qtrue; gw_minimized = qfalse;
 														if ( re.SetColorMappings ) {
 															re.SetColorMappings();
 														}

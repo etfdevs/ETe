@@ -121,9 +121,7 @@ static void MakeMeshNormals( int width, int height, drawVert_t ctrl[MAX_GRID_SIZ
 	qboolean	good[8];
 	qboolean	wrapWidth, wrapHeight;
 	float		len;
-static	int	neighbors[8][2] = {
-	{0,1}, {1,1}, {1,0}, {1,-1}, {0,-1}, {-1,-1}, {-1,0}, {-1,1}
-	};
+	static const int neighbors[8][2] = { {0,1}, {1,1}, {1,0}, {1,-1}, {0,-1}, {-1,-1}, {-1,0}, {-1,1} };
 
 	wrapWidth = qfalse;
 	for ( i = 0 ; i < height ; i++ ) {
@@ -203,6 +201,9 @@ static	int	neighbors[8][2] = {
 			}
 
 			VectorNormalize2( sum, dv->normal );
+			for ( k = 0; k < 3; k++ ) {
+				dv->normal[k] = R_ClampDenorm( dv->normal[k] );
+			}
 		}
 	}
 }
@@ -465,7 +466,7 @@ srfGridMesh_t *R_SubdividePatchToGrid( int width, int height,
 	}
 
 
-	// put all the aproximating points on the curve
+	// put all the approximating points on the curve
 	PutPointsOnCurve( ctrl, width, height );
 
 	// cull out any rows or columns that are colinear
@@ -553,7 +554,7 @@ srfGridMesh_t *R_GridInsertColumn( srfGridMesh_t *grid, int column, int row, vec
 	for (j = 0; j < grid->height; j++) {
 		errorTable[1][j] = grid->heightLodError[j];
 	}
-	// put all the aproximating points on the curve
+	// put all the approximating points on the curve
 	//PutPointsOnCurve( ctrl, width, height );
 	// calculate normals
 	MakeMeshNormals( width, height, ctrl );
@@ -607,7 +608,7 @@ srfGridMesh_t *R_GridInsertRow( srfGridMesh_t *grid, int row, int column, vec3_t
 	for (j = 0; j < grid->width; j++) {
 		errorTable[0][j] = grid->widthLodError[j];
 	}
-	// put all the aproximating points on the curve
+	// put all the approximating points on the curve
 	//PutPointsOnCurve( ctrl, width, height );
 	// calculate normals
 	MakeMeshNormals( width, height, ctrl );

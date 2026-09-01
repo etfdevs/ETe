@@ -44,6 +44,9 @@ int	SV_NumForGentity( sharedEntity_t *ent ) {
 sharedEntity_t *SV_GentityNum( int num ) {
 	sharedEntity_t *ent;
 
+	if ( num < 0 || num >= MAX_GENTITIES ) {
+		Com_Error( ERR_DROP, "%s: bad num %d", __func__, num );
+	}
 	ent = (sharedEntity_t *)((byte *)sv.gentities + sv.gentitySize*(num));
 
 	return ent;
@@ -86,10 +89,10 @@ static void SV_GameSendServerCommand( int clientNum, const char *text ) {
 	if ( clientNum == -1 ) {
 		SV_SendServerCommand( NULL, "%s", text );
 	} else {
-		if ( clientNum < 0 || clientNum >= sv_maxclients->integer ) {
+		if ( clientNum < 0 || clientNum >= sv.maxclients ) {
 			return;
 		}
-		SV_SendServerCommand( svs.clients + clientNum, "%s", text );	
+		SV_SendServerCommand( svs.clients + clientNum, "%s", text );
 	}
 }
 
@@ -102,7 +105,7 @@ Disconnects the client with a message
 ===============
 */
 static void SV_GameDropClient( int clientNum, const char *reason, int length ) {
-	if ( clientNum < 0 || clientNum >= sv_maxclients->integer ) {
+	if ( clientNum < 0 || clientNum >= sv.maxclients ) {
 		return;
 	}
 	SV_DropClient( svs.clients + clientNum, reason );
@@ -124,11 +127,11 @@ static void SV_SetBrushModel( sharedEntity_t *ent, const char *name ) {
 	vec3_t			mins, maxs;
 
 	if ( !name ) {
-		Com_Error( ERR_DROP, "SV_SetBrushModel: NULL" );
+		Com_Error( ERR_DROP, "SV_SetBrushModel: NULL model for ent number %d", ent->s.number );
 	}
 
 	if ( name[0] != '*' ) {
-		Com_Error( ERR_DROP, "SV_SetBrushModel: %s isn't a brush model", name );
+		Com_Error( ERR_DROP, "SV_SetBrushModel: %s isn't a brush model (ent number %d)", name, ent->s.number );
 	}
 
 	ent->s.modelindex = atoi( name + 1 );
@@ -161,11 +164,15 @@ qboolean SV_inPVS( const vec3_t p1, const vec3_t p2 )
 
 	leafnum = CM_PointLeafnum (p1);
 	cluster = CM_LeafCluster (leafnum);
+	if ( cluster < 0 )
+		return qfalse;
 	area1 = CM_LeafArea (leafnum);
 	mask = CM_ClusterPVS (cluster);
 
 	leafnum = CM_PointLeafnum (p2);
 	cluster = CM_LeafCluster (leafnum);
+	if ( cluster < 0 )
+		return qfalse;
 	area2 = CM_LeafArea (leafnum);
 	if ( mask && (!(mask[cluster>>3] & (1<<(cluster&7)) ) ) )
 		return qfalse;
@@ -190,10 +197,14 @@ static qboolean SV_inPVSIgnorePortals( const vec3_t p1, const vec3_t p2 )
 
 	leafnum = CM_PointLeafnum (p1);
 	cluster = CM_LeafCluster (leafnum);
+	if ( cluster < 0 )
+		return qfalse;
 	mask = CM_ClusterPVS (cluster);
 
 	leafnum = CM_PointLeafnum (p2);
 	cluster = CM_LeafCluster (leafnum);
+	if ( cluster < 0 )
+		return qfalse;
 
 	if ( mask && (!(mask[cluster>>3] & (1<<(cluster&7)) ) ) )
 		return qfalse;
@@ -279,7 +290,7 @@ SV_GetUsercmd
 ===============
 */
 static void SV_GetUsercmd( int clientNum, usercmd_t *cmd ) {
-	if ( (unsigned) clientNum < sv_maxclients->integer ) {
+	if ( (unsigned) clientNum < sv.maxclients ) {
 		*cmd = svs.clients[ clientNum ].lastUsercmd;
 	} else {
 		Com_Error( ERR_DROP, "%s(): bad clientNum: %i", __func__, clientNum );
@@ -288,7 +299,7 @@ static void SV_GetUsercmd( int clientNum, usercmd_t *cmd ) {
 
 
 static void SV_BotUsercmd( int clientNum, usercmd_t *cmd ) {
-	if ( (unsigned) clientNum < sv_maxclients->integer ) {
+	if ( (unsigned) clientNum < sv.maxclients ) {
 		SV_ClientThink( &svs.clients[ clientNum ], cmd );
 	} else {
 		Com_Error( ERR_DROP, "%s(): bad clientNum: %i", __func__, clientNum );
@@ -297,8 +308,8 @@ static void SV_BotUsercmd( int clientNum, usercmd_t *cmd ) {
 
 
 static void SV_BotClientCommand( int client, const char *command ) {
-	if ( (unsigned) client < sv_maxclients->integer ) {
-		SV_ExecuteClientCommand( &svs.clients[client], command, qfalse );
+	if ( (unsigned) client < sv.maxclients ) {
+		SV_ExecuteClientCommand( &svs.clients[client], command );
 	} else {
 		Com_Error( ERR_DROP, "%s(): bad clientNum: %i", __func__, client );
 	}
@@ -311,7 +322,7 @@ SV_SendBinaryMessage
 ====================
 */
 static void SV_SendBinaryMessage( int cno, char *buf, int buflen ) {
-	if ( (unsigned) cno < sv_maxclients->integer ) {
+	if ( (unsigned) cno < sv.maxclients ) {
 		if ( buflen < 0 || buflen > MAX_BINARY_MESSAGE ) {
 			svs.clients[cno].binaryMessageLength = 0;
 			Com_Error( ERR_DROP, "%s(): bad length %i", __func__, buflen );
@@ -332,7 +343,7 @@ SV_BinaryMessageStatus
 ====================
 */
 static int SV_BinaryMessageStatus( int cno ) {
-	if ( cno < 0 || cno >= sv_maxclients->integer ) {
+	if ( cno < 0 || cno >= sv.maxclients ) {
 		return qfalse;
 	}
 
@@ -401,7 +412,6 @@ void *GVM_ArgPtr( intptr_t intValue )
 {
 	return VM_ArgPtr( intValue );
 }
-
 
 static qboolean SV_G_GetValue( char* value, int valueSize, const char* key )
 {
@@ -757,7 +767,7 @@ static intptr_t QDECL SV_DllSyscall( intptr_t arg, ... ) {
 }
 
 
-void SV_CompleteMapName( char *args, int argNum );
+void SV_CompleteMapName( const char *args, int argNum );
 static const cmdListItem_t etf_cmds[] = {
 	{ "etfdevmap", NULL, SV_CompleteMapName },
 	{ "etfmap", NULL, SV_CompleteMapName }
@@ -780,8 +790,6 @@ void SV_ShutdownGameProgs( void ) {
 	if ( !gvm ) {
 		return;
 	}
-
-	//Sys_OmnibotUnLoad();
 
 	VM_Call( gvm, GAME_SHUTDOWN, qfalse );
 	VM_Free( gvm );
@@ -808,7 +816,7 @@ static void SV_InitGameVM( qboolean restart ) {
 	// a previous level
 	// https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=522
 	// now done before GAME_INIT call
-	for ( i = 0 ; i < sv_maxclients->integer ; i++ ) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		svs.clients[i].gentity = NULL;
 	}
 
@@ -836,9 +844,6 @@ void SV_RestartGameProgs( void ) {
 	if ( !gvm ) {
 		return;
 	}
-
-	// unload the refs during a restart
-	//Sys_OmnibotUnLoad();
 
 	VM_Call( gvm, GAME_SHUTDOWN, qtrue );
 
@@ -873,9 +878,6 @@ void SV_InitGameProgs( void ) {
 	}
 
 	SV_InitGameVM( qfalse );
-
-	// unload the refs during a map change
-	//Sys_OmnibotLoad();
 
 	// load userinfo filters
 	SV_LoadFilters( sv_filter->string );

@@ -36,9 +36,9 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "../qcommon/q_shared.h"
 #include "../qcommon/qcommon.h"
-#ifndef DEDICATED
-#include "../renderer/tr_local.h"
-#endif
+//#ifndef DEDICATED
+//#include "../renderer/tr_local.h"
+//#endif
 
 static qboolean signalcaught = qfalse;
 

@@ -1,0 +1,1083 @@
+	/*
+===========================================================================
+Copyright (C) 1999-2005 Id Software, Inc.
+
+This file is part of Quake III Arena source code.
+
+Quake III Arena source code is free software; you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 2 of the License,
+or (at your option) any later version.
+
+Quake III Arena source code is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Quake III Arena source code; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+===========================================================================
+*/
+
+#include "sdl_local.h"
+
+#include "../client/client.h"
+#include "../renderercommon/tr_public.h"
+#include "sdl_glw.h"
+#include "sdl_icon.h"
+
+typedef enum {
+	RSERR_OK = 0,
+	RSERR_INVALID_FULLSCREEN,
+	RSERR_INVALID_MODE,
+	RSERR_FATAL_ERROR,
+	RSERR_UNKNOWN
+} rserr_t;
+
+glwstate_t glw_state;
+
+SDL_Window *SDL_window = NULL;
+static SDL_GLContext SDL_glContext = NULL;
+#ifdef USE_VULKAN_API
+static PFN_vkGetInstanceProcAddr qvkGetInstanceProcAddr;
+#endif
+
+cvar_t *r_stereoEnabled;
+cvar_t *in_nograb;
+
+static void GLW_ShowCursor( qboolean show )
+{
+	if ( show ) {
+		SDL_ShowCursor();
+	} else {
+		SDL_HideCursor();
+	}
+}
+
+static SDL_Window *GLW_CreateWindow( const char *title, int x, int y, int w, int h, SDL_WindowFlags flags )
+{
+	SDL_Window *window;
+	SDL_PropertiesID props = SDL_CreateProperties();
+
+	if ( !props ) {
+		Com_DPrintf( "SDL_CreateProperties failed: %s\n", SDL_GetError() );
+		return NULL;
+	}
+
+	SDL_SetStringProperty( props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, (Sint64)flags );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_X_NUMBER, x );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, y );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, w );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, h );
+
+	window = SDL_CreateWindowWithProperties( props );
+	SDL_DestroyProperties( props );
+
+	return window;
+}
+
+/*
+===============
+GLimp_Shutdown
+===============
+*/
+void GLimp_Shutdown( qboolean unloadDLL )
+{
+	const char* drv = SDL_GetCurrentVideoDriver();
+
+	IN_Shutdown();
+
+	if ( glw_state.isFullscreen ) {
+		if ( drv && strcmp( drv, "x11" ) == 0 ) {
+			SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+		} else {
+			GLW_ShowCursor( qtrue );
+		}
+	}
+
+	if ( SDL_window ) {
+		SDL_DestroyWindow( SDL_window );
+		SDL_window = NULL;
+	}
+
+	if ( unloadDLL )
+		SDL_QuitSubSystem( SDL_INIT_VIDEO );
+}
+
+
+void GLimp_FlashWindow( int state )
+{
+	if ( !SDL_window )
+		return;
+
+	if ( state == 1 )
+		SDL_FlashWindow( SDL_window, SDL_FLASH_BRIEFLY );
+	else if ( state == 2 )
+		SDL_FlashWindow( SDL_window, SDL_FLASH_UNTIL_FOCUSED );
+	else
+		SDL_FlashWindow( SDL_window, SDL_FLASH_CANCEL );
+}
+
+
+/*
+===============
+GLimp_LogComment
+===============
+*/
+void GLimp_LogComment( const char *comment )
+{
+}
+
+
+static void GLW_SyncWindow( const char *reason )
+{
+	if ( SDL_window && !SDL_SyncWindow( SDL_window ) ) {
+		Com_DPrintf( "SDL_SyncWindow failed after %s: %s\n", reason, SDL_GetError() );
+	}
+}
+
+
+void GLW_UpdateWindowState( void )
+{
+	SDL_DisplayID display = 0;
+	const SDL_DisplayMode *desktopMode;
+	int numDisplays = 0;
+	SDL_DisplayID *displays = SDL_GetDisplays( &numDisplays );
+
+	if ( displays ) {
+		SDL_free( displays );
+	}
+
+	if ( numDisplays > 0 ) {
+		glw_state.monitorCount = numDisplays;
+	} else if ( glw_state.monitorCount <= 0 ) {
+		glw_state.monitorCount = 1;
+	}
+
+	if ( SDL_window ) {
+		SDL_WindowFlags windowFlags = SDL_GetWindowFlags( SDL_window );
+		int w, h;
+
+		glw_state.isFullscreen = ( windowFlags & SDL_WINDOW_FULLSCREEN ) ? qtrue : qfalse;
+		if ( glw_state.config ) {
+			glw_state.config->isFullscreen = glw_state.isFullscreen;
+		}
+
+		if ( !SDL_GetWindowSize( SDL_window, &w, &h ) ) {
+			Com_DPrintf( "SDL_GetWindowSize failed: %s\n", SDL_GetError() );
+		} else {
+			glw_state.window_width = w;
+			glw_state.window_height = h;
+		}
+
+		display = SDL_GetDisplayForWindow( SDL_window );
+		if ( !display ) {
+			Com_DPrintf( "SDL_GetDisplayForWindow() failed: %s\n", SDL_GetError() );
+		}
+	}
+
+	desktopMode = display ? SDL_GetDesktopDisplayMode( display ) : NULL;
+	if ( desktopMode ) {
+		glw_state.desktop_width = desktopMode->w;
+		glw_state.desktop_height = desktopMode->h;
+	} else if ( !glw_state.desktop_width || !glw_state.desktop_height ) {
+		glw_state.desktop_width = 640;
+		glw_state.desktop_height = 480;
+	}
+}
+
+
+static qboolean GLW_EnterFullscreen( SDL_Window *window, const SDL_DisplayMode *mode )
+{
+	qboolean exclusiveTried = qfalse;
+
+#ifndef MACOS_X
+	if ( mode ) {
+		exclusiveTried = qtrue;
+		if ( !SDL_SetWindowFullscreenMode( window, mode ) ) {
+			Com_DPrintf( "SDL_SetWindowFullscreenMode failed: %s\n", SDL_GetError() );
+		} else if ( SDL_SetWindowFullscreen( window, true ) ) {
+			return qtrue;
+		} else {
+			Com_DPrintf( "SDL_SetWindowFullscreen failed: %s\n", SDL_GetError() );
+		}
+	}
+#endif
+
+	if ( !SDL_SetWindowFullscreenMode( window, NULL ) ) {
+		Com_DPrintf( "SDL_SetWindowFullscreenMode failed: %s\n", SDL_GetError() );
+		return qfalse;
+	}
+
+	if ( !SDL_SetWindowFullscreen( window, true ) ) {
+		Com_DPrintf( "SDL_SetWindowFullscreen failed: %s\n", SDL_GetError() );
+		return qfalse;
+	}
+
+	if ( exclusiveTried ) {
+		Com_Printf( "...falling back to desktop fullscreen\n" );
+	}
+
+	return qtrue;
+}
+
+
+static SDL_DisplayID FindNearestDisplay( int *x, int *y, int w, int h )
+{
+	const int cx = *x + w / 2;
+	const int cy = *y + h / 2;
+	int i, index, numDisplays;
+	SDL_Rect *list, *m;
+	SDL_DisplayID display = 0;
+	SDL_DisplayID *displays;
+
+	index = -1; // selected display index
+
+	displays = SDL_GetDisplays( &numDisplays );
+	if ( !displays || numDisplays <= 0 ) {
+		if ( displays ) {
+			SDL_free( displays );
+		}
+		return 0;
+	}
+
+	glw_state.monitorCount = numDisplays;
+
+	list = Z_Malloc( numDisplays * sizeof( list[0] ) );
+
+	for ( i = 0; i < numDisplays; i++ )
+	{
+		if ( !SDL_GetDisplayBounds( displays[i], list + i ) ) {
+			list[i].x = 0;
+			list[i].y = 0;
+			list[i].w = 0;
+			list[i].h = 0;
+		}
+		//Com_Printf( "[%i]: x=%i, y=%i, w=%i, h=%i\n", i, list[i].x, list[i].y, list[i].w, list[i].h );
+	}
+
+	// select display by window center intersection
+	for ( i = 0; i < numDisplays; i++ )
+	{
+		m = list + i;
+		if ( cx >= m->x && cx < (m->x + m->w) && cy >= m->y && cy < (m->y + m->h) )
+		{
+			index = i;
+			break;
+		}
+	}
+
+	// select display by nearest distance between window center and display center
+	if ( index == -1 )
+	{
+		unsigned long nearest, dist;
+		int dx, dy;
+		nearest = ~0UL;
+		for ( i = 0; i < numDisplays; i++ )
+		{
+			m = list + i;
+			dx = (m->x + m->w/2) - cx;
+			dy = (m->y + m->h/2) - cy;
+			dist = ( dx * dx ) + ( dy * dy );
+			if ( dist < nearest )
+			{
+				nearest = dist;
+				index = i;
+			}
+		}
+	}
+
+	// adjust x and y coordinates if needed
+	if ( index >= 0 )
+	{
+		m = list + index;
+		display = displays[index];
+		if ( *x < m->x )
+			*x = m->x;
+
+		if ( *y < m->y )
+			*y = m->y;
+	}
+
+	Z_Free( list );
+	SDL_free( displays );
+
+	return display;
+}
+
+
+static SDL_HitTestResult SDL_HitTestFunc( SDL_Window *win, const SDL_Point *area, void *data )
+{
+	if ( Key_GetCatcher() & KEYCATCH_CONSOLE && keys[ K_ALT ].down )
+		return SDL_HITTEST_DRAGGABLE;
+
+	return SDL_HITTEST_NORMAL;
+}
+
+
+/*
+===============
+GLimp_SetMode
+===============
+*/
+static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qboolean vulkan )
+{
+	glconfig_t *config = glw_state.config;
+	int perChannelColorBits;
+	int colorBits, depthBits, stencilBits;
+	int i;
+	const SDL_DisplayMode *desktopMode;
+	SDL_DisplayID display = 0;
+	int x;
+	int y;
+	SDL_WindowFlags flags = SDL_WINDOW_HIDDEN;
+	//const char* sdl_driver = SDL_GetCurrentVideoDriver();
+	char windowTitle[sizeof(cl_title)+(sizeof(ARCH_STRING)-1)+6] = { 0 };
+
+#ifdef USE_VULKAN_API
+	if ( vulkan ) {
+		flags |= SDL_WINDOW_VULKAN;
+		Com_Printf( "Initializing Vulkan display\n");
+	} else
+#endif
+	{
+		flags |= SDL_WINDOW_OPENGL;
+		Com_Printf( "Initializing OpenGL display\n");
+	}
+
+	// If a window exists, note its display index
+	if ( SDL_window != NULL )
+	{
+		display = SDL_GetDisplayForWindow( SDL_window );
+		if ( !display )
+		{
+			Com_DPrintf( "SDL_GetDisplayForWindow() failed: %s\n", SDL_GetError() );
+		}
+	}
+	else
+	{
+		x = vid_xpos->integer;
+		y = vid_ypos->integer;
+
+		// find out to which display our window belongs to
+		// according to previously stored \vid_xpos and \vid_ypos coordinates
+		display = FindNearestDisplay( &x, &y, 640, 480 );
+		//if ( !display ) {
+	//		Com_Printf( "Fallback to primary display\n" );
+		//	display = SDL_GetPrimaryDisplay();
+	//	}
+	}
+
+	desktopMode = display ? SDL_GetDesktopDisplayMode( display ) : NULL;
+	if ( desktopMode ) {
+		glw_state.desktop_width = desktopMode->w;
+		glw_state.desktop_height = desktopMode->h;
+	} else {
+		glw_state.desktop_width = 640;
+		glw_state.desktop_height = 480;
+	}
+
+	config->isFullscreen = fullscreen;
+	glw_state.isFullscreen = fullscreen;
+
+	if ( fullscreen && *modeFS )
+		Com_Printf( "...setting mode %d:", atoi(modeFS) );
+	else
+		Com_Printf( "...setting mode %d:", mode );
+
+	if ( !CL_GetModeInfo( &config->vidWidth, &config->vidHeight, &config->windowAspect, mode, modeFS, glw_state.desktop_width, glw_state.desktop_height, fullscreen ) )
+	{
+		Com_Printf( " invalid mode\n" );
+		return RSERR_INVALID_MODE;
+	}
+
+	Com_Printf( " %d %d\n", config->vidWidth, config->vidHeight );
+
+	// Destroy existing state if it exists
+	if ( SDL_glContext != NULL )
+	{
+		SDL_GL_DestroyContext( SDL_glContext );
+		SDL_glContext = NULL;
+	}
+
+	if ( SDL_window != NULL )
+	{
+		SDL_GetWindowPosition( SDL_window, &x, &y );
+		Com_DPrintf( "Existing window at %dx%d before being destroyed\n", x, y );
+		SDL_DestroyWindow( SDL_window );
+		SDL_window = NULL;
+	}
+
+	gw_active = qfalse;
+	gw_minimized = qtrue;
+
+	/*if ( fullscreen )
+	{
+		//flags |= SDL_WINDOW_FULLSCREEN;
+	}
+	else */if ( r_noborder->integer )
+	{
+		flags |= SDL_WINDOW_BORDERLESS;
+	}
+
+	//if ( (sdl_driver && sdl_driver[0] != '\0') && ( !Q_stricmp( sdl_driver, "wayland" ) || !Q_stricmp( sdl_driver, "cocoa" ) ) )
+		flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+
+	colorBits = r_colorbits->value;
+
+	if ( colorBits == 0 || colorBits > 24 )
+		colorBits = 24;
+
+	if ( cl_depthbits->integer == 0 )
+	{
+		// implicitly assume Z-buffer depth == desktop color depth
+		if ( colorBits > 16 )
+			depthBits = 24;
+		else
+			depthBits = 16;
+	}
+	else
+		depthBits = cl_depthbits->integer;
+
+	stencilBits = cl_stencilbits->integer;
+
+	// do not allow stencil if Z-buffer depth likely won't contain it
+	if ( depthBits < 24 )
+		stencilBits = 0;
+
+	Com_sprintf( windowTitle, sizeof(windowTitle), "%s ( %s )", cl_title, ARCH_STRING );
+
+	for ( i = 0; i < 16; i++ )
+	{
+		int testColorBits, testDepthBits, testStencilBits;
+		int realColorBits[3];
+
+		// 0 - default
+		// 1 - minus colorBits
+		// 2 - minus depthBits
+		// 3 - minus stencil
+		if ((i % 4) == 0 && i)
+		{
+			// one pass, reduce
+			switch (i / 4)
+			{
+				case 2 :
+					if (colorBits == 24)
+						colorBits = 16;
+					break;
+				case 1 :
+					if (depthBits == 24)
+						depthBits = 16;
+					else if (depthBits == 16)
+						depthBits = 8;
+				case 3 :
+					if (stencilBits == 24)
+						stencilBits = 16;
+					else if (stencilBits == 16)
+						stencilBits = 8;
+			}
+		}
+
+		testColorBits = colorBits;
+		testDepthBits = depthBits;
+		testStencilBits = stencilBits;
+
+		if ((i % 4) == 3)
+		{ // reduce colorBits
+			if (testColorBits == 24)
+				testColorBits = 16;
+		}
+
+		if ((i % 4) == 2)
+		{ // reduce depthBits
+			if (testDepthBits == 24)
+				testDepthBits = 16;
+		}
+
+		if ((i % 4) == 1)
+		{ // reduce stencilBits
+			if (testStencilBits == 8)
+				testStencilBits = 0;
+		}
+
+		if ( testColorBits == 24 )
+			perChannelColorBits = 8;
+		else
+			perChannelColorBits = 4;
+
+#ifdef USE_VULKAN_API
+		if ( !vulkan )
+#endif
+		{
+	
+#ifdef __sgi /* Fix for SGIs grabbing too many bits of color */
+			if (perChannelColorBits == 4)
+				perChannelColorBits = 0; /* Use minimum size for 16-bit color */
+
+			/* Need alpha or else SGIs choose 36+ bit RGB mode */
+			SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 1 );
+#endif
+
+			SDL_GL_SetAttribute( SDL_GL_RED_SIZE, perChannelColorBits );
+			SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, perChannelColorBits );
+			SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, perChannelColorBits );
+#ifndef __sgi
+			// prefer alpha if available, otherwise prefer smallest available alpha
+			SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, perChannelColorBits == 8 ? 8 : 0 );
+#endif
+			SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, testDepthBits );
+			SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, testStencilBits );
+
+			SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 0 );
+			SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 0 );
+
+			if ( r_stereoEnabled->integer )
+			{
+				config->stereoEnabled = qtrue;
+				SDL_GL_SetAttribute( SDL_GL_STEREO, 1 );
+			}
+			else
+			{
+				config->stereoEnabled = qfalse;
+				SDL_GL_SetAttribute( SDL_GL_STEREO, 0 );
+			}
+		
+			SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+
+			if ( !r_allowSoftwareGL->integer )
+				SDL_GL_SetAttribute( SDL_GL_ACCELERATED_VISUAL, 1 );
+		}
+
+		if ( ( SDL_window = GLW_CreateWindow( windowTitle, x, y, config->vidWidth, config->vidHeight, flags ) ) == NULL )
+		{
+			Com_DPrintf( "SDL_CreateWindowWithProperties failed: %s\n", SDL_GetError() );
+			continue;
+		}
+
+		if ( fullscreen )
+		{
+			SDL_DisplayMode mode;
+			const SDL_DisplayMode *currentMode;
+			SDL_DisplayID fullscreenDisplay;
+
+			SDL_zero( mode );
+			mode.displayID = display;
+
+			switch ( testColorBits )
+			{
+				case 16: mode.format = SDL_PIXELFORMAT_RGB565; break;
+				case 24: mode.format = SDL_PIXELFORMAT_RGB24;  break;
+				default:
+					Com_DPrintf( "testColorBits is %d, can't fullscreen\n", testColorBits );
+					SDL_DestroyWindow( SDL_window );
+					SDL_window = NULL;
+					continue;
+			}
+
+			mode.w = config->vidWidth;
+			mode.h = config->vidHeight;
+			mode.refresh_rate = /* config->displayFrequency = */ Cvar_VariableIntegerValue( "r_displayRefresh" );
+
+			if ( !GLW_EnterFullscreen( SDL_window, &mode ) ) {
+				SDL_DestroyWindow( SDL_window );
+				SDL_window = NULL;
+				continue;
+			}
+
+			GLW_SyncWindow( "fullscreen transition" );
+			GLW_UpdateWindowState();
+
+			if ( ( currentMode = SDL_GetWindowFullscreenMode( SDL_window ) ) != NULL ) {
+				config->displayFrequency = currentMode->refresh_rate;
+			} else {
+				fullscreenDisplay = SDL_GetDisplayForWindow( SDL_window );
+				currentMode = fullscreenDisplay ? SDL_GetCurrentDisplayMode( fullscreenDisplay ) : NULL;
+				if ( currentMode ) {
+					config->displayFrequency = currentMode->refresh_rate;
+				}
+			}
+		}
+		else
+		{
+			GLW_SyncWindow( "window creation" );
+			GLW_UpdateWindowState();
+		}
+
+#ifdef USE_VULKAN_API
+		if ( vulkan )
+		{
+			config->colorBits = testColorBits;
+			config->depthBits = testDepthBits;
+			config->stencilBits = testStencilBits;
+		}
+		else
+#endif
+		{
+			if ( !SDL_glContext )
+			{
+				if ( ( SDL_glContext = SDL_GL_CreateContext( SDL_window ) ) == NULL )
+				{
+					Com_DPrintf( "SDL_GL_CreateContext failed: %s\n", SDL_GetError( ) );
+					SDL_DestroyWindow( SDL_window );
+					SDL_window = NULL;
+					continue;
+				}
+			}
+
+			if ( !SDL_GL_SetSwapInterval( r_swapInterval->integer ) )
+			{
+				Com_DPrintf( "SDL_GL_SetSwapInterval failed: %s\n", SDL_GetError( ) );
+			}
+
+			SDL_GL_GetAttribute( SDL_GL_RED_SIZE, &realColorBits[0] );
+			SDL_GL_GetAttribute( SDL_GL_GREEN_SIZE, &realColorBits[1] );
+			SDL_GL_GetAttribute( SDL_GL_BLUE_SIZE, &realColorBits[2] );
+			//SDL_GL_GetAttribute( SDL_GL_ALPHA_SIZE, &realColorBits[3] );
+			SDL_GL_GetAttribute( SDL_GL_DEPTH_SIZE, &config->depthBits );
+			SDL_GL_GetAttribute( SDL_GL_STENCIL_SIZE, &config->stencilBits );
+
+			config->colorBits = realColorBits[0] + realColorBits[1] + realColorBits[2];
+		} // if ( !vulkan )
+
+
+		Com_Printf( "Using %d color bits, %d depth, %d stencil display.\n", config->colorBits, config->depthBits, config->stencilBits );
+
+		break;
+	}
+
+	if ( SDL_window )
+	{
+#ifdef USE_ICON
+		SDL_Surface *icon = SDL_CreateSurfaceFrom(
+			CLIENT_WINDOW_ICON.width,
+			CLIENT_WINDOW_ICON.height,
+			SDL_GetPixelFormatForMasks(
+				CLIENT_WINDOW_ICON.bytes_per_pixel * 8,
+#ifdef Q3_LITTLE_ENDIAN
+				0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000
+#else
+				0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF
+#endif
+			),
+			(void *)CLIENT_WINDOW_ICON.pixel_data,
+			CLIENT_WINDOW_ICON.bytes_per_pixel * CLIENT_WINDOW_ICON.width
+		);
+		if ( icon )
+		{
+			SDL_SetWindowIcon( SDL_window, icon );
+			SDL_DestroySurface( icon );
+		}
+#endif
+	}
+	else
+	{
+		Com_Printf( "Couldn't get a visual\n" );
+		return RSERR_INVALID_MODE;
+	}
+
+	if ( !fullscreen && r_noborder->integer )
+		SDL_SetWindowHitTest( SDL_window, SDL_HitTestFunc, NULL );
+
+	if ( SDL_GetWindowFlags( SDL_window ) & SDL_WINDOW_HIDDEN )
+	{
+		if ( !SDL_ShowWindow( SDL_window ) ) {
+			Com_DPrintf( "SDL_ShowWindow failed: %s\n", SDL_GetError() );
+		}
+		if ( !SDL_RaiseWindow( SDL_window ) ) {
+			Com_DPrintf( "SDL_RaiseWindow failed: %s\n", SDL_GetError() );
+		}
+		GLW_SyncWindow( "window show" );
+	}
+
+	GLW_UpdateWindowState();
+
+	if ( !SDL_GetWindowSizeInPixels( SDL_window, &config->vidWidth, &config->vidHeight ) )
+	{
+		Com_DPrintf( "SDL_GetWindowSizeInPixels failed: %s\n", SDL_GetError() );
+		config->vidWidth = glw_state.window_width;
+		config->vidHeight = glw_state.window_height;
+	}
+
+	SDL_WarpMouseInWindow( SDL_window, glw_state.window_width / 2, glw_state.window_height / 2 );
+
+	return RSERR_OK;
+}
+
+
+/*
+===============
+GLimp_StartDriverAndSetMode
+===============
+*/
+static rserr_t GLimp_StartDriverAndSetMode( int mode, const char *modeFS, qboolean fullscreen, qboolean vulkan )
+{
+	rserr_t err;
+
+	if ( fullscreen && in_nograb->integer )
+	{
+		Com_Printf( "Fullscreen not allowed with \\in_nograb 1\n");
+		Cvar_Set( "r_fullscreen", "0" );
+		r_fullscreen->modified = qfalse;
+		fullscreen = qfalse;
+	}
+
+	if ( !SDL_WasInit( SDL_INIT_VIDEO ) )
+	{
+		const char *driverName;
+
+		if ( r_sdlDriver->string[0] != '\0' )
+		{
+			SDL_SetHint( SDL_HINT_VIDEO_DRIVER, r_sdlDriver->string );
+		}
+
+		if ( r_allowScreenSaver->integer )
+		{
+			SDL_SetHint( SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1" );
+		}
+
+		/*
+			Starting from SDL2 2.0.14 The default value for SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS 
+			is now false for better compatibility with modern window managers, however it 
+			prevented the game from alt-tab/minimize, set to 1 before calling SDL_Init fix it.
+		*/
+		SDL_SetHint( SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "1" );
+
+		if ( !SDL_Init( SDL_INIT_VIDEO ) )
+		{
+			Com_Printf( "SDL_Init( SDL_INIT_VIDEO ) FAILED (%s)\n", SDL_GetError() );
+			return RSERR_FATAL_ERROR;
+		}
+
+		driverName = SDL_GetCurrentVideoDriver();
+
+		Com_Printf( "SDL using driver \"%s\"\n", driverName );
+	}
+
+	err = GLW_SetMode( mode, modeFS, fullscreen, vulkan );
+
+	switch ( err )
+	{
+		case RSERR_INVALID_FULLSCREEN:
+			Com_Printf( "...WARNING: fullscreen unavailable in this mode\n" );
+			return err;
+		case RSERR_INVALID_MODE:
+			Com_Printf( "...WARNING: could not set the given mode (%d)\n", mode );
+			return err;
+		default:
+			break;
+	}
+
+	return RSERR_OK;
+}
+
+
+/*
+===============
+GLimp_Init
+
+This routine is responsible for initializing the OS specific portions
+of OpenGL
+===============
+*/
+void GLimp_Init( glconfig_t *config )
+{
+	rserr_t err;
+
+#ifndef _WIN32
+	InitSig();
+#endif
+
+	Com_DPrintf( "GLimp_Init()\n" );
+
+	glw_state.config = config; // feedback renderer configuration
+
+	in_nograb = Cvar_Get( "in_nograb", "0", 0 );
+	Cvar_SetDescription( in_nograb, "Do not capture mouse in game, may be useful during online streaming" );
+
+	r_allowSoftwareGL = Cvar_Get( "r_allowSoftwareGL", "0", CVAR_LATCH );
+	Cvar_SetDescription( r_allowSoftwareGL, "Toggle the use of the default software OpenGL driver supplied by the Operating System" );
+
+	r_swapInterval = Cvar_Get( "r_swapInterval", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	Cvar_SetDescription( r_swapInterval, "V-blanks to wait before swapping buffers\n 0: No V-Sync\n 1: Synced to the monitor's refresh rate" );
+	r_stereoEnabled = Cvar_Get( "r_stereoEnabled", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	Cvar_SetDescription( r_stereoEnabled, "Enable stereo rendering for techniques like shutter glasses" );
+
+	// Create the window and set up the context
+	err = GLimp_StartDriverAndSetMode( r_mode->integer, r_modeFullscreen->string, r_fullscreen->integer, qfalse );
+	if ( err != RSERR_OK )
+	{
+		if ( err == RSERR_FATAL_ERROR )
+		{
+			Com_Error( ERR_VID_FATAL, "GLimp_Init() - could not load OpenGL subsystem" );
+			return;
+		}
+
+		if ( r_mode->integer != 3 || ( r_fullscreen->integer && atoi( r_modeFullscreen->string ) != 3 ) )
+		{
+			Com_Printf( "Setting \\r_mode %d failed, falling back on \\r_mode %d\n", r_mode->integer, 3 );
+			if ( GLimp_StartDriverAndSetMode( 3, "", r_fullscreen->integer, qfalse ) != RSERR_OK )
+			{
+				// Nothing worked, give up
+				Com_Error( ERR_VID_FATAL, "GLimp_Init() - could not load OpenGL subsystem" );
+				return;
+			}
+		}
+	}
+
+	// These values force the UI to disable driver selection
+	config->driverType = GLDRV_ICD;
+	config->hardwareType = GLHW_GENERIC;
+
+	if ( Sys_IsSteamOverlayAttached() ) {
+		Com_Printf( S_COLOR_CYAN "Steam Overlay Detected\n" );
+	}
+	else {
+		Com_Printf( S_COLOR_WHITE "Steam Overlay Not Detected\n" );
+	}
+
+	// This depends on SDL_INIT_VIDEO, hence having it here
+	IN_Init();
+
+	HandleEvents();
+
+	Key_ClearStates();
+}
+
+
+/*
+===============
+GLimp_EndFrame
+
+Responsible for doing a swapbuffers
+===============
+*/
+void GLimp_EndFrame( void )
+{
+	// don't flip if drawing to front buffer
+	if ( Q_stricmp( cl_drawBuffer->string, "GL_FRONT" ) != 0 )
+	{
+		SDL_GL_SwapWindow( SDL_window );
+	}
+}
+
+
+/*
+===============
+GL_GetProcAddress
+
+Used by opengl renderers to resolve all qgl* function pointers
+===============
+*/
+void *GL_GetProcAddress( const char *symbol )
+{
+	return (void *)SDL_GL_GetProcAddress( symbol );
+}
+
+
+#ifdef USE_VULKAN_API
+/*
+===============
+VKimp_Init
+
+This routine is responsible for initializing the OS specific portions
+of Vulkan
+===============
+*/
+void VKimp_Init( glconfig_t *config )
+{
+	rserr_t err;
+
+#ifndef _WIN32
+	InitSig();
+#endif
+
+	Com_DPrintf( "VKimp_Init()\n" );
+
+	in_nograb = Cvar_Get( "in_nograb", "0", 0 );
+	Cvar_SetDescription( in_nograb, "Do not capture mouse in game, may be useful during online streaming" );
+
+	r_swapInterval = Cvar_Get( "r_swapInterval", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_stereoEnabled = Cvar_Get( "r_stereoEnabled", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	Cvar_SetDescription( r_stereoEnabled, "Enable stereo rendering for techniques like shutter glasses" );
+
+	// feedback to renderer configuration
+	glw_state.config = config;
+
+	// Create the window and set up the context
+	err = GLimp_StartDriverAndSetMode( r_mode->integer, r_modeFullscreen->string, r_fullscreen->integer, qtrue /* Vulkan */ );
+	if ( err != RSERR_OK )
+	{
+		if ( err == RSERR_FATAL_ERROR )
+		{
+			Com_Error( ERR_VID_FATAL, "VKimp_Init() - could not load Vulkan subsystem" );
+			return;
+		}
+
+		Com_Printf( "Setting r_mode %d failed, falling back on r_mode %d\n", r_mode->integer, 3 );
+
+		err = GLimp_StartDriverAndSetMode( 3, "", r_fullscreen->integer, qtrue /* Vulkan */ );
+		if( err != RSERR_OK )
+		{
+			// Nothing worked, give up
+			Com_Error( ERR_VID_FATAL, "VKimp_Init() - could not load Vulkan subsystem" );
+			return;
+		}
+	}
+
+	qvkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)SDL_Vulkan_GetVkGetInstanceProcAddr();
+
+	if ( qvkGetInstanceProcAddr == NULL )
+	{
+		SDL_QuitSubSystem( SDL_INIT_VIDEO );
+		Com_Error( ERR_VID_FATAL, "VKimp_Init: qvkGetInstanceProcAddr is NULL" );
+	}
+
+	// These values force the UI to disable driver selection
+	config->driverType = GLDRV_ICD;
+	config->hardwareType = GLHW_GENERIC;
+
+	if ( Sys_IsSteamOverlayAttached() ) {
+		Com_Printf( S_COLOR_CYAN "Steam Overlay Detected\n" );
+	}
+	else {
+		Com_Printf( S_COLOR_WHITE "Steam Overlay Not Detected\n" );
+	}
+
+	// This depends on SDL_INIT_VIDEO, hence having it here
+	IN_Init();
+
+	HandleEvents();
+
+	Key_ClearStates();
+}
+
+
+/*
+===============
+VK_GetInstanceProcAddr
+===============
+*/
+void *VK_GetInstanceProcAddr( VkInstance instance, const char *name )
+{
+	return qvkGetInstanceProcAddr( instance, name );
+}
+
+
+/*
+===============
+VK_CreateSurface
+===============
+*/
+qboolean VK_CreateSurface( VkInstance instance, VkSurfaceKHR *surface )
+{
+	if ( SDL_Vulkan_CreateSurface( SDL_window, instance, NULL, surface ) )
+		return qtrue;
+	else
+		return qfalse;
+}
+
+
+/*
+===============
+VKimp_Shutdown
+===============
+*/
+void VKimp_Shutdown( qboolean unloadDLL )
+{
+	const char* drv = SDL_GetCurrentVideoDriver();
+
+	IN_Shutdown();
+
+	if ( glw_state.isFullscreen ) {
+		if ( drv && strcmp( drv, "x11" ) == 0 ) {
+			SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+		} else {
+			GLW_ShowCursor( qtrue );
+		}
+	}
+
+	if ( SDL_window ) {
+		SDL_DestroyWindow( SDL_window );
+		SDL_window = NULL;
+	}
+
+	if ( unloadDLL )
+		SDL_QuitSubSystem( SDL_INIT_VIDEO );
+}
+#endif // USE_VULKAN_API
+
+
+/*
+================
+GLW_HideFullscreenWindow
+================
+*/
+void GLW_HideFullscreenWindow( void ) {
+	if ( SDL_window && glw_state.isFullscreen ) {
+		SDL_HideWindow( SDL_window );
+	}
+}
+
+
+/*
+===============
+Sys_GetClipboardData
+===============
+*/
+char *Sys_GetClipboardText( void )
+{
+#ifdef DEDICATED
+	return NULL;
+#else
+	return SDL_GetClipboardText();
+#endif
+}
+
+void Sys_FreeClipboardText( char *data ) {
+	SDL_free( data );
+}
+
+
+void Sys_SetClipboardText( const char *text )
+{
+#ifndef DEDICATED
+	SDL_SetClipboardText( text );
+#endif
+}
+
+
+/*
+===============
+Sys_SetClipboardBitmap
+
+todo use SDL_SetClipboardData
+===============
+*/
+void Sys_SetClipboardBitmap( const byte *bitmap, int length )
+{
+#ifdef _WIN32
+	HGLOBAL hMem;
+	byte *ptr;
+
+	if ( !OpenClipboard( NULL ) )
+		return;
+
+	EmptyClipboard();
+	hMem = GlobalAlloc( GMEM_MOVEABLE | GMEM_DDESHARE, length );
+	if ( hMem != NULL ) {
+		ptr = ( byte* )GlobalLock( hMem );
+		if ( ptr != NULL ) {
+			memcpy( ptr, bitmap, length ); 
+		}
+		GlobalUnlock( hMem );
+		SetClipboardData( CF_DIB, hMem );
+	}
+	CloseClipboard();
+#endif
+}
+
+int GLimp_NormalFontBase( void ) {
+    return 0;
+}

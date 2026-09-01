@@ -130,7 +130,7 @@ void GL_TextureMode( const char *string ) {
 	const textureMode_t *mode;
 	image_t	*img;
 	int		i;
-	
+
 	mode = NULL;
 	for ( i = 0 ; i < ARRAY_LEN( modes ) ; i++ ) {
 		if ( !Q_stricmp( modes[i].name, string ) ) {
@@ -148,8 +148,16 @@ void GL_TextureMode( const char *string ) {
 	gl_filter_max = mode->maximize;
 
 #ifdef USE_VULKAN
+	if ( gl_filter_min == vk.samplers.filter_min && gl_filter_max == vk.samplers.filter_max ) {
+		return;
+	}
 	vk_wait_idle();
-	for ( i = 0 ; i < tr.numImages ; i++ ) {
+	vk_destroy_samplers();
+
+	vk.samplers.filter_min = gl_filter_min;
+	vk.samplers.filter_max = gl_filter_max;
+	vk_update_attachment_descriptors();
+	for ( i = 0; i < tr.numImages; i++ ) {
 		img = tr.images[i];
 		if ( img->flags & IMGFLAG_MIPMAP ) {
 			vk_update_descriptor_set( img, qtrue );
@@ -653,8 +661,8 @@ typedef struct {
 
 static void generate_image_upload_data( image_t *image, byte *data, Image_Upload_Data *upload_data ) {
 	
-	qboolean mipmap = image->flags & IMGFLAG_MIPMAP;
-	qboolean picmip = image->flags & IMGFLAG_PICMIP;
+	qboolean mipmap = (image->flags & IMGFLAG_MIPMAP) ? qtrue : qfalse;
+	qboolean picmip = (image->flags & IMGFLAG_PICMIP) ? qtrue : qfalse;
 	byte* resampled_buffer = NULL;
 	int scaled_width, scaled_height;
 	int width = image->width;
@@ -788,7 +796,7 @@ static void generate_image_upload_data( image_t *image, byte *data, Image_Upload
 	upload_data->buffer_size = mip_level_size;
 	
 	if ( mipmap ) {
-		while (scaled_width > 1 || scaled_height > 1) {
+		while (scaled_width > 1 && scaled_height > 1) {
 			R_MipMap((byte *)scaled_buffer, (byte *)scaled_buffer, scaled_width, scaled_height);
 
 			scaled_width >>= 1;
@@ -836,15 +844,11 @@ static void upload_vk_image( image_t *image, byte *pic ) {
 		image->internalFormat = has_alpha ? VK_FORMAT_B4G4R4A4_UNORM_PACK16 : VK_FORMAT_A1R5G5B5_UNORM_PACK16;
 	}
 
-	image->handle = VK_NULL_HANDLE;
-	image->view = VK_NULL_HANDLE;
-	image->descriptor = VK_NULL_HANDLE;
-
 	image->uploadWidth = w;
 	image->uploadHeight = h;
 
 	vk_create_image( image, w, h, upload_data.mip_levels );
-	vk_upload_image_data( image, 0, 0, w, h, upload_data.mip_levels, upload_data.buffer, upload_data.buffer_size );
+	vk_upload_image_data( image, 0, 0, w, h, upload_data.mip_levels, upload_data.buffer, upload_data.buffer_size, qfalse );
 
 	ri.Hunk_FreeTempMemory( upload_data.buffer );
 }
@@ -981,7 +985,7 @@ static void Upload32( byte *data, int x, int y, int width, int height, image_t *
 		byte *p = data;
 		int i, n = width * height;
 		for ( i = 0; i < n; i++, p+=4 ) {
-			R_ColorShiftLightingBytes( p, p );
+			R_ColorShiftLightingBytes( p, p, qfalse );
 		}
 	}
 
@@ -1166,6 +1170,10 @@ image_t *R_CreateImage( const char *name, const char *name2, byte *pic, int widt
 	else
 		image->wrapClampMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
+	image->handle = VK_NULL_HANDLE;
+	image->view = VK_NULL_HANDLE;
+	image->descriptor = VK_NULL_HANDLE;
+
 	upload_vk_image( image, pic );
 #else
 	if ( flags & IMGFLAG_RGB )
@@ -1243,7 +1251,6 @@ typedef struct
 // when there are multiple images of different formats available
 static const imageExtToLoaderMap_t imageLoaders[] =
 {
-	{ "svg",  R_LoadSVG },
 	{ "png",  R_LoadPNG },
 	{ "tga",  R_LoadTGA },
 	{ "jpg",  R_LoadJPG },
@@ -1273,22 +1280,6 @@ static const char *R_LoadImage( const char *name, byte **pic, int *width, int *h
 	*pic = NULL;
 	*width = 0;
 	*height = 0;
-
-	// Always try SVG first before specified
-	{
-		COM_StripExtension( name, localName, sizeof( localName ) );
-
-		altName = va( "%s.svg", localName );
-
-		// Load
-		R_LoadSVG( altName, pic, width, height );
-
-		if ( *pic )
-		{
-			Q_strncpyz( localName, altName, sizeof( localName ) );
-			return localName;
-		}
-	}
 
 	Q_strncpyz( localName, name, sizeof( localName ) );
 
@@ -1734,7 +1725,7 @@ void R_SetColorMappings( void ) {
 	qboolean applyGamma;
 
 	if ( !tr.inited ) {
-		// it may be called from window handling functions where gamma flags is now yet known/set
+		// it may be called from window handling functions where gamma flags is not yet known/set
 		return;
 	}
 
@@ -1863,22 +1854,24 @@ R_DeleteTextures
 ===============
 */
 void R_DeleteTextures( void ) {
-
-	image_t *img;
 	int i;
+
+	if ( tr.numImages == 0 ) {
+		return;
+	}
 
 #ifdef USE_VULKAN
 	vk_wait_idle();
 
 	for ( i = 0; i < tr.numImages; i++ ) {
-		img = tr.images[ i ];
+		image_t *img = tr.images[ i ];
 		vk_destroy_image_resources( &img->handle, &img->view );
 
 		// img->descriptor will be released with pool reset
 	}
 #else
 	for ( i = 0; i < tr.numImages; i++ ) {
-		img = tr.images[ i ];
+		image_t *img = tr.images[ i ];
 		qglDeleteTextures( 1, &img->texnum );
 	}
 
@@ -2090,7 +2083,7 @@ qhandle_t RE_GetShaderFromModel( qhandle_t modelid, int surfnum, int withlightma
 				hash = generateHashValue( surf->shader->name );
 				for ( image = hashTable[hash]; image; image = image->next ) {
 					if ( !Q_stricmp( surf->shader->name, image->imgName ) ) {
-						mip = (image->flags & IMGFLAG_MIPMAP);
+						mip = (image->flags & IMGFLAG_MIPMAP) ? qtrue : qfalse;
 						break;
 					}
 				}

@@ -48,7 +48,10 @@ If you have questions concerning this license or the applicable additional terms
 
 #define STEAMPATH_NAME			"Wolfenstein Enemy Territory"
 #define STEAMPATH_APPID			"1873030"
+#define GOGPATH_ID				"1126166849"
+#define WINSTOREPATH_NAME		STEAMPATH_NAME
 
+// 2.60e: ETe ( ET + Quake3e )
 // 2.60d: Mac OSX universal binaries
 // 2.60c: Mac OSX universal binaries
 // 2.60b: CVE-2006-2082 fix
@@ -109,6 +112,9 @@ If you have questions concerning this license or the applicable additional terms
 //#pragma intrinsic( memset, memcpy )
 #endif
 
+// relative path to a source file (src/foo/bar.c)
+#define RELATIVE_FILENAME ((__FILE__) + (SOURCE_PATH_SIZE))
+
 // This warning is broken on GCC 11, which may be used on GHA still
 #if !defined(__clang__) && (__GNUC__ == 11)
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
@@ -122,9 +128,9 @@ If you have questions concerning this license or the applicable additional terms
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-#define UNUSED_VAR __attribute__((unused))
+#define Q_UNUSED_VAR __attribute__((unused))
 #else
-#define UNUSED_VAR
+#define Q_UNUSED_VAR
 #endif
 
 #if (defined _MSC_VER)
@@ -140,22 +146,36 @@ If you have questions concerning this license or the applicable additional terms
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-#define NORETURN __attribute__((noreturn))
-#define NORETURN_PTR __attribute__((noreturn))
+#define Q_NO_RETURN __attribute__((noreturn))
+#define Q_NO_RETURN_PTR __attribute__((noreturn))
 #elif defined(_MSC_VER)
-#define NORETURN __declspec(noreturn)
+#define Q_NO_RETURN __declspec(noreturn)
 // __declspec doesn't work on function pointers
-#define NORETURN_PTR /* nothing */
+#define Q_NO_RETURN_PTR /* nothing */
 #else
-#define NORETURN /* nothing */
-#define NORETURN_PTR /* nothing */
+#define Q_NO_RETURN /* nothing */
+#define Q_NO_RETURN_PTR /* nothing */
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-#define FORMAT_PRINTF(x, y) __attribute__((format (printf, x, y)))
+#ifdef __MINGW32__
+#define Q_PRINTF_FUNC(x, y) __attribute__((format (ms_printf, x, y))) __attribute__((format (gnu_printf, x, y)))
 #else
-#define FORMAT_PRINTF(x, y) /* nothing */
+#define Q_PRINTF_FUNC(x, y) __attribute__((format (printf, x, y)))
 #endif
+#else
+#define Q_PRINTF_FUNC(x, y) /* nothing */
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define Q_ALIGN(x) __attribute__((aligned(x)))
+#elif defined(_MSC_VER)
+#define Q_ALIGN(x) /* __declspec(align(x)) */
+#else
+#define Q_ALIGN(x)
+#endif
+
+#define Q_ALIGNAS(x) _Alignas(x)
 
 /**********************************************************************
   VM Considerations
@@ -180,6 +200,7 @@ If you have questions concerning this license or the applicable additional terms
 #include <string.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdalign.h>
 #include <time.h>
 #include <ctype.h>
 #include <limits.h>
@@ -219,20 +240,48 @@ float FloatSwap( const float *f );
 	#include <stdint.h>
 #endif
 
-#ifdef _WIN32
+#ifndef INTPTR_C
+#if INTPTR_MAX == INT64_MAX
+#define INTPTR_C(c) INT64_C(c)
+#elif INTPTR_MAX == INT32_MAX
+#define INTPTR_C(c) INT32_C(c)
+#endif
+#endif
+
+#ifndef UINTPTR_C
+#if UINTPTR_MAX == UINT64_MAX
+#define UINTPTR_C(c) UINT64_C(c)
+#elif UINTPTR_MAX == UINT32_MAX
+#define UINTPTR_C(c) UINT32_C(c)
+#endif
+#endif
+
+#if defined (_MSC_VER) && _MSC_VER < 1900
 	// vsnprintf is ISO/IEC 9899:1999
 	// abstracting this to make it portable
-	int Q_vsnprintf( char *str, size_t size, const char *format, va_list ap );
-#else
+	int Q_vsnprintf( char *str, size_t size, const char *format, va_list args );
+#else // not using MSVC old msvc
 	#define Q_vsnprintf vsnprintf
 #endif
 
 int64_t Long64Swap(int64_t ll); // needs int64_t from above
 
-#if defined (_WIN32) && !defined(_MSC_VER)
+#if defined (_WIN32)
+#if !defined(_MSC_VER)
+// use GCC/Clang functions
 #define Q_setjmp __builtin_setjmp
 #define Q_longjmp __builtin_longjmp
-#else
+#elif idx64 && (_MSC_VER >= 1910)
+// use custom setjmp()/longjmp() implementations
+#define Q_setjmp Q_setjmp_c
+#define Q_longjmp Q_longjmp_c
+int Q_setjmp_c(void *);
+int Q_longjmp_c(void *, int);
+#else // !idx64 || MSVC<2017
+#define Q_setjmp setjmp
+#define Q_longjmp longjmp
+#endif
+#else // !_WIN32
 #define Q_setjmp setjmp
 #define Q_longjmp longjmp
 #endif
@@ -250,12 +299,10 @@ typedef union floatint_u
 }
 floatint_t;
 
-#if defined(USE_VULKAN)
 typedef union {
 	byte rgba[4];
 	uint32_t u32;
 } color4ub_t;
-#endif
 
 typedef int		qhandle_t;
 typedef int		sfxHandle_t;
@@ -266,14 +313,6 @@ typedef int		clipHandle_t;
 #define PADLEN(base, alignment)	(PAD((base), (alignment)) - (base))
 
 #define PADP(base, alignment)	((void *) PAD((intptr_t) (base), (alignment)))
-
-#if defined(__GNUC__) || defined(__clang__)
-#define QALIGN(x) __attribute__((aligned(x)))
-#elif defined(_MSC_VER)
-#define QALIGN(x) /* __declspec(align(x)) */
-#else
-#define QALIGN(x)
-#endif
 
 //#define	SND_NORMAL			0x000	// (default) Allow sound to be cut off only by the same sound on this channel
 #define     SND_OKTOCUT         0x001   // Allow sound to be cut off by any following sounds on this channel
@@ -452,18 +491,10 @@ typedef enum {
 } ha_pref;
 
 #ifdef HUNK_DEBUG
-#define Hunk_Alloc( size, preference )              Hunk_AllocDebug( size, preference, # size, __FILE__, __LINE__ )
-void *Hunk_AllocDebug( int size, ha_pref preference, char *label, char *file, int line );
+#define Hunk_Alloc( size, preference )              Hunk_AllocDebug( size, preference, #size, RELATIVE_FILENAME, __LINE__ )
+void *Hunk_AllocDebug( size_t size, ha_pref preference, const char *label, const char *file, int line );
 #else
-void *Hunk_Alloc( int size, ha_pref preference );
-#endif
-
-#if defined(__GNUC__) && !defined(__MINGW32__) && !defined(__APPLE__)
-// https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=371
-// custom Snd_Memset implementation for glibc memset bug workaround
-void Snd_Memset (void* dest, const int val, const size_t count);
-#else
-#define Snd_Memset Com_Memset
+void *Hunk_Alloc( size_t size, ha_pref preference );
 #endif
 
 #define Com_Memset memset
@@ -506,14 +537,14 @@ typedef	int	fixed16_t;
 #endif
 
 #ifndef M_LN2
-#define M_LN2      0.693147180559945309417
+#define M_LN2      0.693147180559945309417f
 #endif
 
 #ifdef __linux__
 #ifdef __GLIBC__
 #if idx64
 // force version for better runtime compatibility
-__asm__(".symver logf,logf@GLIBC_2.2.5");
+//__asm__(".symver logf,logf@GLIBC_2.2.5");
 //__asm__(".symver powf,powf@GLIBC_2.2.5");
 __asm__(".symver expf,expf@GLIBC_2.2.5");
 __asm__(".symver memcpy,memcpy@GLIBC_2.2.5");
@@ -625,6 +656,10 @@ extern vec4_t clrBrownLineFull;
 #define S_COLOR_MDCYAN      "^B"
 #define S_COLOR_MDPURPLE    "^C"
 #define S_COLOR_NULL        "^*"
+
+#define S_COLOR_DEVEL	S_COLOR_CYAN
+#define S_COLOR_WARNING	S_COLOR_YELLOW
+#define S_COLOR_ERROR	S_COLOR_RED
 
 extern const vec4_t g_color_table[32];
 extern int ColorIndexFromChar( char ccode );
@@ -858,6 +893,15 @@ void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up 
 void PerpendicularVector( vec3_t dst, const vec3_t src );
 int Q_isnan( float x );
 float Q_atof( const char *str );
+#ifdef USE_QISFINITE
+int Q_isfinite( float f );
+#endif
+
+#ifdef USE_QISFINITE
+#define Q_CheckFinite Q_isfinite
+#else
+#define Q_CheckFinite isfinite
+#endif
 
 #ifndef MAX
 #define MAX(x,y) ((x)>(y)?(x):(y))
@@ -865,6 +909,10 @@ float Q_atof( const char *str );
 
 #ifndef MIN
 #define MIN(x,y) ((x)<(y)?(x):(y))
+#endif
+
+#ifndef CLAMP
+#define CLAMP(x,y,z) MIN(MAX((x),(y)),(z))
 #endif
 
 // Ridah
@@ -896,17 +944,17 @@ void    COM_BeginParseSession( const char *name );
 void    COM_RestoreParseSession( const char **data_p );
 //void    COM_SetCurrentParseLine( int line );
 int     COM_GetCurrentParseLine( void );
-char	*COM_Parse( const char **data_p );
-char	*COM_ParseExt( const char **data_p, qboolean allowLineBreak );
+const char	*COM_Parse( const char **data_p );
+const char	*COM_ParseExt( const char **data_p, qboolean allowLineBreak );
 int     COM_Compress( char *data_p );
-void    COM_ParseError( const char *format, ... ) FORMAT_PRINTF(1, 2);
-void    COM_ParseWarning( const char *format, ... ) FORMAT_PRINTF(1, 2);
+void    COM_ParseError( const char *format, ... ) Q_PRINTF_FUNC(1, 2);
+void    COM_ParseWarning( const char *format, ... ) Q_PRINTF_FUNC(1, 2);
 int Com_ParseInfos( const char *buf, int max, char infos[][MAX_INFO_STRING] );
 
 char	*COM_ParseComplex( const char **data_p, qboolean allowLineBreak );
 
 typedef enum {
-	TK_GENEGIC = 0, // for single-char tokens
+	TK_GENERIC = 0, // for single-char tokens
 	TK_STRING,
 	TK_QUOTED,
 	TK_EQ,
@@ -961,14 +1009,14 @@ void Parse1DMatrix( const char **buf_p, int x, float *m);
 void Parse2DMatrix( const char **buf_p, int y, int x, float *m);
 void Parse3DMatrix( const char **buf_p, int z, int y, int x, float *m);
 
-int  QDECL Com_sprintf( char *dest, int size, const char *fmt, ... ) FORMAT_PRINTF( 3, 4 );
+int  QDECL Com_sprintf( char *dest, int size, const char *fmt, ... ) Q_PRINTF_FUNC( 3, 4 );
 
-char *Com_SkipTokens( char *s, int numTokens, char *sep );
-char *Com_SkipCharset( char *s, char *sep );
+const char *Com_SkipTokens( const char *s, int numTokens, const char *sep );
+const char *Com_SkipCharset( const char *s, const char *sep );
 
 void Com_RandomBytes( byte *string, int len );
 
-void Com_SortFileList( char **list, int nfiles, int fastSort );
+void Com_SortList( char** list, int n );
 
 // mode parm for FS_FOpenFile
 typedef enum {
@@ -1042,7 +1090,7 @@ typedef intptr_t (QDECL *vmMain_t)( int command, intptr_t arg0, intptr_t arg1, i
 typedef intptr_t (QDECL *dllSyscall_t)( intptr_t callNum, ... );
 typedef void (QDECL *dllEntry_t)( dllSyscall_t syscallptr );
 
-const char *QDECL va( const char *format, ... ) FORMAT_PRINTF(1, 2);
+const char *QDECL va( const char *format, ... ) Q_PRINTF_FUNC(1, 2);
 float   *tv( float x, float y, float z );
 
 #define TRUNCATE_LENGTH	64
@@ -1053,7 +1101,7 @@ void Com_TruncateLongString( char *buffer, const char *s );
 //
 // key / value info strings
 //
-char *Info_ValueForKey( const char *s, const char *key );
+const char *Info_ValueForKey( const char *s, const char *key );
 void Info_Tokenize( const char *s );
 const char *Info_ValueForKeyToken( const char *key );
 #define Info_SetValueForKey( buf, key, value ) Info_SetValueForKey_s( (buf), MAX_INFO_STRING, (key), (value) )
@@ -1064,8 +1112,8 @@ const char *Info_NextPair( const char *s, char *key, char *value );
 int Info_RemoveKey( char *s, const char *key );
 
 // this is only here so the functions in q_shared.c and bg_*.c can link
-void	NORETURN QDECL Com_Error( errorParm_t level, const char *fmt, ... ) FORMAT_PRINTF(2, 3);
-void	QDECL Com_Printf( const char *msg, ... ) FORMAT_PRINTF(1, 2);
+void	Q_NO_RETURN QDECL Com_Error( errorParm_t level, const char *fmt, ... ) Q_PRINTF_FUNC(2, 3);
+void	QDECL Com_Printf( const char *msg, ... ) Q_PRINTF_FUNC(1, 2);
 
 /*
 ==========================================================
@@ -1232,7 +1280,7 @@ COLLISION DETECTION
 ==============================================================
 */
 
-#include "../game/surfaceflags.h"            // shared with the q3map utility
+#include "surfaceflags.h"            // shared with the q3map utility
 
 // plane types are used to speed some tests
 // 0-2 are axial planes
@@ -1282,7 +1330,7 @@ typedef struct {
 // or ENTITYNUM_NONE, ENTITYNUM_WORLD
 
 
-// markfragments are returned by CM_MarkFragments()
+// markfragments are returned by R_MarkFragments()
 typedef struct {
 	int firstPoint;
 	int numPoints;
@@ -1310,7 +1358,7 @@ typedef struct {
 // channel 0 never willingly overrides
 // other channels will allways override a playing sound on that channel
 typedef enum {
-	CHAN_AUTO,
+	CHAN_AUTO=0,
 	CHAN_LOCAL,     // menu sounds, etc
 	CHAN_WEAPON,
 	CHAN_VOICE,
@@ -1628,7 +1676,7 @@ typedef struct playerState_s {
 
 // Arnout: doubleTap buttons - DT_NUM can be max 8
 typedef enum {
-	DT_NONE,
+	DT_NONE=0,
 	DT_MOVELEFT,
 	DT_MOVERIGHT,
 	DT_FORWARD,
@@ -1662,7 +1710,7 @@ typedef struct usercmd_s {
 #define SOLID_BMODEL    0xffffff
 
 typedef enum {
-	TR_STATIONARY,
+	TR_STATIONARY=0,
 	TR_INTERPOLATE,             // non-parametric, but interpolate between snapshots
 	TR_LINEAR,
 	TR_LINEAR_STOP,
@@ -1700,7 +1748,7 @@ typedef struct {
 // NOTE: all fields in here must be 32 bits (or those within sub-structures)
 
 typedef enum {
-	ET_GENERAL,
+	ET_GENERAL=0,
 	ET_PLAYER,
 	ET_ITEM,
 	ET_MISSILE,
@@ -1852,7 +1900,7 @@ typedef struct entityState_s {
 } entityState_t;
 
 typedef enum {
-	CA_UNINITIALIZED,
+	CA_UNINITIALIZED=0,
 	CA_DISCONNECTED,    // not talking to a server
 	CA_AUTHORIZING,     // not used any more, was checking cd key
 	CA_CONNECTING,      // sending request packets to the server
@@ -1920,7 +1968,7 @@ typedef struct qtime_s {
 
 // cinematic states
 typedef enum {
-	FMV_IDLE,
+	FMV_IDLE=0,
 	FMV_PLAY,       // play
 	FMV_EOF,        // all other conditions, i.e. stop/EOF/abort
 	FMV_ID_BLT,

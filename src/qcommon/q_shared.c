@@ -543,13 +543,13 @@ int COM_GetCurrentParseLine( void )
 }
 
 
-char *COM_Parse( const char **data_p )
+const char *COM_Parse( const char **data_p )
 {
 	return COM_ParseExt( data_p, qtrue );
 }
 
 
-void FORMAT_PRINTF(1, 2) COM_ParseError( const char *format, ... )
+void Q_PRINTF_FUNC(1, 2) COM_ParseError( const char *format, ... )
 {
 	va_list argptr;
 	static char string[4096];
@@ -562,7 +562,7 @@ void FORMAT_PRINTF(1, 2) COM_ParseError( const char *format, ... )
 }
 
 
-void FORMAT_PRINTF(1, 2) COM_ParseWarning( const char *format, ... )
+void Q_PRINTF_FUNC(1, 2) COM_ParseWarning( const char *format, ... )
 {
 	va_list argptr;
 	static char string[4096];
@@ -606,7 +606,8 @@ static const char *SkipWhitespace( const char *data, qboolean *hasNewLines ) {
 
 
 int COM_Compress( char *data_p ) {
-	char *in, *out;
+	const char *in;
+	char *out;
 	int c;
 	qboolean newline = qfalse, whitespace = qfalse;
 
@@ -672,7 +673,7 @@ int COM_Compress( char *data_p ) {
 }
 
 
-char *COM_ParseExt( const char **data_p, qboolean allowLineBreaks )
+const char *COM_ParseExt( const char **data_p, qboolean allowLineBreaks )
 {
 	int c = 0, len;
 	qboolean hasNewLines = qfalse;
@@ -859,7 +860,7 @@ char *COM_ParseComplex( const char **data_p, qboolean allowLineBreaks )
 	str = (byte*)*data_p;
 	len = 0; 
 	shift = 0; // token line shift relative to com_lines
-	com_tokentype = TK_GENEGIC;
+	com_tokentype = TK_GENERIC;
 	
 __reswitch:
 	switch ( *str )
@@ -1073,7 +1074,7 @@ Internal brace depths are properly skipped.
 =================
 */
 qboolean SkipBracedSection( const char **program, int depth ) {
-	char			*token;
+	const char			*token;
 
 	do {
 		token = COM_ParseExt( program, qtrue );
@@ -1118,14 +1119,14 @@ void SkipRestOfLine( const char **data ) {
 
 
 void Parse1DMatrix( const char **buf_p, int x, float *m ) {
-	char	*token;
+	const char	*token;
 	int		i;
 
 	COM_MatchToken( buf_p, "(" );
 
-	for (i = 0 ; i < x ; i++) {
-		token = COM_Parse(buf_p);
-		m[i] = Q_atof(token);
+	for (i = 0 ; i < x; i++) {
+		token = COM_Parse( buf_p );
+		m[i] = Q_atof( token );
 	}
 
 	COM_MatchToken( buf_p, ")" );
@@ -1459,7 +1460,7 @@ qboolean Q_isintegral( float f )
 }
 
 
-#ifdef _WIN32
+#if defined (_MSC_VER) && _MSC_VER < 1900
 /*
 =============
 Q_vsnprintf
@@ -1787,31 +1788,9 @@ char *Q_stradd( char *dst, const char *src )
 */
 const char *Q_stristr( const char *s, const char *find)
 {
-  char c, sc;
-  size_t len;
-
-  if ((c = *find++) != 0)
-  {
-    if (c >= 'a' && c <= 'z')
-    {
-      c -= ('a' - 'A');
-    }
-    len = strlen(find);
-    do
-    {
-      do
-      {
-        if ((sc = *s++) == 0)
-          return NULL;
-        if (sc >= 'a' && sc <= 'z')
-        {
-          sc -= ('a' - 'A');
-        }
-      } while (sc != c);
-    } while (Q_stricmpn(s, find, len) != 0);
-    s--;
-  }
-  return s;
+	size_t len = strlen(find);
+	for (; *s; s++) if (!Q_stricmpn(s, find, len)) return /*(char *)*/s;
+	return NULL;
 }
 
 
@@ -2000,7 +1979,7 @@ int Q_CountChar(const char *string, char tocount)
 }
 
 // ENSI NOTE use combination of Q3e and ioquake3 instead??
-int FORMAT_PRINTF( 3, 4 ) QDECL Com_sprintf( char *dest, int size, const char *fmt, ... ) {
+int Q_PRINTF_FUNC( 3, 4 ) QDECL Com_sprintf( char *dest, int size, const char *fmt, ... ) {
 	int ret;
 	va_list argptr;
 
@@ -2008,7 +1987,7 @@ int FORMAT_PRINTF( 3, 4 ) QDECL Com_sprintf( char *dest, int size, const char *f
 	ret = Q_vsnprintf( dest, size, fmt, argptr );
 	va_end( argptr );
 	if ( ret == -1 ) {
-		Com_Printf( "Com_sprintf: overflow of %i bytes buffer\n", size );
+		Com_Printf( "%s: overflow of %i bytes buffer\n", __func__, size );
 		return 0;
 	}
 	return ret;
@@ -2027,7 +2006,7 @@ Ridah, modified this into a circular list, to further prevent stepping on
 previous strings
 ============
 */
-const char * FORMAT_PRINTF(1, 2) QDECL va( const char *format, ... ) 
+const char * Q_PRINTF_FUNC(1, 2) QDECL va( const char *format, ... ) 
 {
 	char	*buf;
 	va_list		argptr;
@@ -2045,7 +2024,7 @@ const char * FORMAT_PRINTF(1, 2) QDECL va( const char *format, ... )
 
 	//if ( ( len = strlen( temp_buffer ) ) >= MAX_VA_STRING ) {
 	if ( ret == -1 ) {
-		Com_Printf( "va(): overflow of %i bytes buffer\n", MAX_VA_STRING );
+		Com_Printf( "%s: overflow of %i bytes buffer\n", __func__, MAX_VA_STRING );
 		//Com_Error( ERR_DROP, "Attempted to overrun string in call to va()\n" );
 	}
 
@@ -2133,7 +2112,7 @@ Searches the string for the given
 key and returns the associated value, or an empty string.
 ===============
 */
-char *Info_ValueForKey( const char *s, const char *key )
+const char *Info_ValueForKey( const char *s, const char *key )
 {
 	static	char value[2][BIG_INFO_VALUE];	// use two buffers so compares
 											// work without stomping on each other
@@ -2468,7 +2447,7 @@ qboolean Info_SetValueForKey_s( char *s, int slen, const char *key, const char *
 Com_CharIsOneOfCharset
 ==================
 */
-static qboolean Com_CharIsOneOfCharset( char c, char *set )
+static qboolean Com_CharIsOneOfCharset( char c, const char *set )
 {
 	int i, n = (int)(strlen(set));
 
@@ -2487,9 +2466,9 @@ static qboolean Com_CharIsOneOfCharset( char c, char *set )
 Com_SkipCharset
 ==================
 */
-char *Com_SkipCharset( char *s, char *sep )
+const char *Com_SkipCharset( const char *s, const char *sep )
 {
-	char	*p = s;
+	const char	*p = s;
 
 	while( p )
 	{
@@ -2508,10 +2487,10 @@ char *Com_SkipCharset( char *s, char *sep )
 Com_SkipTokens
 ==================
 */
-char *Com_SkipTokens( char *s, int numTokens, char *sep )
+const char *Com_SkipTokens( const char *s, int numTokens, const char *sep )
 {
 	int		sepCount = 0;
-	char	*p = s;
+	const char	*p = s;
 
 	while( sepCount < numTokens )
 	{

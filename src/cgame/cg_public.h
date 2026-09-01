@@ -26,7 +26,8 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 
-
+#ifndef __CG_PUBLIC_H__
+#define __CG_PUBLIC_H__
 
 #define CMD_BACKUP          64
 #define CMD_MASK            ( CMD_BACKUP - 1 )
@@ -277,7 +278,8 @@ typedef enum {
 	CG_PC_REMOVE_ALL_GLOBAL_DEFINES,
 	CG_GETCLIPBOARDDATA,
 	CG_CMDBACKUP_EXT,
-
+	CG_KEY_ISMODACTIVE,
+	CG_FLASHWINDOW,
 	CG_TRAP_GETVALUE = COM_TRAP_GETVALUE,
 #endif
 
@@ -350,3 +352,5 @@ typedef enum {
 } cgameExport_t;
 
 //----------------------------------------------
+
+#endif

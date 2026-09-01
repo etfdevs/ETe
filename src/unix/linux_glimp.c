@@ -120,6 +120,9 @@ static GLXContext ctx = NULL;
 static Atom wmDeleteEvent = None;
 static Atom motifWMHints = None;
 
+static qboolean window_flashing = qfalse;
+static uint64_t flash_cancel_ticks;
+
 static int window_width = 0;
 static int window_height = 0;
 static qboolean window_created;
@@ -931,6 +934,20 @@ void HandleEvents( void )
 		case FocusOut:
 			if ( event.type == FocusIn ) {
 				gw_active = qtrue;
+
+				if ( window_flashing && (
+					flash_cancel_time == 0 || flash_cancel_ticks) {
+
+				}
+				// FIXME: Only need to do this when there are flashing windows
+				for (i = 0; i < data->numwindows; ++i) {
+					if (data->windowlist[i] != NULL &&
+						data->windowlist[i]->flash_cancel_time &&
+						SDL_GetTicks() >= data->windowlist[i]->flash_cancel_time) {
+						X11_FlashWindow(_this, data->windowlist[i]->window, SDL_FLASH_CANCEL);
+					}
+				}
+
 				Com_DPrintf( "FocusIn\n" );
 			} else {
 				gw_active = qfalse;
@@ -1904,6 +1921,13 @@ void GLimp_Init( glconfig_t *config )
 		return;
 	}
 
+	if ( Sys_IsSteamOverlayAttached() ) {
+		Com_Printf( S_COLOR_CYAN "Steam Overlay Detected\n" );
+	}
+	else {
+		Com_Printf( S_COLOR_WHITE "Steam Overlay Not Detected\n" );
+	}
+
 	// These values force the UI to disable driver selection
 	config->driverType = GLDRV_ICD;
 	config->hardwareType = GLHW_GENERIC;
@@ -2049,6 +2073,43 @@ void VKimp_Init( glconfig_t *config )
 #endif // USE_VULKAN_API
 
 
+void GLimp_FlashWindow( int state ) {
+	XWMHints *hints;
+
+	if ( !dpy || !win )
+
+	hints = XGetWMHints(dpy, win);
+
+	if (!hints) {
+		return;
+	}
+
+	hints->flags &= ~XUrgencyHint;
+	window_flashing = qfalse;
+	flash_cancel_ticks = 0;
+
+	switch ( state )
+	{
+	case 1:
+		if (!gw_active) {
+			hints->flags |= XUrgencyHint;
+			window_flashing = qtrue;
+			// On Ubuntu 21.04 this causes a dialog to pop up, so leave it up for a full second so users can see it
+			flash_cancel_ticks = SDL_GetTicks() + 1000;
+		}
+		break;
+	case 2:
+		if (!gw_active) {
+			hints->flags |= XUrgencyHint;
+			window_flashing = qtrue;
+		}
+		break;
+	default:
+		break;
+	};
+}
+
+
 /*****************************************************************************/
 /* MOUSE                                                                     */
 /*****************************************************************************/
@@ -2147,7 +2208,7 @@ void IN_Frame( void )
 Sys_GetClipboardData
 =================
 */
-char *Sys_GetClipboardData( void )
+char *Sys_GetClipboardText( void )
 {
 	const Atom xtarget = XInternAtom( dpy, "UTF8_STRING", 0 );
 	unsigned long nitems, rem;
@@ -2181,6 +2242,11 @@ char *Sys_GetClipboardData( void )
 }
 
 
+void Sys_FreeClipboardText( char *data ) {
+	Z_Free( data );
+}
+
+
 /*
 =================
 Sys_SetClipboardBitmap
@@ -2190,6 +2256,37 @@ void Sys_SetClipboardBitmap( const byte *bitmap, int length )
 {
 	// TODO: implement
 }
+
+qboolean Sys_IsNumLockDown(void)
+{
+	XKeyboardState state;
+
+	if ( !dpy ) {
+		return qfalse;
+	}
+
+	XGetKeyboardControl( dpy, &state );
+	return ( state.led_mask & 0 ) ? qtrue : qfalse;
+}
+
+qboolean Sys_IsKeyModActive( int modnum ) {
+	XKeyboardState state;
+	if ( !dpy ) {
+		return qfalse;
+	}
+
+	XGetKeyboardControl( dpy, &state );
+	switch( modnum ) {
+	case K_KP_NUMLOCK: return ( state.led_mask & 0 ) ? qtrue : qfalse;
+	case K_CAPSLOCK: return ( state.led_mask & 1 ) ? qtrue : qfalse;
+	case K_SCROLLOCK: return ( state.led_mask & 2 ) ? qtrue : qfalse;
+	//case K_SHIFT: return ( GetKeyState( VK_SHIFT ) & 1 ) ? qtrue : qfalse;
+	//case K_ALT: return ( GetKeyState( VK_MENU ) & 1 ) ? qtrue : qfalse;
+	//case K_CTRL: return ( GetKeyState( VK_CONTROL ) & 1 ) ? qtrue : qfalse;
+	default: return qfalse;
+	}
+}
+
 
 
 #ifdef USE_JOYSTICK

@@ -750,11 +750,6 @@ void RE_RenderScene( const refdef_t *fd ) {
 
 	R_RenderView( &parms );
 
-#ifndef USE_VULKAN
-	if ( fd->rdflags & RDF_RENDEROMNIBOT )
-		RE_RenderOmnibot();
-#endif
-
 #ifdef USE_VULKAN
 	if ( tr.needScreenMap )
 	{

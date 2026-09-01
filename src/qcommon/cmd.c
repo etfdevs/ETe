@@ -978,7 +978,7 @@ void Cmd_CommandCompletion( void(*callback)(const char *s) ) {
 Cmd_CompleteArgument
 ============
 */
-qboolean Cmd_CompleteArgument( const char *command, char *args, int argNum ) {
+qboolean Cmd_CompleteArgument( const char *command, const char *args, int argNum ) {
 	const cmd_function_t *cmd;
 
 	for( cmd = cmd_functions; cmd; cmd = cmd->next ) {
@@ -1094,9 +1094,9 @@ static void Cmd_List_f( void )
 Cmd_CompleteCfgName
 ==================
 */
-static void Cmd_CompleteCfgName( char *args, int argNum ) {
-	if( argNum == 2 ) {
-		Field_CompleteFilename( "", "cfg", qfalse, FS_MATCH_ANY | FS_MATCH_STICK );
+static void Cmd_CompleteCfgName( const char *args, int argNum ) {
+	if ( argNum == 2 ) {
+		Field_CompleteFilename( "", "cfg", qfalse, FS_MATCH_ANY | FS_MATCH_STICK | FS_MATCH_SUBDIRS );
 	}
 }
 
@@ -1106,7 +1106,7 @@ static void Cmd_CompleteCfgName( char *args, int argNum ) {
 Cmd_CompleteWriteCfgName
 ==================
 */
-void Cmd_CompleteWriteCfgName( char *args, int argNum ) {
+void Cmd_CompleteWriteCfgName( const char *args, int argNum ) {
 	if( argNum == 2 ) {
 		Field_CompleteFilename( "", "cfg", qfalse, FS_MATCH_EXTERN | FS_MATCH_STICK );
 	}
@@ -1166,10 +1166,11 @@ void Cmd_SetModule( const char *cmd_name, module_t module ) {
 
 
 void Cmd_UnregisterModule( module_t module ) {
+	cmd_function_t *cmd;
 	if ( module <= MODULE_NONE || module >= MODULE_COUNT )
 		return;
 
-	cmd_function_t *cmd = cmd_functions;
+	cmd = cmd_functions;
 	while( cmd ) {
 		if ( cmd->init_module == module && cmd->modules == (1u << (uint32_t)module) ) {
 			cmd_function_t *next = cmd->next;

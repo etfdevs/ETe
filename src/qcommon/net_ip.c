@@ -26,6 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #ifdef _WIN32
 #	include <winsock2.h>
 #	include <ws2tcpip.h>
+#	include <iphlpapi.h>
 #	if WINVER < 0x501
 #		ifdef __MINGW32__
 			// wspiapi.h isn't available on MinGW, so if it's
@@ -252,7 +253,7 @@ static char *NET_ErrorString( void ) {
 		case WSAENETDOWN: return "WSAENETDOWN";
 		case WSAENETUNREACH: return "WSAENETUNREACH";
 		case WSAENETRESET: return "WSAENETRESET";
-		case WSAECONNABORTED: return "WSWSAECONNABORTEDAEINTR";
+		case WSAECONNABORTED: return "WSWSAECONNABORTED";
 		case WSAECONNRESET: return "WSAECONNRESET";
 		case WSAENOBUFS: return "WSAENOBUFS";
 		case WSAEISCONN: return "WSAEISCONN";
@@ -320,12 +321,11 @@ static void SockadrToNetadr( const sockaddr_t *s, netadr_t *a ) {
 		a->port = s->v4.sin_port;
 	}
 #ifdef USE_IPV6
-	else if ( s->ss.ss_family == AF_INET6 )
-	{
+	else if ( s->ss.ss_family == AF_INET6 ) {
 		a->type = NA_IP6;
 		memcpy( a->ipv._6, &s->v6.sin6_addr, sizeof( a->ipv._6 ) );
 		a->port = s->v6.sin6_port;
-		a->scope_id = s->v6.sin6_scope_id;
+		a->scope_id = (uint32_t)s->v6.sin6_scope_id;
 	}
 #endif
 }
@@ -593,7 +593,7 @@ const char *NET_AdrToString( const netadr_t *a )
 
 const char *NET_AdrToStringwPort( const netadr_t *a )
 {
-	static char s[NET_ADDRSTRMAXLEN];
+	static char s[NET_ADDRSTRMAXLEN + 8]; // including strlen("[]:65535")
 
 	if (a->type == NA_LOOPBACK)
 		strcpy( s, "loopback" );
@@ -1431,14 +1431,14 @@ static void NET_GetLocalAddress( void )
 	char	hostname[256];
 	struct ifaddrs *ifap, *search;
 
+	numIP = 0;
+
 	if ( gethostname( hostname, sizeof( hostname ) ) )
 		return;
 
 	Com_Printf( "Hostname: %s\n", hostname );
 
-	numIP = 0;
-
-	if ( getifaddrs( &ifap ) )
+	if ( getifaddrs( &ifap ) != 0 )
 		Com_Printf( "NET_GetLocalAddress: Unable to get list of network interfaces: %s\n", NET_ErrorString() );
 	else
 	{
@@ -1448,13 +1448,57 @@ static void NET_GetLocalAddress( void )
 			if ( ifap->ifa_flags & IFF_UP )
 				NET_AddLocalAddress( search->ifa_name, search->ifa_addr, search->ifa_netmask );
 		}
-	
+
 		freeifaddrs( ifap );
-		
+
 		Sys_ShowIP();
 	}
 }
 #else // _WIN32
+
+static void NET_FindNetMask4( const struct sockaddr *addr, struct sockaddr *netmask )
+{
+	MIB_IPADDRTABLE *addrTable;
+	const struct sockaddr_in *s;
+	DWORD dwResult, i;
+	HANDLE hHeap;
+	ULONG size;
+
+	size = 0;
+	dwResult = GetIpAddrTable( NULL, &size, 0 );
+	if ( dwResult != ERROR_INSUFFICIENT_BUFFER ) {
+		return;  // keep original netmask
+	}
+
+	hHeap = GetProcessHeap();
+	if ( hHeap == NULL ) {
+		return;
+	}
+	addrTable = (MIB_IPADDRTABLE*)HeapAlloc( hHeap, 0, size );
+	if ( addrTable == NULL ) {
+		return;
+	}
+
+	dwResult = GetIpAddrTable( addrTable, &size, 0 );
+	if ( dwResult != NO_ERROR ) {
+		HeapFree( hHeap, 0, addrTable );
+		return;
+	}
+
+	s = (const struct sockaddr_in *)addr;
+
+	for ( i = 0; i < addrTable->dwNumEntries; i++ ) {
+		if ( memcmp( &s->sin_addr, &addrTable->table[i].dwAddr, sizeof( IN_ADDR ) ) == 0 ) {
+			struct sockaddr_in *o = (struct sockaddr_in *)netmask;
+			memcpy( &o->sin_addr, &addrTable->table[i].dwMask, sizeof( IN_ADDR ) );
+			break;
+		}
+	}
+
+	HeapFree( hHeap, 0, addrTable );
+}
+
+
 static void NET_GetLocalAddress( void ) {
 	char	hostname[256];
 	struct addrinfo	hint;
@@ -1466,29 +1510,29 @@ static void NET_GetLocalAddress( void ) {
 		return;
 
 	Com_Printf( "Hostname: %s\n", hostname );
-	
+
 	memset(&hint, 0, sizeof(hint));
-	
+
 	hint.ai_family = AF_UNSPEC;
 	hint.ai_socktype = SOCK_DGRAM;
-	
-	if ( !getaddrinfo( hostname, NULL, &hint, &res ) )
+
+	if ( getaddrinfo( hostname, NULL, &hint, &res ) == 0 )
 	{
-		struct addrinfo *search;
+		const struct addrinfo *search;
 		struct sockaddr_in mask4;
 #ifdef USE_IPV6
 		struct sockaddr_in6 mask6;
 #endif
-	
+
 		/* On operating systems where it's more difficult to find out the configured interfaces, we'll just assume a
 		 * netmask with all bits set. */
-	
-		memset(&mask4, 0, sizeof(mask4));
+
+		memset(&mask4, 0x0, sizeof(mask4));
 		mask4.sin_family = AF_INET;
 		memset(&mask4.sin_addr.s_addr, 0xFF, sizeof(mask4.sin_addr.s_addr));
 
 #ifdef USE_IPV6
-		memset(&mask6, 0, sizeof(mask6));
+		memset(&mask6, 0x0, sizeof(mask6));
 		mask6.sin6_family = AF_INET6;
 		memset(&mask6.sin6_addr, 0xFF, sizeof(mask6.sin6_addr));
 #endif
@@ -1496,17 +1540,23 @@ static void NET_GetLocalAddress( void ) {
 		// add all IPs from returned list.
 		for ( search = res; search; search = search->ai_next )
 		{
-			if ( search->ai_family == AF_INET )
-				NET_AddLocalAddress( "", search->ai_addr, (struct sockaddr *) &mask4 );
+			if ( search->ai_family == AF_INET ) {
+				NET_FindNetMask4( search->ai_addr, (struct sockaddr*)&mask4 );
+				NET_AddLocalAddress( "", search->ai_addr, (struct sockaddr*)&mask4 );
+				continue;
+			}
 #ifdef USE_IPV6
-			else if ( search->ai_family == AF_INET6 )
-				NET_AddLocalAddress( "", search->ai_addr, (struct sockaddr *) &mask6 );
+			if ( search->ai_family == AF_INET6 ) {
+				// TODO: NET_FindNetMask6()
+				NET_AddLocalAddress( "", search->ai_addr, (struct sockaddr*)&mask6 );
+				continue;
+			}
 #endif
 		}
-	
+
 		Sys_ShowIP();
 	}
-	
+
 	if ( res )
 		freeaddrinfo( res );
 }
@@ -1698,6 +1748,8 @@ static void NET_Config( qboolean enableNetworking ) {
 	qboolean	modified;
 	qboolean	stop;
 	qboolean	start;
+
+	NET_FlushPacketQueue( -99999 );
 
 	// get any latched changes to cvars
 	modified = NET_GetCvars();

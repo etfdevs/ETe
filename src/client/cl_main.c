@@ -105,7 +105,7 @@ cvar_t	*r_noborder;
 
 cvar_t *r_allowSoftwareGL;	// don't abort out if the pixelformat claims software
 cvar_t *r_swapInterval;
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 cvar_t *r_glDriver;
 #ifdef _WIN32
 cvar_t *r_allowScreenSaver;
@@ -129,7 +129,7 @@ cvar_t *cl_stencilbits;
 cvar_t *cl_depthbits;
 cvar_t *cl_drawBuffer;
 
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 // this is shared with the OS sys files
 cvar_t *in_forceCharset;
 #endif
@@ -193,10 +193,6 @@ static void CL_InitGLimp_Cvars( void );
 
 static void CL_NextDemo( void );
 
-// fretn
-//void CL_WriteWaveClose( void );
-//void CL_WavStopRecord_f( void );
-
 /*
 ===============
 CL_CDDialog
@@ -208,31 +204,10 @@ void CL_CDDialog( void ) {
 	cls.cddialog = qtrue;	// start it next frame
 }
 
-void CL_PurgeCache( void ) {
-	cls.doCachePurge = qtrue;
-}
 
-static void CL_DoPurgeCache( void ) {
-	if ( !cls.doCachePurge ) {
-		return;
-	}
-
-	cls.doCachePurge = qfalse;
-
-	if ( !com_cl_running ) {
-		return;
-	}
-
-	if ( !com_cl_running->integer ) {
-		return;
-	}
-
-	if ( !cls.rendererStarted ) {
-		return;
-	}
-
-	re.purgeCache();
-}
+// fretn
+//void CL_WriteWaveClose( void );
+//void CL_WavStopRecord_f( void );
 
 /*
 =======================================================================
@@ -730,13 +705,13 @@ static void CL_Record_f( void ) {
 CL_CompleteRecordName
 ====================
 */
-static void CL_CompleteRecordName( char *args, int argNum )
+static void CL_CompleteRecordName( const char *args, int argNum )
 {
 	if ( argNum == 2 )
 	{
 		char demoExt[ 16 ];
 
-		Com_sprintf( demoExt, sizeof( demoExt ), ".%s%d", DEMOEXT, com_protocol->integer );
+		Com_sprintf( demoExt, sizeof( demoExt ), "." DEMOEXT "%d", com_protocol->integer );
 		Field_CompleteFilename( "demos", demoExt, qtrue, FS_MATCH_EXTERN | FS_MATCH_STICK );
 	}
 }
@@ -811,7 +786,7 @@ void CL_ReadDemoMessage( void ) {
 		return;
 	}
 	buf.cursize = LittleLong( buf.cursize );
-	if ( buf.cursize == -1 ) {
+	if ( buf.cursize < 0 ) {
 		CL_DemoCompleted();
 		return;
 	}
@@ -905,12 +880,12 @@ static qboolean CL_DemoNameCallback_f( const char *filename, int length )
 CL_CompleteDemoName
 ====================
 */
-static void CL_CompleteDemoName( char *args, int argNum )
+static void CL_CompleteDemoName( const char *args, int argNum )
 {
 	if ( argNum == 2 )
 	{
 		FS_SetFilenameCallback( CL_DemoNameCallback_f );
-		Field_CompleteFilename( "demos", "." DEMOEXT "??", qfalse, FS_MATCH_ANY | FS_MATCH_STICK );
+		Field_CompleteFilename( "demos", "." DEMOEXT "??", qfalse, FS_MATCH_ANY | FS_MATCH_STICK | FS_MATCH_SUBDIRS );
 		FS_SetFilenameCallback( NULL );
 	}
 }
@@ -1043,16 +1018,16 @@ If the "nextdemo" cvar is set, that command will be issued
 ==================
 */
 static void CL_NextDemo( void ) {
-	char v[ MAX_CVAR_VALUE_STRING ];
+	const char *s;
 
-	Cvar_VariableStringBuffer( "nextdemo", v, sizeof( v ) );
-	Com_DPrintf( "CL_NextDemo: %s\n", v );
-	if ( !v[0] ) {
+	s = Cvar_VariableString( "nextdemo" );
+	Com_DPrintf( "CL_NextDemo: %s\n", s );
+	if ( !s[0] ) {
 		return;
 	}
 
 	Cvar_Set( "nextdemo", "" );
-	Cbuf_AddText( v );
+	Cbuf_AddText( s );
 	Cbuf_AddText( "\n" );
 	Cbuf_Execute();
 }
@@ -1103,17 +1078,10 @@ void CL_ShutdownAll( void ) {
 	// shutdown the renderer
 	if ( re.Shutdown ) {
 		if ( CL_GameSwitch() ) {
-			if ( re.purgeCache ) {
-				CL_DoPurgeCache();
-			}
 			CL_ShutdownRef( REF_DESTROY_WINDOW ); // shutdown renderer & GLimp
 		} else {
 			re.Shutdown( REF_KEEP_CONTEXT ); // don't destroy window or context
 		}
-	}
-
-	if ( re.purgeCache ) {
-		CL_DoPurgeCache();
 	}
 
 	cls.rendererStarted = qfalse;
@@ -1191,7 +1159,7 @@ void CL_MapLoading( void ) {
 		Com_Memset( cls.updateInfoString, 0, sizeof( cls.updateInfoString ) );
 		Com_Memset( clc.serverMessage, 0, sizeof( clc.serverMessage ) );
 		Com_Memset( &cl.gameState, 0, sizeof( cl.gameState ) );
-		clc.lastPacketSentTime = -9999;
+		clc.lastPacketSentTime = cls.realtime - RETRANSMIT_TIMEOUT; // send packet immediately
 		cls.framecount++;
 		SCR_UpdateScreen();
 	} else {
@@ -1203,7 +1171,7 @@ void CL_MapLoading( void ) {
 		Key_SetCatcher( 0 );
 		cls.framecount++;
 		SCR_UpdateScreen();
-		clc.connectTime = -RETRANSMIT_TIMEOUT;
+		clc.connectTime = cls.realtime - RECONNECT_TIMEOUT; // send packet immediately
 		NET_StringToAdr( cls.servername, &clc.serverAddress, NA_UNSPEC );
 		// we don't need a challenge on the localhost
 		CL_CheckForResend();
@@ -1235,7 +1203,7 @@ static void CL_UpdateGUID(void)
 	}
 	else
 	{
-		char *guid = Com_PBMD5File( ETKEY_FILE );
+		char *guid = Com_PBMD5File( BASEGAME "/" ETKEY_FILE );
 
 		if (guid)
 		{
@@ -1456,9 +1424,7 @@ qboolean CL_Disconnect( qboolean showMainMenu ) {
 	// send it a few times in case one is dropped
 	if ( cls.state >= CA_CONNECTED && cls.state != CA_CINEMATIC && !clc.demoplaying ) {
 		CL_AddReliableCommand( "disconnect", qtrue );
-		CL_WritePacket();
-		CL_WritePacket();
-		CL_WritePacket();
+		CL_WritePacket( 2 );
 	}
 
 	CL_ClearState();
@@ -1775,7 +1741,7 @@ static void CL_Connect_f( void ) {
 	Cvar_Set( "com_errorMessage", "" );
 
 	Key_SetCatcher( 0 );
-	clc.connectTime = -99999;	// CL_CheckForResend() will fire immediately
+	clc.connectTime = cls.realtime - RECONNECT_TIMEOUT; // CL_CheckForResend() will fire immediately
 	clc.connectPacketCount = 0;
 
 	Cvar_Set( "cl_reconnectArgs", args );
@@ -1792,12 +1758,12 @@ static void CL_Connect_f( void ) {
 CL_CompleteRcon
 ==================
 */
-static void CL_CompleteRcon( char *args, int argNum )
+static void CL_CompleteRcon( const char *args, int argNum )
 {
 	if ( argNum >= 2 )
 	{
 		// Skip "rcon "
-		char *p = Com_SkipTokens( args, 1, " " );
+		const char *p = Com_SkipTokens( args, 1, " " );
 
 		if ( p > args )
 			Field_CompleteCommand( p, qtrue, qtrue );
@@ -2190,9 +2156,7 @@ static void CL_DownloadsComplete( void ) {
 	// set pure checksums
 	CL_SendPureChecksums();
 
-	CL_WritePacket();
-	CL_WritePacket();
-	CL_WritePacket();
+	CL_WritePacket( 2 );
 }
 
 
@@ -2331,8 +2295,8 @@ void CL_InitDownloads( void ) {
 			// if autodownloading is not enabled on the server
 			cls.state = CA_CONNECTED;
 
-			*cls.downloadTempName = *cls.downloadName = '\0';
-			Cvar_Set( "cl_downloadName", "" );
+			//*cls.downloadTempName = *cls.downloadName = '\0';
+			//Cvar_Set( "cl_downloadName", "" );
 
 			CL_NextDownload();
 			return;
@@ -2389,7 +2353,7 @@ static void CL_CheckForResend( void ) {
 		return;
 	}
 
-	if ( cls.realtime - clc.connectTime < RETRANSMIT_TIMEOUT ) {
+	if ( cls.realtime - clc.connectTime < RECONNECT_TIMEOUT ) {
 		return;
 	}
 
@@ -2566,7 +2530,8 @@ static qboolean CL_PrintPacket( const netadr_t *from, msg_t *msg ) {
 		Com_Error( ERR_DROP, "%s", CL_TranslateStringBuf( PROTOCOL_MISMATCH_ERROR_LONG ) );
 	} else if ( !Q_stricmpn( s, "[err_update]", 12 ) )       {
 		Q_strncpyz( clc.serverMessage, s + 12, sizeof( clc.serverMessage ) );
-		Com_Error( ERR_AUTOUPDATE, "%s", clc.serverMessage );
+		Com_Error( ERR_DROP, "%s", CL_TranslateStringBuf( PROTOCOL_MISMATCH_ERROR_LONG ) );
+		//Com_Error( ERR_AUTOUPDATE, "%s", clc.serverMessage );
 	} else if ( fromserver && !Q_stricmpn( s, "ET://", 5 ) )       { // fretn
 		Q_strncpyz( clc.serverMessage, s, sizeof( clc.serverMessage ) );
 		Cvar_Set( "com_errorMessage", clc.serverMessage );
@@ -2900,7 +2865,7 @@ static qboolean CL_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 		clc.challenge = atoi(Cmd_Argv(1));
 		cls.state = CA_CHALLENGING;
 		clc.connectPacketCount = 0;
-		clc.connectTime = -99999;
+		clc.connectTime = cls.realtime - RECONNECT_TIMEOUT;
 
 		// take this address as the new server address.  This allows
 		// a server proxy to hand off connections to multiple servers
@@ -2961,7 +2926,7 @@ static qboolean CL_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 		Netchan_Setup( NS_CLIENT, &clc.netchan, from, Cvar_VariableIntegerValue( "net_qport" ), clc.challenge, clc.compat );
 
 		cls.state = CA_CONNECTED;
-		clc.lastPacketSentTime = -9999;		// send first packet immediately
+		clc.lastPacketSentTime = cls.realtime - RETRANSMIT_TIMEOUT; // send first packet immediately
 		return qtrue;
 	}
 
@@ -3236,14 +3201,14 @@ void CL_WWWDownload( void ) {
 	if ( ret == DL_DONE ) {
 		// taken from CL_ParseDownload
 		// we work with OS paths
-		clc.download = 0;
+		clc.download = FS_INVALID_HANDLE;
 		to_ospath = FS_BuildOSPath( Cvar_VariableString( "fs_homepath" ), cls.originalDownloadName, "" );
 		to_ospath[strlen( to_ospath ) - 1] = '\0';
 		if ( rename( cls.downloadTempName, to_ospath ) ) {
 			FS_CopyFile( cls.downloadTempName, to_ospath );
 			remove( cls.downloadTempName );
 		}
-		*cls.downloadTempName = *cls.downloadName = 0;
+		*cls.downloadTempName = *cls.downloadName = '\0';
 		Cvar_Set( "cl_downloadName", "" );
 		if ( cls.bWWWDlDisconnected ) {
 			// reconnect to the server, which might send us to a new disconnected download
@@ -3471,135 +3436,6 @@ void CL_Frame( int msec, int realMsec ) {
 #endif
 }
 
-
-//============================================================================
-// Ridah, startup-caching system
-typedef struct {
-	char name[MAX_QPATH];
-	int hits;
-	int lastSetIndex;
-} cacheItem_t;
-typedef enum {
-	CACHE_SOUNDS = 0,
-	CACHE_MODELS,
-	CACHE_IMAGES,
-
-	CACHE_NUMGROUPS
-} cacheGroup_t;
-static const char *cacheGroups[CACHE_NUMGROUPS] = {
-	"sound",
-	"model",
-	"image"
-};
-#define MAX_CACHE_ITEMS     4096
-#define CACHE_HIT_RATIO     0.75        // if hit on this percentage of maps, it'll get cached
-
-static int cacheIndex;
-static cacheItem_t cacheItems[CACHE_NUMGROUPS][MAX_CACHE_ITEMS];
-
-static void CL_Cache_StartGather_f( void ) {
-	cacheIndex = 0;
-	memset( cacheItems, 0, sizeof( cacheItems ) );
-
-	Cvar_Set( "cl_cacheGathering", "1" );
-}
-
-static cacheGroup_t CacheGroupFromString( const char *str ) {
-	if ( !Q_stricmp( str, cacheGroups[0] ) )
-		return CACHE_SOUNDS;
-	else if ( !Q_stricmp( str, cacheGroups[1] ) )
-		return CACHE_MODELS;
-	else if ( !Q_stricmp( str, cacheGroups[2] ) )
-		return CACHE_IMAGES;
-	else
-		return CACHE_NUMGROUPS;
-}
-
-static void CL_Cache_UsedFile_f( void ) {
-	char itemStr[MAX_QPATH];
-	int i;
-	cacheGroup_t group;
-	cacheItem_t *item;
-
-	if ( Cmd_Argc() < 2 ) {
-		Com_Error( ERR_DROP, "usedfile without enough parameters" );
-		return;
-	}
-
-	Q_strncpyz( itemStr, Cmd_ArgsFrom( 2 ), sizeof( itemStr ) );
-	Q_strlwr( itemStr );
-
-	// find the cache group
-	group = CacheGroupFromString( Cmd_Argv( 1 ) );
-	if ( /*group < CACHE_SOUNDS ||*/ group >= CACHE_NUMGROUPS ) {
-		Com_Error( ERR_DROP, "usedfile without a valid cache group" );
-	}
-
-	// see if it's already there
-	for ( i = 0, item = cacheItems[group]; i < MAX_CACHE_ITEMS; i++, item++ ) {
-		if ( !item->name[0] ) {
-			// didn't find it, so add it here
-			Q_strncpyz( item->name, itemStr, sizeof(item->name) );
-			if ( cacheIndex > 9999 ) { // hack, but yeh
-				item->hits = cacheIndex;
-			} else {
-				item->hits++;
-			}
-			item->lastSetIndex = cacheIndex;
-			break;
-		}
-		if ( item->name[0] == itemStr[0] && !strcmp( item->name, itemStr ) ) {
-			if ( item->lastSetIndex != cacheIndex ) {
-				item->hits++;
-				item->lastSetIndex = cacheIndex;
-			}
-			break;
-		}
-	}
-}
-
-static void CL_Cache_SetIndex_f( void ) {
-	if ( Cmd_Argc() < 2 ) {
-		Com_Error( ERR_DROP, "setindex needs an index" );
-		return;
-	}
-
-	cacheIndex = atoi( Cmd_Argv( 1 ) );
-}
-
-static void CL_Cache_MapChange_f( void ) {
-	cacheIndex++;
-}
-
-static void CL_Cache_EndGather_f( void ) {
-	// save the frequently used files to the cache list file
-	int i, j, handle, cachePass;
-	char filename[MAX_QPATH];
-
-	cachePass = (int)floor( (float)cacheIndex * CACHE_HIT_RATIO );
-
-	for ( i = 0; i < CACHE_NUMGROUPS; i++ ) {
-		Com_sprintf( filename, sizeof( filename ), "%s.cache", cacheGroups[i] );
-
-		handle = FS_FOpenFileWrite( filename );
-
-		for ( j = 0; j < MAX_CACHE_ITEMS; j++ ) {
-			// if it's a valid filename, and it's been hit enough times, cache it
-			if ( cacheItems[i][j].hits >= cachePass && strchr( cacheItems[i][j].name, '/' ) ) {
-				FS_Write( cacheItems[i][j].name, strlen( cacheItems[i][j].name ), handle );
-				FS_Write( "\n", 1, handle );
-			}
-		}
-
-		FS_FCloseFile( handle );
-	}
-
-	Cvar_Set( "cl_cacheGathering", "0" );
-}
-
-// done.
-//============================================================================
-
 /*
 ================
 CL_SetRecommended_f
@@ -3609,13 +3445,12 @@ static void CL_SetRecommended_f( void ) {
 	Com_SetRecommended();
 }
 
-
 /*
 ================
 CL_RefPrintf
 ================
 */
-static FORMAT_PRINTF(2, 3) void QDECL CL_RefPrintf( printParm_t level, const char *fmt, ... ) {
+static Q_PRINTF_FUNC(2, 3) void QDECL CL_RefPrintf( printParm_t level, const char *fmt, ... ) {
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
 
@@ -3781,7 +3616,7 @@ void CL_StartHunkUsers( void ) {
 CL_RefMalloc
 ============
 */
-static void *CL_RefMalloc( int size ) {
+static void *CL_RefMalloc( size_t size ) {
 	return Z_TagMalloc( size, TAG_RENDERER );
 }
 
@@ -3914,7 +3749,6 @@ static void CL_InitRef( void ) {
 	rimp.Malloc = CL_RefMalloc;
 	rimp.Free = Z_Free;
 	rimp.Tag_Free = CL_RefTagFree;
-	rimp.Hunk_Clear = Hunk_ClearToMark;
 #ifdef HUNK_DEBUG
 	rimp.Hunk_AllocDebug = Hunk_AllocDebug;
 #else
@@ -3967,13 +3801,13 @@ static void CL_InitRef( void ) {
 
 	rimp.Sys_SetClipboardBitmap = Sys_SetClipboardBitmap;
 	rimp.Sys_LowPhysicalMemory = Sys_LowPhysicalMemory;
-	rimp.Sys_OmnibotRender = Sys_OmnibotRender;
 	rimp.Com_RealTime = Com_RealTime;
 	rimp.Com_Filter = Com_Filter;
 	rimp.MSG_HashKey = MSG_HashKey;
 
 	rimp.GLimp_InitGamma = GLimp_InitGamma;
 	rimp.GLimp_SetGamma = GLimp_SetGamma;
+	rimp.GLimp_FlashWindow = GLimp_FlashWindow;
 	// OpenGL API
 #ifdef USE_OPENGL_API
 	rimp.GLimp_Init = GLimp_Init;
@@ -4137,7 +3971,7 @@ static void CL_StopVideo_f( void )
 CL_CompleteVideoName
 ====================
 */
-static void CL_CompleteVideoName( char *args, int argNum )
+static void CL_CompleteVideoName( const char *args, int argNum )
 {
 	if ( argNum == 2 )
 	{
@@ -4314,7 +4148,7 @@ static void CL_InitGLimp_Cvars( void )
 	Cvar_SetDescription( r_allowSoftwareGL, "Toggle the use of the default software OpenGL driver supplied by the Operating System" );
 	r_swapInterval = Cvar_Get( "r_swapInterval", "0", CVAR_ARCHIVE_ND );
 	Cvar_SetDescription( r_swapInterval, "V-blanks to wait before swapping buffers\n 0: No V-Sync\n 1: Synced to the monitor's refresh rate" );
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 	r_glDriver = Cvar_Get( "r_glDriver", OPENGL_DRIVER_NAME, CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
 	Cvar_SetDescription( r_glDriver, "Specifies the OpenGL driver to use, will revert back to default if driver name set is invalid" );
 #ifdef _WIN32
@@ -4348,6 +4182,11 @@ static void CL_InitGLimp_Cvars( void )
 	/*r_oldMode =*/ Cvar_Get( "r_oldMode", "", CVAR_ARCHIVE | CVAR_NOTABCOMPLETE );                             // ydnar: previous "good" video mode
 	Cvar_CheckRange( r_mode, "-2", va( "%i", s_numVidModes-1 ), CV_INTEGER );
 	Cvar_SetDescription( r_mode, "Set video mode:\n -2 - use current desktop resolution\n -1 - use \\r_customWidth and \\r_customHeight\n  0..N - enter \\modelist for details" );
+#ifdef _DEBUG
+	r_modeFullscreen = Cvar_Get( "r_modeFullscreen", "", CVAR_ARCHIVE | CVAR_LATCH );
+#else
+	r_modeFullscreen = Cvar_Get( "r_modeFullscreen", "-2", CVAR_ARCHIVE | CVAR_LATCH );
+#endif
 	Cvar_SetDescription( r_modeFullscreen, "Dedicated fullscreen mode, set to \"\" to use \\r_mode in all cases" );
 
 	r_fullscreen = Cvar_Get( "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH );
@@ -4393,11 +4232,6 @@ static void CL_InitGLimp_Cvars( void )
 
 static const cmdListItem_t cl_cmds[] = {
 	{ "addFavorite", CL_AddFavorite_f, NULL },
-	{ "cache_endgather", CL_Cache_EndGather_f, NULL },
-	{ "cache_mapchange", CL_Cache_MapChange_f, NULL },
-	{ "cache_setindex", CL_Cache_SetIndex_f, NULL },
-	{ "cache_startgather", CL_Cache_StartGather_f, NULL },
-	{ "cache_usedfile", CL_Cache_UsedFile_f, NULL },
 	{ "cinematic", CL_PlayCinematic_f, CL_CompleteCinematicName },
 	{ "clientinfo", CL_Clientinfo_f, NULL },
 	{ "cmd", CL_ForwardToServer_f, CL_CompleteRcon },
@@ -4624,7 +4458,7 @@ void CL_Init( void ) {
 	Cvar_CheckRange( cl_dlDirectory, "0", "1", CV_INTEGER );
 	s = va( "Save downloads initiated by \\dlmap and \\download commands in:\n"
 		" 0 - current game directory\n"
-		" 1 - fs_basegame (%s) directory", FS_GetBaseGameDir() );
+		" 1 - basegame (%s) directory", FS_GetBaseGameDir() );
 	Cvar_SetDescription( cl_dlDirectory, s );
 
 	cl_reconnectArgs = Cvar_Get( "cl_reconnectArgs", "", CVAR_ARCHIVE_ND | CVAR_NOTABCOMPLETE );
@@ -4655,7 +4489,7 @@ void CL_Init( void ) {
 	cl_debugTranslation = Cvar_Get( "cl_debugTranslation", "0", 0 );
 	// -NERVE - SMF
 
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 	in_forceCharset = Cvar_Get( "in_forceCharset", "0", CVAR_ARCHIVE_ND );
 	Cvar_SetDescription( in_forceCharset, "Try to translate non-ASCII chars in keyboard input or force EN/US keyboard layout" );
 #endif
@@ -4690,7 +4524,7 @@ void CL_Init( void ) {
 	}
 #endif
 
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 	Cvar_SetGroup( cl_language, CVG_LANGUAGE );
 	Cvar_SetGroup( in_forceCharset, CVG_LANGUAGE );
 #endif
@@ -6091,7 +5925,7 @@ void CL_LoadTransTable( const char *fileName ) {
 CL_ReloadTranslation
 =======================
 */
-void CL_ReloadTranslation() {
+void CL_ReloadTranslation(void) {
 	char    **fileList;
 	int numFiles, i;
 
@@ -6116,7 +5950,7 @@ void CL_ReloadTranslation() {
 CL_InitTranslation
 =======================
 */
-void CL_InitTranslation() {
+void CL_InitTranslation(void) {
 	char    **fileList;
 	int numFiles, i;
 
@@ -6270,7 +6104,7 @@ const char* CL_TranslateStringBuf( const char *string ) {
 
 
 void CL_TrackCvarChanges( qboolean force ) {
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 	if ( force || Cvar_CheckGroup( CVG_LANGUAGE ) ) {
 		if ( cl_language->integer > 0 && in_forceCharset->integer > 0 ) {
 			Com_Printf( "WARNING: in_forceCharset incompatible with non-English languages!\n"

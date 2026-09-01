@@ -396,10 +396,10 @@ void RE_StretchPicGradient( float x, float y, float w, float h,
 		gradientColor = colorWhite;
 	}
 
-	cmd->gradientColor[0] = gradientColor[0] * 255;
-	cmd->gradientColor[1] = gradientColor[1] * 255;
-	cmd->gradientColor[2] = gradientColor[2] * 255;
-	cmd->gradientColor[3] = gradientColor[3] * 255;
+	cmd->gradientColor.rgba[0] = gradientColor[0] * 255;
+	cmd->gradientColor.rgba[1] = gradientColor[1] * 255;
+	cmd->gradientColor.rgba[2] = gradientColor[2] * 255;
+	cmd->gradientColor.rgba[3] = gradientColor[3] * 255;
 	cmd->gradientType = gradientType;
 }
 //----(SA)	end
@@ -426,7 +426,7 @@ void RE_SetGlobalFog( qboolean restore, int duration, float r, float g, float b,
 			tr.world->globalFogTransEndTime = tr.refdef.time + duration;
 		} else {
 			VectorCopy( tr.world->globalOriginalFog, tr.world->fogs[tr.world->globalFog].shader->fogParms.color );
-			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt = ColorBytes4( tr.world->globalOriginalFog[ 0 ] * tr.identityLight,
+			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt.u32 = ColorBytes4( tr.world->globalOriginalFog[ 0 ] * tr.identityLight,
 																						 tr.world->globalOriginalFog[ 1 ] * tr.identityLight,
 																						 tr.world->globalOriginalFog[ 2 ] * tr.identityLight, 1.0 );
 			tr.world->fogs[tr.world->globalFog].shader->fogParms.depthForOpaque = tr.world->globalOriginalFog[ 3 ];
@@ -444,7 +444,7 @@ void RE_SetGlobalFog( qboolean restore, int duration, float r, float g, float b,
 			tr.world->globalFogTransEndTime = tr.refdef.time + duration;
 		} else {
 			VectorSet( tr.world->fogs[tr.world->globalFog].shader->fogParms.color, r, g, b );
-			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt = ColorBytes4( r * tr.identityLight,
+			tr.world->fogs[tr.world->globalFog].shader->fogParms.colorInt.u32 = ColorBytes4( r * tr.identityLight,
 																						 g * tr.identityLight,
 																						 b * tr.identityLight, 1.0 );
 			tr.world->fogs[tr.world->globalFog].shader->fogParms.depthForOpaque = depthForOpaque < 1 ? 1 : depthForOpaque;
@@ -477,7 +477,7 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 
 	backEnd.doneBloom = qfalse;
 
-	Byte4Set(backEnd.color2D, 0xFF, 0xFF, 0xFF, 0xFF);
+	backEnd.color2D.u32 = ~0U;
 
 	// check for errors
 	GL_CheckErrors();
@@ -604,9 +604,9 @@ void RE_EndFrame( int *frontEndMsec, int *backEndMsec ) {
 	}
 	cmd->commandId = RC_SWAP_BUFFERS;
 
-	R_PerformanceCounters();
-
 	R_IssueRenderCommands();
+
+	R_PerformanceCounters();
 
 	R_InitNextFrame();
 
@@ -774,24 +774,4 @@ void RE_Finish( void ) {
 		return;
 	}
 	cmd->commandId = RC_FINISH;
-}
-
-
-/*
-==================
-RE_RenderOmnibot
-==================
-*/
-void RE_RenderOmnibot( void ) {
-	renderOmnibot_t *cmd;
-	
-	if (!tr.registered) {
-		return;
-	}
-	cmd = R_GetCommandBuffer( sizeof( *cmd ) );
-
-	if ( !cmd ) {
-		return;
-	}
-	cmd->commandId = RC_DRAW_OMNIBOT;
 }

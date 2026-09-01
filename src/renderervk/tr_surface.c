@@ -117,7 +117,7 @@ void RB_AddQuadStampExt( const vec3_t origin, const vec3_t left, const vec3_t up
 	tess.normal[ndx][0] = tess.normal[ndx+1][0] = tess.normal[ndx+2][0] = tess.normal[ndx+3][0] = normal[0];
 	tess.normal[ndx][1] = tess.normal[ndx+1][1] = tess.normal[ndx+2][1] = tess.normal[ndx+3][1] = normal[1];
 	tess.normal[ndx][2] = tess.normal[ndx+1][2] = tess.normal[ndx+2][2] = tess.normal[ndx+3][2] = normal[2];
-	
+
 	// standard square texture coordinates
 	tess.texCoords[0][ndx+0][0] = tess.texCoords[1][ndx+0][0] = s1;
 	tess.texCoords[0][ndx+0][1] = tess.texCoords[1][ndx+0][1] = t1;
@@ -133,10 +133,10 @@ void RB_AddQuadStampExt( const vec3_t origin, const vec3_t left, const vec3_t up
 
 	// constant color all the way around
 	// should this be identity and let the shader specify from entity?
-	tess.vertexColors[ndx + 0].u32 =
-	tess.vertexColors[ndx + 1].u32 =
-	tess.vertexColors[ndx + 2].u32 =
-	tess.vertexColors[ndx + 3].u32 = color.u32;
+	tess.vertexColors[ndx + 0] =
+	tess.vertexColors[ndx + 1] =
+	tess.vertexColors[ndx + 2] =
+	tess.vertexColors[ndx + 3] = color;
 
 	tess.numVertexes += 4;
 	tess.numIndexes += 6;
@@ -170,10 +170,10 @@ void RB_AddQuadStamp2( float x, float y, float w, float h, float s1, float t1, f
 	tess.indexes[numIndexes + 4] = numVerts + 0;
 	tess.indexes[numIndexes + 5] = numVerts + 1;
 
-	tess.vertexColors[numVerts + 0].u32 =
-	tess.vertexColors[numVerts + 1].u32 =
-	tess.vertexColors[numVerts + 2].u32 =
-	tess.vertexColors[numVerts + 3].u32 = color.u32;
+	tess.vertexColors[numVerts + 0] =
+	tess.vertexColors[numVerts + 1] =
+	tess.vertexColors[numVerts + 2] =
+	tess.vertexColors[numVerts + 3] = color;
 
 	tess.xyz[numVerts + 0][0] = x;
 	tess.xyz[numVerts + 0][1] = y;
@@ -275,7 +275,7 @@ static void RB_SurfaceSprite( void ) {
 RB_SurfacePolychain
 =============
 */
-static void RB_SurfacePolychain( srfPoly_t *p ) {
+static void RB_SurfacePolychain( const srfPoly_t *p ) {
 	int		i;
 	int		numv;
 
@@ -295,7 +295,7 @@ static void RB_SurfacePolychain( srfPoly_t *p ) {
 		VectorCopy( p->verts[i].xyz, tess.xyz[numv] );
 		tess.texCoords[0][numv][0] = p->verts[i].st[0];
 		tess.texCoords[0][numv][1] = p->verts[i].st[1];
-		tess.vertexColors[numv].u32 = p->verts[ i ].modulate.u32;
+		tess.vertexColors[numv] = p->verts[ i ].modulate;
 
 		numv++;
 	}
@@ -317,9 +317,9 @@ static void RB_SurfacePolychain( srfPoly_t *p ) {
 RB_SurfaceTriangles
 =============
 */
-static void RB_SurfaceTriangles( srfTriangles_t *srf ) {
+static void RB_SurfaceTriangles( const srfTriangles_t *srf ) {
 	int			i;
-	drawVert_t	*dv;
+	const drawVert_t	*dv;
 	float		*xyz, *normal;
 	float		*texCoords0;
 	float		*texCoords1;
@@ -416,7 +416,7 @@ RB_SurfaceFoliage - ydnar
 =============
 */
 
-void RB_SurfaceFoliage( srfFoliage_t *srf ) {
+void RB_SurfaceFoliage( const srfFoliage_t *srf ) {
 	int o, i;// , numVerts, numIndexes;
 #ifdef USE_DISTANCE_CULL
 	int a;
@@ -1264,7 +1264,7 @@ static void LerpCMeshVertexes( mdcSurface_t *surf, float backlerp ) {
 RB_SurfaceCMesh
 =============
 */
-void RB_SurfaceCMesh( mdcSurface_t *surface ) {
+static void RB_SurfaceCMesh( mdcSurface_t *surface ) {
 	int j;
 	float backlerp;
 	int             *triangles;
@@ -1449,7 +1449,7 @@ static float LodErrorForVolume( vec3_t local, float radius ) {
 	return r_lodCurveError->value / d;
 }
 
-
+#ifdef USE_VBO_GRID
 void RB_SurfaceGridEstimate( srfGridMesh_t *cv, int *numVertexes, int *numIndexes )
 {
 	int		lodWidth, lodHeight;
@@ -1513,7 +1513,7 @@ void RB_SurfaceGridEstimate( srfGridMesh_t *cv, int *numVertexes, int *numIndexe
 	tess.numVertexes = 0;
 	tess.numIndexes = 0;
 }
-
+#endif // USE_VBO_GRID
 
 /*
 =============
@@ -1541,7 +1541,7 @@ static void RB_SurfaceGrid( srfGridMesh_t *cv ) {
 	int		dlightBits;
 #endif
 
-#ifdef USE_VBO
+#ifdef USE_VBO_GRID
 #ifdef USE_LEGACY_DLIGHTS
 	if ( tess.allowVBO && cv->vboItemIndex && !cv->dlightBits ) {
 #else
@@ -1563,14 +1563,18 @@ static void RB_SurfaceGrid( srfGridMesh_t *cv ) {
 	}
 
 	VBO_Flush();
-#endif // USE_VBO
+#else
+#ifdef USE_VBO
+	VBO_Flush();
+#endif
+#endif
 
 #ifdef USE_LEGACY_DLIGHTS
 	dlightBits = cv->dlightBits;
 	tess.dlightBits |= dlightBits;
 #endif
 
-#ifdef USE_VBO
+#ifdef USE_VBO_GRID
 	tess.surfType = SF_GRID;
 
 	// determine the allowable discrepance
@@ -1581,7 +1585,7 @@ static void RB_SurfaceGrid( srfGridMesh_t *cv ) {
 #endif
 		lodError = r_lodCurveError->value; // fixed quality for VBO
 	else
-#endif
+#endif // USE_VBO_GRID
 		lodError = LodErrorForVolume( cv->lodOrigin, cv->lodRadius );
 
 	// determine which rows and columns of the subdivision
@@ -1860,6 +1864,7 @@ static void RB_SurfaceEntity( surfaceType_t *surfType ) {
 
 
 static void RB_SurfaceBad( surfaceType_t *surfType ) {
+	tess.surfType = SF_BAD;
 	ri.Printf( PRINT_ALL, "Bad surface tesselated.\n" );
 }
 
@@ -1949,6 +1954,7 @@ void RB_SurfaceDecal( srfDecal_t *srf ) {
 
 
 static void RB_SurfaceSkip( void *surf ) {
+	tess.surfType = SF_SKIP;
 }
 
 

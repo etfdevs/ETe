@@ -1235,6 +1235,35 @@ static rserr_t GLW_SetMode( int mode, const char *modeFS, int colorbits, qboolea
 }
 
 
+void GLimp_FlashWindow( int state )
+{
+	FLASHWINFO flashdesc;
+
+	if ( !g_wv.hWnd )
+		return;
+
+	memset( &flashdesc, 0, sizeof( flashdesc ) );
+	flashdesc.cbSize = sizeof( FLASHWINFO );
+	flashdesc.hwnd = g_wv.hWnd;
+
+	switch ( state )
+	{
+	case 1:
+		flashdesc.dwFlags = FLASHW_TRAY;
+		flashdesc.uCount = 1;
+		break;
+	case 2:
+		flashdesc.dwFlags = ( FLASHW_TRAY | FLASHW_TIMERNOFG );
+		break;
+	default:
+		flashdesc.dwFlags = FLASHW_STOP;
+		break;
+	}
+
+	FlashWindowEx( &flashdesc );
+}
+
+
 static void GLimp_DetectSteamOverlay( void ) {
 	HMODULE gameoverlaydll = GetModuleHandle( T( "GameOverlayRenderer.dll" ) );
 

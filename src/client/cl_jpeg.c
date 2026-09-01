@@ -39,7 +39,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #	endif
 #else
 #	define JPEG_INTERNALS
-#	include "../libjpeg/jpeglib.h"
+#	include <jpeglib.h>
 #endif
 
 /* Catching errors, as done in libjpeg's example.c */
@@ -117,7 +117,7 @@ void CL_LoadJPG( const char *filename, byte **pic, int *width, int *height )
 	 * requires it in order to read binary files.
 	*/
 
-	len = FS_ReadFile( ( char * ) filename, &fbuffer.v );
+	len = FS_ReadFile( filename, &fbuffer.v );
 	if ( !fbuffer.b || len < 0 ) {
 		return;
 	}

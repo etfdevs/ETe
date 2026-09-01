@@ -106,15 +106,15 @@ cvar_t		*s_show;
 static cvar_t *s_mixahead;
 static cvar_t *s_mixOffset;
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__APPLE_CC__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__APPLE_CC__) || (defined(USE_SDL3) && defined(_WIN32))
 cvar_t		*s_device;
 #endif
 
-#if defined(USE_SDL)
+#if defined(USE_SDL2) || defined(USE_SDL3)
 cvar_t		*s_sdlDriver;
 #endif
 
-cvar_t *s_debugStreams;
+static cvar_t *s_debugStreams;
 
 // fretn
 cvar_t      *s_bits;
@@ -146,11 +146,6 @@ static void S_Base_SoundInfo( void )
 	}
 	else
 	{
-		if (s_soundMuted)
-		{
-			Com_Printf("sound system is muted\n");
-		}
-
 		Com_Printf("%5d channels\n", dma.channels);
 		Com_Printf("%5d samples\n", dma.samples);
 		Com_Printf("%5d samplebits (%s)\n", dma.samplebits, dma.isfloat ? "float" : "int");
@@ -340,7 +335,6 @@ static sfx_t *S_FindName( const char *name )
 {
 	int		i;
 	int		hash;
-
 	sfx_t	*sfx;
 
 	if (!name) {
@@ -2442,23 +2436,30 @@ qboolean S_Base_Init( soundInterface_t *si ) {
 	Cvar_SetDescription( s_show, "Debugging output (used sound files)" );
 	s_testsound = Cvar_Get( "s_testsound", "0", CVAR_CHEAT );
 	Cvar_SetDescription( s_testsound, "Debugging tool that plays a simple sine wave tone to test the sound system" );
-#if defined(__linux__) && !defined(USE_SDL)
+#if defined(__linux__) && !defined(USE_SDL2) && !defined(USE_SDL3)
 	s_device = Cvar_Get( "s_device", "default", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	Cvar_SetDescription( s_device, "Set ALSA output device\n"
 		" Use \"default\", \"sysdefault\", \"front\", etc.\n"
 		" Enter " S_COLOR_CYAN "aplay -L "S_COLOR_WHITE"in your shell to see all options.\n"
 		S_COLOR_YELLOW " Please note that only mono/stereo devices are acceptable." );
-#elif defined(__linux__) && defined(USE_SDL)
+#elif defined(_WIN32) && defined(USE_SDL3)
+	// TODO change description that it is a device ID not device index in SDL3
 	s_device = Cvar_Get( "s_device", "default", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	Cvar_SetDescription( s_device, "Set SDL audio output device index\n"
 		"Use \"default\" to let system pick or choose one from \\s_devlist output." );
-#elif (defined(__APPLE__) || defined(__APPLE_CC__)) && defined(USE_SDL)
+#elif defined(__linux__) && (defined(USE_SDL2) || defined(USE_SDL3))
+	// TODO change description that it is a device ID not device index in SDL3
+	s_device = Cvar_Get( "s_device", "default", CVAR_ARCHIVE_ND | CVAR_LATCH );
+	Cvar_SetDescription( s_device, "Set SDL audio output device index\n"
+		"Use \"default\" to let system pick or choose one from \\s_devlist output." );
+#elif (defined(__APPLE__) || defined(__APPLE_CC__)) && (defined(USE_SDL2) || defined(USE_SDL3))
+	// TODO change description that it is a device ID not device index in SDL3
 	s_device = Cvar_Get( "s_device", "default", CVAR_ARCHIVE_ND | CVAR_LATCH );
 	Cvar_SetDescription( s_device, "Set SDL audio output device index\n"
 		"Use \"default\" to let system pick or choose one from \\s_devlist output." );
 #endif
 
-#if defined(USE_SDL)
+#if defined(USE_SDL2) || defined(USE_SDL3)
 	s_sdlDriver = Cvar_Get( "s_sdlDriver", "", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
 	Cvar_SetDescription( s_sdlDriver, "Set SDL audio driver, e.g. \"pulseaudio\" or \"pipewire\"" );
 #endif

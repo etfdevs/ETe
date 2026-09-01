@@ -887,7 +887,7 @@ void RB_DrawSun( void ) {
 	float		dist;
 	vec3_t		origin, vec1, vec2;
 	vec3_t		temp;
-	byte		sunColor[4] = { 255, 255, 255, 255 };
+	color4ub_t	sunColor;
 
 	if ( !tr.sunShader ) {
 		return;
@@ -899,6 +899,9 @@ void RB_DrawSun( void ) {
 	if ( !r_drawSun->integer ) {
 		return;
 	}
+
+	sunColor.u32 = ~0U;
+
 	qglLoadMatrixf( backEnd.viewParms.world.modelMatrix );
 
 	dist =  backEnd.viewParms.zFar / 1.75;      // div sqrt(3)
@@ -973,7 +976,7 @@ void RB_StageIteratorSky( void ) {
 
 #ifdef USE_PMLIGHT
 #ifdef USE_LEGACY_DLIGHTS
-	if ( r_dlightMode->integer ) 
+	if ( R_GetDlightMode() )
 #endif 
 	{
 		GL_ProgramDisable();

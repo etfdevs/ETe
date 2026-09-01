@@ -34,7 +34,7 @@ instead of tesselation like for regular surfaces. Using items queue also
 eleminates run-time tesselation limits.
 
 When it is time to render - we sort queued items to get longest possible 
-index sequence run to check if its long enough i.e. worth switching to GPU-side IBO.
+index sequence run to check if it is long enough i.e. worth switching to GPU-side IBO.
 So long index runs are rendered via multiple glDrawElements() calls, 
 all remaining short index sequences are grouped together into single software index
 which is finally rendered via single legacy index array transfer.
@@ -44,6 +44,8 @@ maintain, also it can be used for re-tesselation in future.
 No performance differences from 'Array of Structures' were observed.
 
 */
+
+#ifdef USE_VBO
 
 #define MAX_VBO_STAGES MAX_SHADER_STAGES
 
@@ -238,29 +240,26 @@ const char *BuildFP( int multitexture, int alphatest, int fogMode )
 		return buf;
 	}
 
+	if ( alphatest || multitexture == GL_ADD  || multitexture == GL_MODULATE ) {
+		strcat( buf, "TEMP t; \n" );
+	}
+
 	switch ( multitexture ) {
 		case 0:
-			strcat( buf, "TEMP t; \n" );
 			strcat( buf, "TEX base, fragment.texcoord[0], texture[0], 2D; \n" );
-			strcat( buf, genATestFP( alphatest ) );
 			break;
 		case GL_ADD:
-			strcat( buf, "TEMP t; \n" );
 			strcat( buf, "TEX base, fragment.texcoord[0], texture[0], 2D; \n" );
-			strcat( buf, genATestFP( alphatest ) );
 			strcat( buf, "TEX t,    fragment.texcoord[1], texture[1], 2D; \n"
 			"ADD base, base, t; \n" );
 			break;
 		case GL_MODULATE:
-			strcat( buf, "TEMP t; \n" );
 			strcat( buf, "TEX base, fragment.texcoord[0], texture[0], 2D; \n" );
-			strcat( buf, genATestFP( alphatest ) );
 			strcat( buf, "TEX t,    fragment.texcoord[1], texture[1], 2D; \n" );
 			strcat( buf, "MUL base, base, t; \n" );
 			break;
 		case GL_REPLACE:
 			strcat( buf, "TEX base, fragment.texcoord[1], texture[1], 2D; \n" );
-			//strcat( buf, genATestFP( alphatest ) );
 			break;
 		default:
 			ri.Error( ERR_DROP, "Invalid multitexture mode %04x", multitexture );
@@ -269,15 +268,24 @@ const char *BuildFP( int multitexture, int alphatest, int fogMode )
 
 	if ( fogMode == FP_FOG_BLEND ) {
 		strcat( buf, "MUL base, base, fragment.color; \n" );
+		strcat( buf, genATestFP( alphatest ) );
 		strcat( buf, "TEMP fog; \n"
 		"TEX fog, fragment.texcoord[4], texture[2], 2D; \n"
 		"MUL fog, fog, program.local[0]; \n"
 		"LRP_SAT result.color, fog.a, fog, base; \n"
 		"END \n" );
 	} else {
-		strcat( buf,
-		"MUL result.color, base, fragment.color; \n"
-		"END \n" );
+		if ( alphatest ) {
+			strcat( buf, "MUL base, base, fragment.color; \n" );
+			strcat( buf, genATestFP( alphatest ) );
+			strcat( buf,
+			"MOV result.color, base; \n"
+			"END \n" );
+		} else {
+			strcat( buf,
+			"MUL result.color, base, fragment.color; \n"
+			"END \n" );
+		}
 	}
 
 	return buf;
@@ -331,7 +339,7 @@ static int getFPindex( int multitexture, int atest, int fogmode )
 	index <<= 2; // reserve bits for atest
 	switch ( atest )
 	{
-		case GLS_ATEST_GT_0: index |= 1; break;
+		case GLS_ATEST_GT_0:  index |= 1; break;
 		case GLS_ATEST_LT_80: index |= 2; break;
 		case GLS_ATEST_GE_80: index |= 3; break;
 		default: break;
@@ -367,6 +375,29 @@ static qboolean isStaticRGBgen( colorGen_t cgen )
 }
 
 
+static qboolean isStaticTCmod( const textureBundle_t *bundle )
+{
+	int i;
+
+	for ( i = 0; i < bundle->numTexMods; i++ ) {
+		switch ( bundle->texMods[i].type ) {
+		case TMOD_NONE:
+		case TMOD_SCALE:
+		case TMOD_TRANSFORM:
+		//case TMOD_OFFSET:
+		//case TMOD_SCALE_OFFSET:
+		//case TMOD_OFFSET_SCALE:
+		case TMOD_SWAP:
+			break;
+		default:
+			return qfalse;
+		}
+	}
+
+	return qtrue;
+}
+
+
 static qboolean isStaticTCgen( shaderStage_t *stage, int bundle )
 {
 	switch ( stage->bundle[bundle].tcGen )
@@ -377,7 +408,7 @@ static qboolean isStaticTCgen( shaderStage_t *stage, int bundle )
 		case TCGEN_TEXTURE:
 			return qtrue;
 		case TCGEN_ENVIRONMENT_MAPPED:
-			if ( stage->bundle[bundle].numTexMods == 0 && ( !stage->bundle[bundle].isLightmap /*|| r_mergeLightmaps->integer == 0*/ ) ) {
+			if ( bundle == 0 && stage->bundle[bundle].numTexMods == 0 ) {
 				stage->tessFlags |= TESS_ENV0 << bundle;
 				stage->tessFlags &= ~( TESS_ST0 << bundle );
 				return qtrue;
@@ -394,22 +425,6 @@ static qboolean isStaticTCgen( shaderStage_t *stage, int bundle )
 		default:
 			return qfalse;
 	}
-}
-
-
-static qboolean isStaticTCmod( const textureBundle_t *bundle )
-{
-	texMod_t type;
-	int i;
-
-	for ( i = 0; i < bundle->numTexMods; i++ ) {
-		type = bundle->texMods[i].type;
-		if ( type != TMOD_NONE && type != TMOD_SCALE && type != TMOD_TRANSFORM && type != TMOD_SWAP ) {
-			return qfalse;
-		}
-	}
-
-	return qtrue;
 }
 
 
@@ -791,7 +806,9 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 	srfSurfaceFace_t *face;
 	srfTriangles_t *tris;
 	srfFoliage_t *foliage;
+#ifdef USE_VBO_GRID
 	srfGridMesh_t *grid;
+#endif
 	msurface_t *sf;
 	int ibo_size;
 	int vbo_size;
@@ -805,6 +822,11 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 	if ( !qglBindBufferARB || !r_vbo->integer )
 		return;
 
+	if (!qglGenProgramsARB) {
+		ri.Printf( PRINT_WARNING, "... ARB shaders required for VBO\n" );
+		return;
+	}
+	
 	if ( glConfig.numTextureUnits < 3 ) {
 		ri.Printf( PRINT_WARNING, "... not enough texture units for VBO\n" );
 		return;
@@ -849,6 +871,7 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 			sf->shader->numIndexes += (foliage->numIndexes * foliage->numInstances);
 			continue;
 		}
+#ifdef USE_VBO_GRID
 		grid = (srfGridMesh_t *) sf->data;
 		if ( grid->surfaceType == SF_GRID && isStaticShader( sf->shader ) ) {
 			grid->vboItemIndex = ++numStaticSurfaces;
@@ -861,6 +884,7 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 			sf->shader->numIndexes += grid->vboExpectIndices;
 			continue;
 		}
+#endif // USE_VBO_GRID
 	}
 
 	if ( numStaticSurfaces == 0 ) {
@@ -923,11 +947,13 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 			surfList[ n++ ] = sf;
 			continue;
 		}
+#ifdef USE_VBO_GRID
 		grid = (srfGridMesh_t *) sf->data;
 		if ( grid->surfaceType == SF_GRID && grid->vboItemIndex ) {
 			surfList[ n++ ] = sf;
 			continue;
 		}
+#endif
 	}
 
 	if ( n != numStaticSurfaces ) {
@@ -949,15 +975,19 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 		face = (srfSurfaceFace_t *) sf->data;
 		tris = (srfTriangles_t *) sf->data;
 		foliage = (srfFoliage_t *) sf->data;
+#ifdef USE_VBO_GRID
 		grid = (srfGridMesh_t *) sf->data;
+#endif
 		if ( face->surfaceType == SF_FACE )
 			face->vboItemIndex = i + 1;
 		else if ( tris->surfaceType == SF_TRIANGLES ) {
 			tris->vboItemIndex = i + 1;
 		} else if ( foliage->surfaceType == SF_FOLIAGE ) {
 			foliage->vboItemIndex = i + 1;
+#ifdef USE_VBO_GRID
 		} else if ( grid->surfaceType == SF_GRID ) {
 			grid->vboItemIndex = i + 1;
+#endif // USE_VBO_GRID
 		} else {
 			ri.Error( ERR_DROP, "Unexpected surface type" );
 		}
@@ -974,12 +1004,14 @@ void R_BuildWorldVBO( msurface_t *surf, int surfCount )
 		rb_surfaceTable[ *sf->data ]( sf->data ); // VBO_PushData() may be called multiple times there
 		// setup colors and texture coordinates
 		VBO_PushData( i + 1, &tess );
+#ifdef USE_VBO_GRID
 		if ( grid->surfaceType == SF_GRID ) {
 			vbo_item_t *vi = vbo->items + i + 1;
 			if ( vi->num_vertexes != grid->vboExpectVertices || vi->num_indexes != grid->vboExpectIndices ) {
 				ri.Error( ERR_DROP, "Unexpected grid vertexes/indexes count" );
 			}
 		}
+#endif // USE_VBO_GRID
 		tess.numIndexes = 0;
 		tess.numVertexes = 0;
 	}
@@ -1046,11 +1078,13 @@ __fail:
 			foliage->vboItemIndex = 0;
 			continue;
 		}
+#ifdef USE_VBO_GRID
 		grid = (srfGridMesh_t *) sf->data;
 		if ( grid->surfaceType == SF_GRID ) {
 			grid->vboItemIndex = 0;
 			continue;
 		}
+#endif // USE_VBO_GRID
 	}
 
 	VBO_UnBind();
@@ -1410,6 +1444,11 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 			stateBits &= ~GLS_ATEST_BITS; // done in shaders
 		}
 
+		if ( r_lightmap->integer && ( pStage->bundle[0].isLightmap || pStage->bundle[1].isLightmap ) ) {
+			stateBits &= ~(GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS);
+			stateBits |= (GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO);
+		}
+
 		GL_State( stateBits );
 
 		if ( pStage->tessFlags & ( TESS_ENV0 | TESS_ENV1 ) ) {
@@ -1603,3 +1642,5 @@ void RB_StageIteratorVBO( void )
 	tess.vboIndex = 0;
 	VBO_ClearQueue();
 }
+
+#endif // USE_VBO

@@ -40,8 +40,8 @@ If you have questions concerning this license or the applicable additional terms
 #include <direct.h>
 #include <io.h>
 
-#if !defined(DEDICATED) && defined(USE_STEAMAPI)
-#include "../../steam/steamshim_child.h"
+#if defined(USE_SDL3) && !defined(DEDICATED)
+#include <SDL3/SDL_main.h>
 #endif
 
 #define MEM_THRESHOLD (96*1024*1024)
@@ -55,6 +55,7 @@ Sys_LowPhysicalMemory
 */
 qboolean Sys_LowPhysicalMemory( void ) {
 	MEMORYSTATUSEX statex;
+	ZeroMemory( &statex, sizeof( statex ) );
 	statex.dwLength = sizeof( statex );
 
 	GlobalMemoryStatusEx( &statex );
@@ -84,10 +85,13 @@ void Sys_StartProcess( const char *exeName, qboolean doexit ) {
 	// JPW NERVE swiped from Sherman's SP code
 	if ( !CreateProcess( NULL, temp, NULL, NULL,FALSE, 0, NULL, NULL, &si, &pi ) ) {
 		// couldn't start it, popup error box
-		Com_Error( ERR_DROP, "Could not start process: '%s\\%s' ", szPathOrig, exeName  );
+		Com_Error( ERR_DROP, "Could not start process: '%s\\%s'", szPathOrig, exeName );
 		return;
 	}
 	// jpw
+
+	CloseHandle( pi.hProcess );
+	CloseHandle( pi.hThread );
 
 	// TTimo: similar way of exiting as used in Sys_OpenURL below
 	if ( doexit ) {
@@ -133,15 +137,6 @@ void Sys_OpenURL( const char *url, qboolean doexit ) {
 	}
 }
 
-/*
-==================
-Sys_BeginProfiling
-==================
-*/
-void Sys_BeginProfiling( void ) {
-	// this is just used on the mac build
-}
-
 
 /*
 =============
@@ -150,7 +145,7 @@ Sys_Error
 Show the early console as an error dialog
 =============
 */
-void NORETURN FORMAT_PRINTF(1, 2) QDECL Sys_Error( const char *error, ... ) {
+void Q_NO_RETURN Q_PRINTF_FUNC(1, 2) QDECL Sys_Error( const char *error, ... ) {
 	va_list	argptr;
 	char	text[4096];
 	MSG		msg;
@@ -182,6 +177,8 @@ void NORETURN FORMAT_PRINTF(1, 2) QDECL Sys_Error( const char *error, ... ) {
 		DispatchMessage( &msg );
 	}
 
+	SetUnhandledExceptionFilter( NULL );
+
 	Sys_DestroyConsole();
 
 	exit( 1 );
@@ -193,11 +190,14 @@ void NORETURN FORMAT_PRINTF(1, 2) QDECL Sys_Error( const char *error, ... ) {
 Sys_Quit
 ==============
 */
-void NORETURN Sys_Quit( void ) {
+void Q_NO_RETURN Sys_Quit( void ) {
 
 	timeEndPeriod( 1 );
 
+	SetUnhandledExceptionFilter( NULL );
+
 	Sys_DestroyConsole();
+
 	exit( 0 );
 }
 
@@ -210,6 +210,33 @@ Sys_Print
 void Sys_Print( const char *msg )
 {
 	Conbuf_AppendText( msg );
+}
+
+
+/*
+=============
+Sys_Sleep
+=============
+*/
+void Sys_Sleep( int msec ) {
+
+	if ( msec < 0 ) {
+		// special case: wait for event or network packet
+		DWORD dwResult;
+		msec = 300;
+		do {
+			dwResult = MsgWaitForMultipleObjects( 0, NULL, FALSE, msec, QS_ALLEVENTS );
+		}
+		while ( dwResult == WAIT_TIMEOUT && NET_Sleep( 10 * 1000 ) );
+		//WaitMessage();
+		return;
+	}
+
+	// busy wait there because Sleep(0) will relinquish CPU - which is not what we want
+	//if ( msec == 0 )
+	//	return;
+
+	Sleep( msec );
 }
 
 
@@ -319,8 +346,13 @@ const char *Sys_Pwd( void )
 		*s = '\0';
 	else // bogus case?
 	{
-		_getcwd( pwd, sizeof( pwd ) - 1 );
-		pwd[ sizeof( pwd ) - 1 ] = '\0';
+		if ( _getcwd( pwd, sizeof( pwd ) - 1 ) != NULL )
+			pwd[ sizeof( pwd ) - 1 ] = '\0';
+		else
+		{
+			pwd[0] = '\0';
+			return pwd;
+		}
 	}
 
 	return pwd;
@@ -346,199 +378,150 @@ DIRECTORY SCANNING
 ==============================================================
 */
 
-void Sys_ListFilteredFiles( const char *basedir, const char *subdirs, const char *filter, char **list, int *numfiles ) {
-	char		search[MAX_OSPATH*2+1];
-	char		newsubdirs[MAX_OSPATH*2];
-	char		filename[MAX_OSPATH*2];
-	intptr_t	findhandle;
-	struct _finddata_t findinfo;
-
-	if ( *numfiles >= MAX_FOUND_FILES - 1 ) {
-		return;
-	}
-
-	if ( basedir[0] == '\0' ) {
-		return;
-	}
-
-	if ( *subdirs ) {
-		Com_sprintf( search, sizeof(search), "%s\\%s\\*", basedir, subdirs );
-	}
-	else {
-		Com_sprintf( search, sizeof(search), "%s\\*", basedir );
-	}
-
-	findhandle = _findfirst (search, &findinfo);
-	if (findhandle == -1) {
-		return;
-	}
-
-	do {
-		if (findinfo.attrib & _A_SUBDIR) {
-			if ( !Q_streq( findinfo.name, "." ) && !Q_streq( findinfo.name, ".." ) ) {
-				if ( *subdirs ) {
-					Com_sprintf( newsubdirs, sizeof(newsubdirs), "%s\\%s", subdirs, findinfo.name );
-				} else {
-					Com_sprintf( newsubdirs, sizeof(newsubdirs), "%s", findinfo.name );
-				}
-				Sys_ListFilteredFiles( basedir, newsubdirs, filter, list, numfiles );
-			}
-		}
-		if ( *numfiles >= MAX_FOUND_FILES - 1 ) {
-			break;
-		}
-		Com_sprintf( filename, sizeof(filename), "%s\\%s", subdirs, findinfo.name );
-		if ( !Com_FilterPath( filter, filename ) )
-			continue;
-		list[ *numfiles ] = FS_CopyString( filename );
-		(*numfiles)++;
-	} while ( _findnext (findhandle, &findinfo) != -1 );
-
-	_findclose (findhandle);
-}
-
 
 /*
 =============
-Sys_Sleep
+Sys_ListExtFiles
 =============
 */
-void Sys_Sleep( int msec ) {
-	
-	if ( msec < 0 ) {
-		// special case: wait for event or network packet
-		DWORD dwResult;
-		msec = 300;
-		do {
-			dwResult = MsgWaitForMultipleObjects( 0, NULL, FALSE, msec, QS_ALLEVENTS );
-		} while ( dwResult == WAIT_TIMEOUT && NET_Sleep( 10 * 1000 ) );
-		//WaitMessage();
-		return;
-	}
-
-	// busy wait there because Sleep(0) will relinquish CPU - which is not what we want
-	//if ( msec == 0 )
-	//	return;
-
-	Sleep ( msec );
-}
-
-
-/*
-=============
-Sys_ListFiles
-=============
-*/
-char **Sys_ListFiles( const char *directory, const char *extension, const char *filter, int *numfiles, qboolean wantsubs ) {
+static int Sys_ListExtFiles( const char *directory, const char *subdir, const char *extension, const char *filter, char **list, int maxfiles, int subdirs ) {
 	char		search[MAX_OSPATH*2+MAX_QPATH+1];
+	char		filename[MAX_OSPATH * 2];
 	int			nfiles;
-	char		**listCopy;
-	char		*list[MAX_FOUND_FILES];
 	struct _finddata_t findinfo;
 	intptr_t	findhandle;
 	int			flag;
 	int			extLen;
-	int			length;
-	int			i;
 	const char	*x;
 	qboolean	hasPatterns;
 
-	if ( filter ) {
-
-		nfiles = 0;
-		Sys_ListFilteredFiles( directory, "", filter, list, &nfiles );
-
-		list[ nfiles ] = NULL;
-		*numfiles = nfiles;
-
-		if (!nfiles)
-			return NULL;
-
-		listCopy = Z_Malloc( ( nfiles + 1 ) * sizeof( listCopy[0] ) );
-		for ( i = 0 ; i < nfiles ; i++ ) {
-			listCopy[i] = list[i];
-		}
-		listCopy[i] = NULL;
-
-		return listCopy;
-	}
-
-	if ( directory[0] == '\0' ) {
-		*numfiles = 0;
-		return NULL;
-	}
-
-	if ( !extension ) {
-		extension = "";
-	}
-
 	// passing a slash as extension will find directories
-	if ( extension[0] == '/' && extension[1] == 0 ) {
+	if ( extension[0] == '/' && extension[1] == '\0' ) {
 		extension = "";
 		flag = 0;
 	} else {
 		flag = _A_SUBDIR;
 	}
 
-	Com_sprintf( search, sizeof(search), "%s\\*%s", directory, extension );
-
-	findhandle = _findfirst( search, &findinfo );
-	if ( findhandle == -1 ) {
-		*numfiles = 0;
-		return NULL;
-	}
-
 	extLen = (int)strlen( extension );
-	hasPatterns = Com_HasPatterns( extension );
+	hasPatterns = Com_HasPatterns( extension ); // contains either '?' or '*'
 	if ( hasPatterns && extension[0] == '.' && extension[1] != '\0' ) {
 		extension++;
 	}
 
-	// search
 	nfiles = 0;
 
+	if ( *subdir != '\0' ) {
+		Com_sprintf( search, sizeof( search ), "%s\\%s\\*", directory, subdir );
+	} else {
+		Com_sprintf( search, sizeof( search ), "%s\\*", directory );
+	}
+
+	if ( subdirs > 0 ) {
+		// handle recursion
+		findhandle = _findfirst( search, &findinfo );
+		if ( findhandle != -1 ) {
+			do {
+				if ( findinfo.attrib & _A_SUBDIR ) {
+					if ( !Q_streq( findinfo.name, "." ) && !Q_streq( findinfo.name, ".." ) ) {
+						char subdir2[MAX_OSPATH * 2 + MAX_QPATH + 1];
+						if ( *subdir != '\0' ) {
+							Com_sprintf( subdir2, sizeof( subdir2 ), "%s\\%s", subdir, findinfo.name );
+						} else {
+							Q_strncpyz( subdir2, findinfo.name, sizeof( subdir2 ) );
+						}
+						if ( nfiles >= maxfiles ) {
+							break;
+						}
+						nfiles += Sys_ListExtFiles( directory, subdir2, extension, filter, list + nfiles, maxfiles - nfiles, subdirs - 1);
+					}
+				}
+			} while ( _findnext( findhandle, &findinfo ) == 0 );
+		}
+		_findclose( findhandle );
+	}
+
+	Q_strcat( search, sizeof( search ), extension );
+
+	findhandle = _findfirst( search, &findinfo );
+	if ( findhandle == -1 ) {
+		return nfiles;
+	}
+
 	do {
-		if ( (!wantsubs && flag ^ ( findinfo.attrib & _A_SUBDIR )) || (wantsubs && findinfo.attrib & _A_SUBDIR) ) {
-			if ( nfiles == MAX_FOUND_FILES - 1 ) {
-				break;
+		if ( flag ^ ( findinfo.attrib & _A_SUBDIR ) ) {
+			if ( *subdir != '\0' ) {
+				Com_sprintf( filename, sizeof( filename ), "%s\\%s", subdir, findinfo.name );
+			} else {
+				Q_strncpyz( filename, findinfo.name, sizeof( filename ) );
 			}
-			if ( *extension ) {
+			if ( filter != NULL && *filter != '\0' ) {
+				if ( !Com_FilterPath( filter, filename ) ) {
+					continue;
+				}
+			} else if ( *extension != '\0' ) {
 				if ( hasPatterns ) {
 					x = strrchr( findinfo.name, '.' );
-					if ( !x || !Com_FilterExt( extension, x+1 ) ) {
+					if ( x == NULL || !Com_FilterExt( extension, x + 1 ) ) {
 						continue;
 					}
 				} else {
-					length = strlen( findinfo.name );
+					// check for exact extension
+					const int length = strlen( findinfo.name );
 					if ( length < extLen || Q_stricmp( findinfo.name + length - extLen, extension ) ) {
 						continue;
 					}
 				}
 			}
-			list[ nfiles ] = FS_CopyString( findinfo.name );
-			nfiles++;
+			if ( nfiles >= maxfiles ) {
+				break;
+			}
+			list[ nfiles++ ] = FS_CopyString( filename );
 		}
-	} while ( _findnext (findhandle, &findinfo) != -1 );
+	} while ( _findnext( findhandle, &findinfo ) == 0 );
 
-	list[ nfiles ] = NULL;
+	_findclose( findhandle );
 
-	_findclose (findhandle);
+	return nfiles;
 
-	// return a copy of the list
-	*numfiles = nfiles;
+}
 
-	if ( !nfiles ) {
-		return NULL;
+char** Sys_ListFiles( const char *directory, const char *extension, const char *filter, int *numfiles, int subdirs )
+{
+	char** listCopy;
+	char* list[MAX_FOUND_FILES];
+	int		i, nfiles;
+
+	if ( extension == NULL ) {
+		extension = "";
 	}
 
-	listCopy = Z_Malloc( ( nfiles + 1 ) * sizeof( listCopy[0] ) );
-	for ( i = 0 ; i < nfiles ; i++ ) {
+	nfiles = Sys_ListExtFiles( directory, "", extension, filter, list, ARRAY_LEN( list ), subdirs );
+
+	// copy list from stack, reserve extra space for NULL
+	listCopy = Z_Malloc( (nfiles + 1) * sizeof( listCopy[0] ) );
+	for ( i = 0; i < nfiles; i++ ) {
 		listCopy[i] = list[i];
 	}
 	listCopy[i] = NULL;
 
-	Com_SortFileList( listCopy, nfiles, extension[0] != '\0' );
+	if ( nfiles > 1 ) {
+		Com_SortList( listCopy, nfiles - 1 );
+		if ( nfiles > 2 ) {
+			if ( Q_streq( listCopy[0], "." ) && Q_streq( listCopy[1], ".." ) ) {
+				// emulate old strgtr() function sort behavior for special entries
+				char* dot1 = listCopy[0];
+				char* dot2 = listCopy[1];
+				for ( i = 0; i < nfiles - 2; i++ ) {
+					listCopy[i] = listCopy[i + 2];
+				}
+				listCopy[nfiles - 2] = dot1;
+				listCopy[nfiles - 1] = dot2;
+			}
+		}
+	}
 
+	*numfiles = nfiles;
 	return listCopy;
 }
 
@@ -603,6 +586,26 @@ int Sys_PathIsDir( const char *path ) {
 		return 1;
 	}
 	return 0;
+}
+
+
+qboolean Sys_PathCmp( const char *path1, const char *path2 )
+{
+	char *r1, *r2;
+
+	r1 = _fullpath(NULL, path1, MAX_OSPATH);
+	r2 = _fullpath(NULL, path2, MAX_OSPATH);
+
+	if(r1 && r2 && !Q_stricmp(r1, r2))
+	{
+		free(r1);
+		free(r2);
+		return qtrue;
+	}
+
+	free(r1);
+	free(r2);
+	return qfalse;
 }
 
 
@@ -1065,7 +1068,15 @@ static LONG WINAPI ExceptionFilter( struct _EXCEPTION_POINTERS *ExceptionInfo )
 WinMain
 ==================
 */
-int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow ) 
+#if defined( USE_SDL3 ) && !defined( DEDICATED )
+void Sys_GetSDLVersion( uint32_t *major, uint32_t *minor, uint32_t *patch );
+#endif
+
+#if defined(USE_SDL3)
+int main( int argc, char **argv )
+#else
+int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow )
+#endif
 {
 	static char	sys_cmdline[ MAX_STRING_CHARS ];
 	char con_title[ MAX_CVAR_VALUE_STRING ];
@@ -1073,11 +1084,17 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	qboolean useXYpos;
 	HANDLE hProcess;
 	DWORD dwPriority;
+#if defined( USE_SDL3 ) && !defined( DEDICATED )
+	uint32_t major, minor, patch;
+	Sys_GetSDLVersion( &major, &minor, &patch );
+#endif
 
+#if !defined(USE_SDL3)
 	// should never get a previous instance in Win32
 	if ( hPrevInstance ) {
 		return 0;
 	}
+#endif
 
 	// slightly boost process priority if it set to default
 	hProcess = GetCurrentProcess();
@@ -1088,8 +1105,13 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	SetupDPIAwareness();
 
+#if defined(USE_SDL3)
+	g_wv.hInstance = (HINSTANCE)GetModuleHandle(NULL);
+	Q_strncpyz( sys_cmdline, GetCommandLine(), sizeof( sys_cmdline ) );
+#else
 	g_wv.hInstance = hInstance;
 	Q_strncpyz( sys_cmdline, lpCmdLine, sizeof( sys_cmdline ) );
+#endif
 
 	useXYpos = Com_EarlyParseCmdLine( sys_cmdline, con_title, sizeof( con_title ), &xpos, &ypos );
 
@@ -1102,6 +1124,10 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	SetUnhandledExceptionFilter( ExceptionFilter );
 
 	Com_Init( sys_cmdline );
+
+#if ( defined( USE_SDL2 ) || defined( USE_SDL3 ) ) && !defined( DEDICATED )
+	Com_Printf( "Using SDL Version %u.%u.%u\n", major, minor, patch );
+#endif
 
 	// hide the early console since we've reached the point where we
 	// have a working graphics subsystems
@@ -1131,107 +1157,6 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	return 0;
 }
 
-qboolean Sys_IsNumLockDown( void ) {
-	// thx juz ;)
-	SHORT state = GetKeyState( VK_NUMLOCK );
-
-	if ( state & 0x01 ) {
-		return qtrue;
-	}
-
-	return qfalse;
-}
-
 int Sys_GetPID( void ) {
 	return (int)GetCurrentProcessId();
 }
-
-HINSTANCE omnibotHandle = NULL;
-typedef void (*pfnOmnibotRenderOGL)();
-pfnOmnibotRenderOGL gOmnibotRenderFunc = 0;
-
-void	Sys_OmnibotLoad()
-{
-	const char *omnibotPath = Cvar_VariableString( "omnibot_path" );
-	const char *omnibotLibrary = Cvar_VariableString( "omnibot_library" );
-	if ( omnibotLibrary != NULL && omnibotLibrary[0] != '\0' )
-	{
-		if ( omnibotPath != NULL && omnibotPath[0] != '\0' ) {
-			omnibotHandle = Sys_LoadLibrary(va("%s/%s.dll", omnibotPath, omnibotLibrary));	
-		}
-		else {
-			omnibotHandle = Sys_LoadLibrary( va("%s.dll", omnibotLibrary ) );
-		}
-		if ( omnibotHandle )
-		{
-			gOmnibotRenderFunc = (pfnOmnibotRenderOGL)Sys_LoadFunction( omnibotHandle, "RenderOpenGL" );
-		}
-	}
-}
-
-
-void	Sys_OmnibotUnLoad()
-{
-	Sys_UnloadLibrary( omnibotHandle );
-	omnibotHandle = NULL;
-}
-
-const void * Sys_OmnibotRender( const void * data )
-{
-	renderOmnibot_t * cmd = (renderOmnibot_t*)data;
-	if ( gOmnibotRenderFunc )
-	{
-		gOmnibotRenderFunc();
-	}
-	return (const void *)( cmd + 1 );
-}
-
-
-/*
-================
-Sys_SteamInit
-================
-*/
-
-#ifndef DEDICATED
-
-void Sys_SteamInit()
-{
-#if defined(USE_STEAMAPI)
-#if (idx64 || id386)
-	/*if (!Cvar_VariableIntegerValue("com_steamIntegration"))
-	{
-		// Don't do anything if com_steamIntegration is disabled
-		return;
-	}*/
-
-	if (!STEAMSHIM_init())
-	{
-		Com_Printf(S_COLOR_RED "Steam integration failed: Steam init failed. Ensure steam_appid.txt exists and is valid.\n");
-		return;
-	}
-	Com_Printf(S_COLOR_CYAN "Steam integration success!\n" );
-#endif
-#endif
-}
-
-
-/*
-================
-Sys_SteamShutdown
-================
-*/
-void Sys_SteamShutdown()
-{
-#if defined(USE_STEAMAPI)
-#if (idx64 || id386)
-	if(!STEAMSHIM_alive())
-	{
-		Com_Printf("Skipping Steam integration shutdown...\n");
-		return;
-	}
-	STEAMSHIM_deinit();
-#endif
-#endif
-}
-#endif

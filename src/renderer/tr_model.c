@@ -54,27 +54,15 @@ static qhandle_t R_RegisterMD3(const char *name, model_t *mod)
 	int			lod;
 	uint32_t	ident = 0;
 	qboolean	loaded = qfalse;
-	int			numLoaded;
 	int			fileSize;
 	char filename[MAX_QPATH], namebuf[MAX_QPATH+20];
-	char *fext, defex[] = "md3";
+	const char *fext;
 
-	numLoaded = 0;
+	fext = COM_GetExtension(name); // always non-empty
+	COM_StripExtension(name, filename, sizeof(filename));
 
-	strcpy(filename, name);
-
-	fext = strchr(filename, '.');
-	if(!fext)
-		fext = defex;
-	else
-	{
-		*fext = '\0';
-		fext++;
-	}
-
-	for (lod = MD3_MAX_LODS - 1 ; lod >= 0 ; lod--)
-	{
-		if(lod)
+	for ( lod = 0 ; lod < MD3_MAX_LODS ; lod++ ) {
+		if ( lod )
 			Com_sprintf(namebuf, sizeof(namebuf), "%s_%d.%s", filename, lod, fext);
 		else
 			Com_sprintf(namebuf, sizeof(namebuf), "%s.%s", filename, fext);
@@ -90,41 +78,31 @@ static qhandle_t R_RegisterMD3(const char *name, model_t *mod)
 		}
 		
 		ident = LittleLong( *buf.u );
-		if ( ident == MD3_IDENT )
+		if ( ident == MD3_IDENT ) {
 			loaded = R_LoadMD3( mod, lod, buf.v, fileSize, name );
-		else if ( ident == MDC_IDENT ) {
+		} else if ( ident == MDC_IDENT ) {
 			loaded = R_LoadMDC( mod, lod, buf.u, fileSize, name );
 			ri.Printf( PRINT_WARNING, "%s: mismatched fileid for %s, loading as mdc\n", __func__, name);
-		}
-		else
+		} else {
 			ri.Printf( PRINT_WARNING, "%s: unknown fileid for %s\n", __func__, name );
+			loaded = qfalse;
+		}
 		
 		ri.FS_FreeFile( buf.v );
 
-		if ( loaded )
-		{
+		if ( loaded ) {
 			mod->numLods++;
-			numLoaded++;
-		}
-		else
-			break;
-	}
-
-	if ( numLoaded )
-	{
-		// duplicate into higher lod spots that weren't
-		// loaded, in case the user changes r_lodbias on the fly
-		for ( lod--; lod >= 0; lod-- )
-		{
-			mod->numLods++;
+		} else {
 			if ( ident == MDC_IDENT )
-				mod->model.mdc[lod] = mod->model.mdc[lod + 1];
+				mod->model.mdc[mod->numLods] = NULL;
 			else
-				mod->model.md3[lod] = mod->model.md3[lod + 1];
+				mod->model.md3[mod->numLods] = NULL;
+			break;
 		}
-
-		return mod->index;
 	}
+
+	if ( mod->numLods )
+		return mod->index;
 
 	ri.Printf( PRINT_DEVELOPER, S_COLOR_YELLOW "%s: couldn't load %s\n", __func__, name );
 
@@ -146,77 +124,55 @@ static qhandle_t R_RegisterMDC(const char *name, model_t *mod)
 	int			lod;
 	uint32_t	ident = 0;
 	qboolean	loaded = qfalse;
-	int			numLoaded;
 	int			fileSize;
 	char filename[MAX_QPATH], namebuf[MAX_QPATH+20];
-	char *fext, defex[] = "mdc";
+	const char *fext;
 
-	numLoaded = 0;
+	fext = COM_GetExtension(name); // always non-empty
+	COM_StripExtension(name, filename, sizeof(filename));
 
-	strcpy(filename, name);
-
-	fext = strchr(filename, '.');
-	if(!fext)
-		fext = defex;
-	else
-	{
-		*fext = '\0';
-		fext++;
-	}
-
-	for (lod = MD3_MAX_LODS - 1 ; lod >= 0 ; lod--)
-	{
-		if(lod)
+	for ( lod = 0 ; lod < MD3_MAX_LODS ; lod++ ) {
+		if ( lod )
 			Com_sprintf(namebuf, sizeof(namebuf), "%s_%d.%s", filename, lod, fext);
 		else
 			Com_sprintf(namebuf, sizeof(namebuf), "%s.%s", filename, fext);
 
 		fileSize = ri.FS_ReadFile( namebuf, &buf.v );
-		if ( !buf.u )
+		if ( !buf.v )
 			continue;
 
-		if ( fileSize < sizeof( mdcHeader_t ) ) {
+		if ( fileSize < sizeof( md3Header_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: truncated header for %s\n", __func__, name );
 			ri.FS_FreeFile( buf.v );
 			break;
 		}
 		
 		ident = LittleLong( *buf.u );
-		if ( ident == MDC_IDENT )
+		if ( ident == MDC_IDENT ) {
 			loaded = R_LoadMDC( mod, lod, buf.u, fileSize, name );
-		else if ( ident == MD3_IDENT ) {
+		} else if ( ident == MD3_IDENT ) {
 			loaded = R_LoadMD3( mod, lod, buf.u, fileSize, name );
-			ri.Printf( PRINT_WARNING, "%s: mismatched fileid for %s, loading as md3\n", __func__, name);
+			ri.Printf( PRINT_WARNING, "%s: mismatched fileid for %s, loading as md3\n", __func__, name );
+		} else {
+			ri.Printf( PRINT_WARNING, "%s: unknown fileid for %s\n", __func__, name );
+			loaded = qfalse;
 		}
-		else
-			ri.Printf( PRINT_WARNING, "%s: unknown fileid for %s\n", __func__, name);
 		
 		ri.FS_FreeFile( buf.v );
 
-		if(loaded)
-		{
+		if ( loaded ) {
 			mod->numLods++;
-			numLoaded++;
-		}
-		else
-			break;
-	}
-
-	if(numLoaded)
-	{
-		// duplicate into higher lod spots that weren't
-		// loaded, in case the user changes r_lodbias on the fly
-		for(lod--; lod >= 0; lod--)
-		{
-			mod->numLods++;
+		} else {
 			if ( ident == MD3_IDENT )
-				mod->model.md3[lod] = mod->model.md3[lod + 1];
+				mod->model.md3[mod->numLods] = NULL;
 			else
-				mod->model.mdc[lod] = mod->model.mdc[lod + 1];
+				mod->model.mdc[mod->numLods] = NULL;
+			break;
 		}
-
-		return mod->index;
 	}
+
+	if ( mod->numLods )
+		return mod->index;
 
 //#ifdef _DEBUG
 //	ri.Printf(PRINT_WARNING, "R_RegisterMDC: couldn't load %s\n", name);
@@ -237,7 +193,7 @@ static qhandle_t R_RegisterMDS(const char *name, model_t *mod)
 		uint32_t *u;
 		void *v;
 	} buf;
-	uint32_t	ident;
+	uint32_t	ident = 0;
 	qboolean loaded = qfalse;
 	int fileSize;
 
@@ -468,7 +424,7 @@ R_LoadModelShadow()
 loads a model's shadow script
 */
 
-void R_LoadModelShadow( model_t *mod ) {
+static void R_LoadModelShadow( model_t *mod ) {
 	union {
 		char *c;
 		void *v;
@@ -548,11 +504,6 @@ qhandle_t RE_RegisterModel( const char *name ) {
 		return 0;
 	}
 
-	// Ridah, caching
-	if ( r_cacheGathering->integer ) {
-		ri.Cmd_ExecuteText( EXEC_NOW, va( "cache_usedfile model %s\n", name ) );
-	}
-
 	//
 	// search the currently loaded models
 	//
@@ -577,13 +528,6 @@ qhandle_t RE_RegisterModel( const char *name ) {
 	Q_strncpyz( mod->name, name, sizeof( mod->name ) );
 
 	//R_IssuePendingRenderCommands();
-
-	// Ridah, look for it cached
-	if ( R_FindCachedModel( name, mod ) ) {
-		R_LoadModelShadow( mod );
-		return mod->index;
-	}
-	// done.
 
 	R_LoadModelShadow( mod );
 
@@ -1090,8 +1034,8 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 	mdcTag_t            *tag;
 	mdcTagName_t		*tagName;
 	short               *ps;
-	int version;
-	int size;
+	uint32_t			version;
+	uint32_t			size, bytesToEnd;
 	qboolean fixRadius = qfalse;
 
 	pinmodel = (mdcHeader_t *)buffer;
@@ -1113,7 +1057,7 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 	mod->dataSize += size;
 	mod->model.mdc[lod] = ri.Hunk_Alloc( size, h_low );
 
-	memcpy( mod->model.mdc[lod], buffer, LittleLong( pinmodel->ofsEnd ) );
+	memcpy( mod->model.mdc[lod], buffer, size );
 
 	hdr = mod->model.mdc[lod];
 
@@ -1122,18 +1066,13 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 	LL( hdr->numFrames );
 	LL( hdr->numTags );
 	LL( hdr->numSurfaces );
+	LL( hdr->numSkins );
 	LL( hdr->ofsFrames );
 	LL( hdr->ofsTagNames );
 	LL( hdr->ofsTags );
 	LL( hdr->ofsSurfaces );
 	LL( hdr->ofsEnd );
 	LL( hdr->flags );
-	LL( hdr->numSkins );
-
-	if ( hdr->numFrames < 1 ) {
-		ri.Printf( PRINT_WARNING, "%s: %s has no frames\n", __func__, mod_name );
-		return qfalse;
-	}
 
 	if ( hdr->numFrames < 1 ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has no frames\n", __func__, mod_name );
@@ -1144,24 +1083,20 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
-	if ( (unsigned)( hdr->numFrames | hdr->numTags | hdr->numSkins ) > (1 << 20) ) {
-		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
-		return qfalse;
-	}
 
-	if ( hdr->ofsFrames + hdr->numFrames * sizeof( md3Frame_t ) > fileSize ) {
+	if ( hdr->numFrames > (size - hdr->ofsFrames) / sizeof( md3Frame_t ) ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
-	if ( hdr->ofsTagNames + hdr->numTags * sizeof( mdcTagName_t ) > fileSize ) {
+	if ( hdr->numTags > (size - hdr->ofsTagNames) / sizeof( mdcTagName_t ) ) {
+		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header (TagNames)\n", __func__, mod_name );
+		return qfalse;
+	}
+	if ( hdr->numTags > (size - hdr->ofsTags) / (sizeof( mdcTag_t ) * hdr->numFrames) ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
-	if ( hdr->ofsTags + hdr->numTags * hdr->numFrames * sizeof( mdcTag_t ) > fileSize ) {
-		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
-		return qfalse;
-	}
-	if ( hdr->ofsSurfaces + ( hdr->numSurfaces ? 1 : 0 ) * sizeof( mdcSurface_t ) > fileSize ) {
+	if ( hdr->numSurfaces > (size - hdr->ofsSurfaces) / sizeof( mdcSurface_t ) ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
@@ -1182,6 +1117,15 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 				frame->localOrigin[j] = LittleFloat( frame->localOrigin[j] );
 			}
 		}
+		// Hack for Bug using plugin generated model
+		else if ( frame->radius == 1 ) {
+			frame->radius = 256;
+			for ( j = 0 ; j < 3 ; j++ ) {
+				frame->bounds[0][j] = 128;
+				frame->bounds[1][j] = -128;
+				frame->localOrigin[j] = LittleFloat( frame->localOrigin[j] );
+			}
+		}
 		else {
 			for ( j = 0 ; j < 3 ; j++ ) {
 				frame->bounds[0][j] = LittleFloat( frame->bounds[0][j] );
@@ -1193,14 +1137,12 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 
 	// swap all the tags
 	tag = ( mdcTag_t * )( (byte *)hdr + hdr->ofsTags );
-	//if ( LittleLong( 1 ) != 1 ) {
-		for ( i = 0 ; i < hdr->numTags * hdr->numFrames ; i++, tag++ ) {
-			for ( j = 0 ; j < 3 ; j++ ) {
-				tag->xyz[j] = LittleShort( tag->xyz[j] );
-				tag->angles[j] = LittleShort( tag->angles[j] );
-			}
+	for ( i = 0 ; i < hdr->numTags * hdr->numFrames ; i++, tag++ ) {
+		for ( j = 0 ; j < 3 ; j++ ) {
+			tag->xyz[j] = LittleShort( tag->xyz[j] );
+			tag->angles[j] = LittleShort( tag->angles[j] );
 		}
-	//}
+	}
 
 	tagName = ( mdcTagName_t * )( (byte *)hdr + hdr->ofsTagNames );
 	for ( i = 0 ; i < hdr->numTags ; i++, tagName++ ) {
@@ -1211,6 +1153,14 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 	// swap all the surfaces
 	surf = ( mdcSurface_t * )( (byte *)hdr + hdr->ofsSurfaces );
 	for ( i = 0 ; i < hdr->numSurfaces ; i++ ) {
+
+		// how many bytes are remaining before end of file
+		bytesToEnd = size - ((byte*)surf - (byte*)hdr);
+
+		if ( bytesToEnd < sizeof(*surf)) {
+			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
+			return qfalse;
+		}
 
 		LL( surf->ident );
 		LL( surf->flags );
@@ -1228,40 +1178,36 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 		LL( surf->ofsFrameCompFrames );
 		LL( surf->ofsEnd );
 
-		if ( surf->ofsEnd > fileSize || (((byte*)surf - (byte*)hdr) + surf->ofsEnd) > fileSize ) {
+		if ( surf->ofsTriangles > bytesToEnd || surf->ofsShaders > bytesToEnd || surf->ofsSt > bytesToEnd || surf->ofsXyzNormals > bytesToEnd
+				|| surf->ofsXyzCompressed > bytesToEnd || surf->ofsFrameBaseFrames > bytesToEnd || surf->ofsFrameCompFrames > bytesToEnd || surf->ofsEnd > bytesToEnd ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsTriangles > fileSize || surf->ofsShaders > fileSize || surf->ofsSt > fileSize || surf->ofsXyzNormals > fileSize
-				|| surf->ofsXyzCompressed > fileSize || surf->ofsFrameBaseFrames > fileSize || surf->ofsFrameCompFrames > fileSize ) {
+		if ( surf->numTriangles > (bytesToEnd - surf->ofsTriangles) / sizeof( md3Triangle_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsTriangles + surf->numTriangles * sizeof( md3Triangle_t ) > fileSize ) {
+		if ( surf->numShaders > (bytesToEnd - surf->ofsShaders) / sizeof( md3Shader_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsShaders + surf->numShaders * sizeof( md3Shader_t ) > fileSize || surf->numShaders > (1<<20) ) {
+		if ( surf->numVerts > (bytesToEnd - surf->ofsSt) / sizeof( md3St_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsSt + surf->numVerts * sizeof( md3St_t ) > fileSize ) {
+		if ( surf->numBaseFrames > (bytesToEnd - surf->ofsXyzNormals) / (sizeof( md3XyzNormal_t ) * surf->numVerts) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsXyzNormals + surf->numVerts *surf->numBaseFrames * sizeof( md3XyzNormal_t ) > fileSize ) {
+		if ( surf->numCompFrames > (bytesToEnd - surf->ofsXyzCompressed) / (sizeof( mdcXyzCompressed_t ) * surf->numVerts) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsXyzCompressed + surf->numVerts *surf->numCompFrames * sizeof( mdcXyzCompressed_t ) > fileSize ) {
+		if ( hdr->numFrames > (bytesToEnd - surf->ofsFrameBaseFrames) / sizeof( short ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsFrameBaseFrames + hdr->numFrames * sizeof( short ) > fileSize ) {
-			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
-			return qfalse;
-		}
-		if ( surf->ofsFrameCompFrames + hdr->numFrames * sizeof( short ) > fileSize ) {
+		if ( hdr->numFrames > (bytesToEnd - surf->ofsFrameCompFrames) / sizeof( short ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
@@ -1272,7 +1218,7 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 				surf->numVerts );
 			return qfalse;
 		}
-		if ( surf->numTriangles*3 >= SHADER_MAX_INDEXES ) {
+		if ( surf->numTriangles >= SHADER_MAX_INDEXES / 3 ) {
 			ri.Printf(PRINT_WARNING, "%s: %s has more than %i triangles on %s (%i).\n", __func__,
 				mod_name, ( SHADER_MAX_INDEXES / 3 ) - 1, surf->name[0] ? surf->name : "a surface",
 				surf->numTriangles );
@@ -1282,11 +1228,11 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 		// change to surface identifier
 		surf->ident = SF_MDC;
 
-		// lowercase the surface name so skin compares are faster
-		Q_strlwr( surf->name );
-
 		// zero-terminate surface name
 		surf->name[sizeof( surf->name ) - 1] = '\0';
+
+		// lowercase the surface name so skin compares are faster
+		Q_strlwr( surf->name );
 
 		// strip off a trailing _1 or _2
 		// this is a crutch for q3data being a mess
@@ -1320,6 +1266,12 @@ static qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, int fileSize, co
 				LL( tri->indexes[0] );
 				LL( tri->indexes[1] );
 				LL( tri->indexes[2] );
+				if (tri->indexes[0] >= surf->numVerts ||
+					tri->indexes[1] >= surf->numVerts ||
+					tri->indexes[2] >= surf->numVerts) {
+					ri.Printf( PRINT_WARNING, "%s: %s has corrupted indexes\n", __func__, mod_name );
+					return qfalse;
+				}				
 			}
 
 			// swap all the ST
@@ -1388,9 +1340,9 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 	md3St_t             *st;
 	md3XyzNormal_t      *xyz;
 	md3Tag_t            *tag;
-	int version;
-	int size;
-	qboolean fixRadius = qfalse;
+	uint32_t			version;
+	uint32_t			size, bytesToEnd;
+	qboolean			fixRadius = qfalse;
 
 	pinmodel = (md3Header_t *)buffer;
 
@@ -1420,6 +1372,7 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 	LL( hdr->numFrames );
 	LL( hdr->numTags );
 	LL( hdr->numSurfaces );
+	LL( hdr->numSkins );
 	LL( hdr->ofsFrames );
 	LL( hdr->ofsTags );
 	LL( hdr->ofsSurfaces );
@@ -1434,20 +1387,16 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
-	if ( (unsigned)( hdr->numFrames | hdr->numTags | hdr->numSkins ) > (1 << 20) ) {
-		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
-		return qfalse;
-	}
 
-	if ( hdr->ofsFrames + hdr->numFrames * sizeof( md3Frame_t ) > fileSize ) {
+	if ( hdr->numFrames > (size - hdr->ofsFrames) / sizeof( md3Frame_t ) ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
-	if ( hdr->ofsTags + hdr->numTags * hdr->numFrames * sizeof( md3Tag_t ) > fileSize ) {
+	if ( hdr->numTags > (size - hdr->ofsTags) / (sizeof( md3Tag_t ) * hdr->numFrames) ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
-	if ( hdr->ofsSurfaces + ( hdr->numSurfaces ? 1 : 0 ) * sizeof( md3Surface_t ) > fileSize ) {
+	if ( hdr->numSurfaces > (size - hdr->ofsSurfaces) / sizeof( md3Surface_t ) ) {
 		ri.Printf( PRINT_WARNING, "%s: %s has corrupted header\n", __func__, mod_name );
 		return qfalse;
 	}
@@ -1503,6 +1452,14 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 	surf = ( md3Surface_t * )( (byte *)hdr + hdr->ofsSurfaces );
 	for ( i = 0 ; i < hdr->numSurfaces ; i++ ) {
 
+		// how many bytes are remaining before end of file
+		bytesToEnd = size - ((byte*)surf - (byte*)hdr);
+
+		if ( bytesToEnd < sizeof(*surf)) {
+			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
+			return qfalse;
+		}
+
 		LL( surf->ident );
 		LL( surf->flags );
 		LL( surf->numFrames );
@@ -1515,27 +1472,24 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 		LL( surf->ofsXyzNormals );
 		LL( surf->ofsEnd );
 
-		if ( surf->ofsEnd > fileSize || (((byte*)surf - (byte*)hdr) + surf->ofsEnd) > fileSize ) {
+		if ( surf->ofsTriangles > bytesToEnd || surf->ofsShaders > bytesToEnd || surf->ofsSt > bytesToEnd ||
+			 surf->ofsXyzNormals > bytesToEnd || surf->ofsEnd > bytesToEnd ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsTriangles > fileSize || surf->ofsShaders > fileSize || surf->ofsSt > fileSize || surf->ofsXyzNormals > fileSize ) {
+		if ( surf->numTriangles > (bytesToEnd - surf->ofsTriangles) / sizeof( md3Triangle_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsTriangles + surf->numTriangles * sizeof( md3Triangle_t ) > fileSize ) {
+		if ( surf->numShaders > (bytesToEnd - surf->ofsShaders) / sizeof( md3Shader_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsShaders + surf->numShaders * sizeof( md3Shader_t ) > fileSize || surf->numShaders > (1<<20) ) {
+		if ( surf->numVerts > (bytesToEnd - surf->ofsSt) / sizeof( md3St_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
-		if ( surf->ofsSt + surf->numVerts * sizeof( md3St_t ) > fileSize ) {
-			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
-			return qfalse;
-		}
-		if ( surf->ofsXyzNormals + surf->numVerts * sizeof( md3XyzNormal_t ) > fileSize ) {
+		if ( surf->numVerts > (bytesToEnd - surf->ofsXyzNormals) / sizeof( md3XyzNormal_t ) ) {
 			ri.Printf( PRINT_WARNING, "%s: %s has corrupted surface header\n", __func__, mod_name );
 			return qfalse;
 		}
@@ -1546,7 +1500,7 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 				surf->numVerts );
 			return qfalse;
 		}
-		if ( surf->numTriangles*3 >= SHADER_MAX_INDEXES ) {
+		if ( surf->numTriangles >= SHADER_MAX_INDEXES / 3 ) {
 			ri.Printf(PRINT_WARNING, "%s: %s has more than %i triangles on %s (%i).\n", __func__,
 				mod_name, ( SHADER_MAX_INDEXES / 3 ) - 1, surf->name[0] ? surf->name : "a surface",
 				surf->numTriangles );
@@ -1594,6 +1548,12 @@ static qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, int fileSize, co
 				LL( tri->indexes[0] );
 				LL( tri->indexes[1] );
 				LL( tri->indexes[2] );
+				if (tri->indexes[0] >= surf->numVerts ||
+					tri->indexes[1] >= surf->numVerts ||
+					tri->indexes[2] >= surf->numVerts) {
+					ri.Printf( PRINT_WARNING, "%s: %s has corrupted indexes\n", __func__, mod_name );
+					return qfalse;
+				}				
 			}
 
 			// swap all the ST
@@ -2178,7 +2138,7 @@ static qboolean R_LoadMDX( model_t *mod, void *buffer, int fileSize, const char 
 ** RE_BeginRegistration
 */
 void RE_BeginRegistration( glconfig_t *glconfigOut ) {
-	ri.Hunk_Clear();    // (SA) MEM NOTE: not in missionpack
+	//ri.Hunk_ClearToMark();    // (SA) MEM NOTE: not in missionpack
 
 	R_Init();
 
@@ -2206,10 +2166,6 @@ void R_ModelInit( void ) {
 
 	mod = R_AllocModel();
 	mod->type = MOD_BAD;
-
-	// Ridah, load in the cacheModels
-	R_LoadCacheModels();
-	// done.
 }
 
 
@@ -2219,7 +2175,7 @@ R_Modellist_f
 ================
 */
 void R_Modellist_f( void ) {
-	int i, j;
+	int i;
 	const model_t *mod;
 	int total = 0, models = 0;
 	const char *match;
@@ -2231,19 +2187,13 @@ void R_Modellist_f( void ) {
 
 	total = 0;
 	for ( i = 1 ; i < tr.numModels; i++ ) {
-		int lods = 1;
 		mod = tr.models[i];
 
 		if ( match && !ri.Com_Filter( match, mod->name ) ) {
 			continue;
 		}
 
-		for ( j = 1 ; j < MD3_MAX_LODS ; j++ ) {
-			if ( mod->model.md3[j] && mod->model.md3[j] != mod->model.md3[j - 1] ) {
-				lods++;
-			}
-		}
-		ri.Printf( PRINT_ALL, "%8i : (%i) %s\n", mod->dataSize, lods, mod->name );
+		ri.Printf( PRINT_ALL, "%8i : (%i) %s\n", mod->dataSize, mod->numLods, mod->name );
 		total += mod->dataSize;
 		models++;
 	}
@@ -2507,11 +2457,10 @@ int R_LerpTag( orientation_t *tag, const refEntity_t *refent, const char *tagNam
 R_TagInfo_f
 ===============
 */
-void R_TagInfo_f( void ) {
+/*void R_TagInfo_f( void ) {
 
 	Com_Printf( "command not functional\n" );
 
-/*
 	int handle;
 	orientation_t tag;
 	int frame = -1;
@@ -2541,8 +2490,8 @@ void R_TagInfo_f( void ) {
 	R_LerpTag( &tag, handle, frame, frame, 0.0, (const char *)ri.Cmd_Argv(2) );
 
 	Com_Printf("%s at position: %.1f %.1f %.1f\n", ri.Cmd_Argv(2), tag.origin[0], tag.origin[1], tag.origin[2] );
-*/
-}
+
+}*/
 
 /*
 ====================
@@ -2594,405 +2543,3 @@ void R_ModelBounds( qhandle_t handle, vec3_t mins, vec3_t maxs ) {
 	VectorClear( maxs );
 	// done.
 }
-
-//---------------------------------------------------------------------------
-// Virtual Memory, used for model caching, since we can't allocate them
-// in the main Hunk (since it gets cleared on level changes), and they're
-// too large to go into the Zone, we have a special memory chunk just for
-// caching models in between levels.
-//
-// Optimized for Win32 systems, so that they'll grow the swapfile at startup
-// if needed, but won't actually commit it until it's needed.
-//
-// GOAL: reserve a big chunk of virtual memory for the media cache, and only
-// use it when we actually need it. This will make sure the swap file grows
-// at startup if needed, rather than each allocation we make.
-byte    *membase = NULL;
-//size_t hunkmaxsize;
-size_t cursize;
-
-#define R_HUNK_MEGS     24
-#define R_HUNK_SIZE     ( R_HUNK_MEGS*1024*1024 )
-
-void *R_Hunk_Begin( void ) {
-	//int maxsize = R_HUNK_SIZE;
-
-	//Com_Printf("R_Hunk_Begin\n");
-
-	// reserve a huge chunk of memory, but don't commit any yet
-	cursize = 0;
-	//hunkmaxsize = maxsize;
-
-	if ( !membase ) {
-#ifdef _WIN32
-		// this will "reserve" a chunk of memory for use by this application
-		// it will not be "committed" just yet, but the swap file will grow
-		// now if needed
-		membase = VirtualAlloc( NULL, R_HUNK_SIZE, MEM_RESERVE, PAGE_NOACCESS );
-#else
-		// show_bug.cgi?id=440
-		// if not win32, then just allocate it now
-		// it is possible that we have been allocated already, in case we don't do anything
-		membase = malloc( R_HUNK_SIZE );
-		// TTimo NOTE: initially, I was doing the memset even if we had an existing membase
-		// but this breaks some shaders (i.e. /map mp_beach, then go back to the main menu .. some shaders are missing)
-		// I assume the shader missing is because we don't clear memory either on win32
-		// meaning even on win32 we are using memory that is still reserved but was uncommited .. it works out of pure luck
-		memset( membase, 0, R_HUNK_SIZE );
-#endif
-	}
-
-	if ( !membase ) {
-		ri.Error( ERR_DROP, "R_Hunk_Begin: reserve failed" );
-	}
-
-	return (void *)membase;
-}
-
-void *R_Hunk_Alloc( size_t size ) {
-#ifdef _WIN32
-	void    *buf;
-#endif
-
-	// round to cacheline
-	size = PAD( size, 32 );
-
-	if ( cursize+size > R_HUNK_SIZE ) {
-		ri.Error( ERR_DROP, "R_Hunk_Alloc overflow (%zu bytes > %i bytes)", cursize+size, R_HUNK_SIZE );
-	}
-
-#ifdef _WIN32
-	// commit pages as needed
-	buf = VirtualAlloc( membase, cursize + size, MEM_COMMIT, PAGE_READWRITE );
-
-	if ( !buf ) {
-		char msg[512];
-		FormatMessageA( FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ), msg, sizeof(msg)/sizeof(msg[0]), NULL );
-		ri.Error( ERR_DROP, "VirtualAlloc commit failed.\n%s", msg );
-	}
-#endif
-
-	cursize += size;
-
-	return ( void * )( membase + cursize - size );
-}
-
-// this is only called when we shutdown GL
-void R_Hunk_End( void ) {
-	if ( membase ) {
-#ifdef _WIN32
-		VirtualFree( membase, 0, MEM_RELEASE );
-#else
-		free( membase );
-#endif
-	}
-
-	membase = NULL;
-}
-
-void R_Hunk_Reset( void ) {
-	if ( !membase ) {
-		ri.Error( ERR_DROP, "R_Hunk_Reset called without a membase!" );
-	}
-
-#ifdef _WIN32
-	// mark the existing committed pages as reserved, but not committed
-	VirtualFree( membase, cursize, MEM_DECOMMIT );
-#endif
-	// on non win32 OS, we keep the allocated chunk as is, just start again to curzise = 0
-
-	// start again at the top
-	cursize = 0;
-}
-
-//=============================================================================
-// Ridah, model caching
-
-// TODO: convert the Hunk_Alloc's in the model loading to malloc's, so we don't have
-// to move so much memory around during transitions
-
-static model_t backupModels[MAX_MOD_KNOWN];
-static int numBackupModels = 0;
-
-/*
-===============
-R_CacheModelAlloc
-===============
-*/
-void *R_CacheModelAlloc( int size ) {
-	if ( r_cache->integer && r_cacheModels->integer ) {
-		return R_Hunk_Alloc( size );
-	} else {
-		return ri.Hunk_Alloc( size, h_low );
-	}
-}
-
-/*
-===============
-R_CacheModelFree
-===============
-*/
-void R_CacheModelFree( void *ptr ) {
-	if ( r_cache->integer && r_cacheModels->integer ) {
-		// TTimo: it's in the hunk, leave it there, next R_Hunk_Begin will clear it all
-	} else
-	{
-		// if r_cache 0, this is never supposed to get called anyway
-		Com_Printf( "FIXME: unexpected R_CacheModelFree call (r_cache 0)\n" );
-	}
-}
-
-/*
-===============
-R_PurgeModels
-===============
-*/
-void R_PurgeModels( int count ) {
-	if ( !numBackupModels ) {
-		return;
-	}
-
-	numBackupModels = 0;
-
-	// note: we can only do this since we only use the virtual memory for the model caching!
-	R_Hunk_Reset();
-}
-
-/*
-===============
-R_BackupModels
-===============
-*/
-void R_BackupModels( void ) {
-	int i, j;
-	model_t *mod, *modBack;
-
-	if ( !r_cache->integer ) {
-		return;
-	}
-	if ( !r_cacheModels->integer ) {
-		return;
-	}
-
-	if ( numBackupModels ) {
-		R_PurgeModels( numBackupModels + 1 ); // get rid of them all
-	}
-
-	// copy each model in memory across to the backupModels
-	modBack = backupModels;
-	for ( i = 0; i < tr.numModels; i++ ) {
-		mod = tr.models[i];
-
-		if ( mod->type && mod->type != MOD_BRUSH && mod->type != MOD_MDS ) {
-			memcpy( modBack, mod, sizeof( *mod ) );
-			switch ( mod->type ) {
-			case MOD_MESH:
-				for ( j = MD3_MAX_LODS - 1; j >= 0; j-- ) {
-					if ( j < mod->numLods && mod->model.md3[j] ) {
-						if ( ( j == MD3_MAX_LODS - 1 ) || ( mod->model.md3[j] != mod->model.md3[j + 1] ) ) {
-							modBack->model.md3[j] = R_CacheModelAlloc( mod->model.md3[j]->ofsEnd );
-							memcpy( modBack->model.md3[j], mod->model.md3[j], mod->model.md3[j]->ofsEnd );
-						} else {
-							modBack->model.md3[j] = modBack->model.md3[j + 1];
-						}
-					}
-				}
-				break;
-			case MOD_MDC:
-				for ( j = MD3_MAX_LODS - 1; j >= 0; j-- ) {
-					if ( j < mod->numLods && mod->model.mdc[j] ) {
-						if ( ( j == MD3_MAX_LODS - 1 ) || ( mod->model.mdc[j] != mod->model.mdc[j + 1] ) ) {
-							modBack->model.mdc[j] = R_CacheModelAlloc( mod->model.mdc[j]->ofsEnd );
-							memcpy( modBack->model.mdc[j], mod->model.mdc[j], mod->model.mdc[j]->ofsEnd );
-						} else {
-							modBack->model.mdc[j] = modBack->model.mdc[j + 1];
-						}
-					}
-				}
-				break;
-			default:
-				break; // MOD_BAD MOD_BRUSH MOD_MDS not handled
-			}
-			modBack++;
-			numBackupModels++;
-		}
-	}
-}
-
-
-/*
-=================
-R_RegisterMDCShaders
-=================
-*/
-static void R_RegisterMDCShaders( model_t *mod, int lod ) {
-	mdcSurface_t        *surf;
-	md3Shader_t         *shader;
-	int i, j;
-
-	// swap all the surfaces
-	surf = ( mdcSurface_t * )( (byte *)mod->model.mdc[lod] + mod->model.mdc[lod]->ofsSurfaces );
-	for ( i = 0 ; i < mod->model.mdc[lod]->numSurfaces ; i++ ) {
-		// register the shaders
-		shader = ( md3Shader_t * )( (byte *)surf + surf->ofsShaders );
-		for ( j = 0 ; j < surf->numShaders ; j++, shader++ ) {
-			shader_t    *sh;
-
-			sh = R_FindShader( shader->name, LIGHTMAP_NONE, qtrue );
-			if ( sh->defaultShader ) {
-				shader->shaderIndex = 0;
-			} else {
-				shader->shaderIndex = sh->index;
-			}
-		}
-		// find the next surface
-		surf = ( mdcSurface_t * )( (byte *)surf + surf->ofsEnd );
-	}
-}
-
-/*
-=================
-R_RegisterMD3Shaders
-=================
-*/
-static void R_RegisterMD3Shaders( model_t *mod, int lod ) {
-	md3Surface_t        *surf;
-	md3Shader_t         *shader;
-	int i, j;
-
-	// swap all the surfaces
-	surf = ( md3Surface_t * )( (byte *)mod->model.md3[lod] + mod->model.md3[lod]->ofsSurfaces );
-	for ( i = 0 ; i < mod->model.md3[lod]->numSurfaces ; i++ ) {
-		// register the shaders
-		shader = ( md3Shader_t * )( (byte *)surf + surf->ofsShaders );
-		for ( j = 0 ; j < surf->numShaders ; j++, shader++ ) {
-			shader_t    *sh;
-
-			sh = R_FindShader( shader->name, LIGHTMAP_NONE, qtrue );
-			if ( sh->defaultShader ) {
-				shader->shaderIndex = 0;
-			} else {
-				shader->shaderIndex = sh->index;
-			}
-		}
-		// find the next surface
-		surf = ( md3Surface_t * )( (byte *)surf + surf->ofsEnd );
-	}
-}
-
-/*
-===============
-R_FindCachedModel
-
-  look for the given model in the list of backupModels
-===============
-*/
-qboolean R_FindCachedModel( const char *name, model_t *newmod ) {
-	int i,j, index;
-	model_t *mod;
-
-	// NOTE TTimo
-	// would need an r_cache check here too?
-
-	if ( !r_cacheModels->integer ) {
-		return qfalse;
-	}
-
-	if ( !numBackupModels ) {
-		return qfalse;
-	}
-
-	mod = backupModels;
-	for ( i = 0; i < numBackupModels; i++, mod++ ) {
-		if ( !Q_strncmp( mod->name, name, sizeof( mod->name ) ) ) {
-			// copy it to a new slot
-			index = newmod->index;
-			memcpy( newmod, mod, sizeof( model_t ) );
-			newmod->index = index;
-			switch ( mod->type ) {
-			case MOD_MDS:
-				return qfalse;  // not supported yet
-			case MOD_MDM:
-				return qfalse;  // not supported yet
-			case MOD_MDX:
-				return qfalse;  // not supported yet
-			case MOD_MESH:
-				for ( j = MD3_MAX_LODS - 1; j >= 0; j-- ) {
-					if ( j < mod->numLods && mod->model.md3[j] ) {
-						if ( ( j == MD3_MAX_LODS - 1 ) || ( mod->model.md3[j] != mod->model.md3[j + 1] ) ) {
-							newmod->model.md3[j] = ri.Hunk_Alloc( mod->model.md3[j]->ofsEnd, h_low );
-							memcpy( newmod->model.md3[j], mod->model.md3[j], mod->model.md3[j]->ofsEnd );
-							R_RegisterMD3Shaders( newmod, j );
-							R_CacheModelFree( mod->model.md3[j] );
-						} else {
-							newmod->model.md3[j] = mod->model.md3[j + 1];
-						}
-					}
-				}
-				break;
-			case MOD_MDC:
-				for ( j = MD3_MAX_LODS - 1; j >= 0; j-- ) {
-					if ( j < mod->numLods && mod->model.mdc[j] ) {
-						if ( ( j == MD3_MAX_LODS - 1 ) || ( mod->model.mdc[j] != mod->model.mdc[j + 1] ) ) {
-							newmod->model.mdc[j] = ri.Hunk_Alloc( mod->model.mdc[j]->ofsEnd, h_low );
-							memcpy( newmod->model.mdc[j], mod->model.mdc[j], mod->model.mdc[j]->ofsEnd );
-							R_RegisterMDCShaders( newmod, j );
-							R_CacheModelFree( mod->model.mdc[j] );
-						} else {
-							newmod->model.mdc[j] = mod->model.mdc[j + 1];
-						}
-					}
-				}
-				break;
-			default:
-				break; // MOD_BAD MOD_BRUSH
-			}
-
-			mod->type = MOD_BAD;    // don't try and purge it later
-			mod->name[0] = 0;
-			return qtrue;
-		}
-	}
-
-	return qfalse;
-}
-
-/*
-===============
-R_LoadCacheModels
-===============
-*/
-void R_LoadCacheModels( void ) {
-	int len;
-	byte *buf;
-	const char    *token, *pString;
-	char name[MAX_QPATH];
-
-	if ( !r_cacheModels->integer ) {
-		return;
-	}
-
-	// don't load the cache list in between level loads, only on startup, or after a vid_restart
-	if ( numBackupModels > 0 ) {
-		return;
-	}
-
-	len = ri.FS_ReadFile( "model.cache", NULL );
-
-	if ( len <= 0 ) {
-		return;
-	}
-
-	buf = (byte *)ri.Hunk_AllocateTempMemory( len );
-	ri.FS_ReadFile( "model.cache", (void **)&buf );
-	pString = (const char *)buf;
-
-	while ( ( token = COM_ParseExt( &pString, qtrue ) ) != NULL && token[0] ) {
-		Q_strncpyz( name, token, sizeof( name ) );
-		RE_RegisterModel( name );
-	}
-
-	ri.Hunk_FreeTempMemory( buf );
-}
-// done.
-//========================================================================

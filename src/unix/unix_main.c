@@ -58,6 +58,11 @@ If you have questions concerning this license or the applicable additional terms
 #include "../client/client.h"
 #endif
 
+
+#if defined(USE_SDL3) && !defined(DEDICATED)
+#include <SDL3/SDL_main.h>
+#endif
+
 #if !defined(DEDICATED) && defined(USE_STEAMAPI)
 #include "../../steam/steamshim_child.h"
 #endif
@@ -768,10 +773,7 @@ void *Sys_LoadGameDll(const char *name, vmMain_t *entryPoint, dllSyscall_t syste
 
 	basepath = Cvar_VariableString("fs_basepath");
 	homepath = Cvar_VariableString("fs_homepath");
-	gamedir = Cvar_VariableString("fs_game");
-	if ( !*gamedir ) {
-		gamedir = Cvar_VariableString("fs_basegame");
-	}
+	gamedir = FS_GetCurrentGameDir();
 
 	// Use Sys_Pwd() instead?
 #ifdef _DEBUG
@@ -1281,7 +1283,7 @@ int Sys_ParseArgs(int argc, const char *argv[])
 	return 0;
 }
 
-#if USE_SDL && !defined(DEDICATED)
+#if (defined(USE_SDL2) || defined(USE_SDL3)) && !defined(DEDICATED)
 void Sys_GetSDLVersion(uint32_t *major, uint32_t *minor, uint32_t *patch);
 #endif
 int main(int argc, const char *argv[])
@@ -1292,7 +1294,7 @@ int main(int argc, const char *argv[])
 	char *cmdline;
 	int len, i;
 	tty_err err;
-#if USE_SDL && !defined(DEDICATED)
+#if (defined(USE_SDL2) || defined(USE_SDL3)) && !defined(DEDICATED)
 	uint32_t major, minor, patch;
 	Sys_GetSDLVersion(&major, &minor, &patch);
 #endif
@@ -1327,7 +1329,7 @@ int main(int argc, const char *argv[])
 
 	Com_Init( cmdline );
 
-#if USE_SDL && !defined(DEDICATED)
+#if (defined(USE_SDL2) || defined(USE_SDL3)) && !defined(DEDICATED)
 	Com_Printf("Using SDL Version %u.%u.%u\n", major, minor, patch);
 #endif
 
@@ -1376,14 +1378,6 @@ int main(int argc, const char *argv[])
 	// never gets here
 	return 0;
 }
-
-#ifndef USE_SDL
-qboolean Sys_IsNumLockDown(void)
-{
-	// Gordon: FIXME for timothee
-	return qfalse;
-}
-#endif
 
 int Sys_GetPID(void)
 {

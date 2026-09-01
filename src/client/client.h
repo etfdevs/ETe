@@ -51,10 +51,10 @@ If you have questions concerning this license or the applicable additional terms
 #include "cl_curl.h"
 #endif
 
-#define RETRANSMIT_TIMEOUT  3000    // time between connection packet retransmits
-
 #define ETKEY_FILE "etkey"
 #define ETKEY_SIZE 28
+#define	RECONNECT_TIMEOUT	3000	// time between packet retransmits at CA_CONNECTING / CA_CHALLENGING
+#define	RETRANSMIT_TIMEOUT	1000	// time between packet retransmits at CA_CONNECTED / CA_LOADING
 
 // snapshots are a view of the server at a given time
 typedef struct {
@@ -363,8 +363,6 @@ typedef struct {
 
 	qboolean cddialog;              // bring up the cd needed dialog next frame
 
-	qboolean doCachePurge;          // Arnout: empty the renderer cache as soon as possible
-
 	char		servername[MAX_OSPATH];		// name of server from original connect (used by reconnect)
 
 	// when the server clears the hunk, all of these must be restarted
@@ -519,7 +517,7 @@ extern	cvar_t	*r_noborder;
 
 extern	cvar_t	*r_allowSoftwareGL;
 extern	cvar_t	*r_swapInterval;
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 extern	cvar_t	*r_glDriver;
 #ifdef _WIN32
 extern	cvar_t  *r_allowScreenSaver;
@@ -539,8 +537,22 @@ extern	cvar_t	*r_colorbits;
 extern	cvar_t	*cl_stencilbits;
 extern	cvar_t	*cl_depthbits;
 extern	cvar_t	*cl_drawBuffer;
-#ifndef USE_SDL
+#if !defined(USE_SDL2) && !defined(USE_SDL3)
 extern	cvar_t	*in_forceCharset;
+#endif
+//#define USE_JOYSTICK
+
+#if (defined(USE_SDL2) || defined(USE_SDL3)) && defined(USE_JOYSTICK)
+extern cvar_t *j_pitch;
+extern cvar_t *j_yaw;
+extern cvar_t *j_forward;
+extern cvar_t *j_side;
+extern cvar_t *j_up;
+extern cvar_t *j_pitch_axis;
+extern cvar_t *j_yaw_axis;
+extern cvar_t *j_forward_axis;
+extern cvar_t *j_side_axis;
+extern cvar_t *j_up_axis;
 #endif
 
 //=================================================
@@ -569,9 +581,9 @@ void CL_ClearState( void );
 int CL_ServerStatus( const char *serverAddress, char *serverStatusString, int maxLen );
 
 // NERVE - SMF - localization
-void CL_InitTranslation();
+void CL_InitTranslation(void);
 void CL_SaveTransTable( const char *fileName, qboolean newOnly );
-void CL_ReloadTranslation();
+void CL_ReloadTranslation(void);
 void CL_TranslateString( const char *string, char *dest_buffer );
 const char* CL_TranslateStringBuf( const char *string ); // TTimo
 // -NERVE - SMF
@@ -628,7 +640,7 @@ void CL_InitInput( void );
 void CL_ShutdownInput( void );
 void CL_SendCmd( void );
 
-void CL_WritePacket( void );
+void CL_WritePacket( int repeat );
 
 //
 // cl_keys.c
@@ -650,8 +662,8 @@ extern int cl_connectedToPureServer;
 extern int cl_connectedToCheatServer;
 extern int cl_optimizedPatchServer;
 
-void CL_ParseServerInfo(void);
 #ifdef USE_DISCORD
+void CL_ParseServerInfo(void);
 void CL_ParsePlayerInfo(void);
 #endif
 
@@ -747,7 +759,7 @@ void	SCR_DrawSmallString( int x, int y, const char *s, int len );
 // cl_cin.c
 //
 
-void CL_CompleteCinematicName( char *args, int argNum );
+void CL_CompleteCinematicName( const char *args, int argNum );
 void CL_PlayCinematic_f( void );
 void SCR_DrawCinematic( void );
 void SCR_RunCinematic( void );
@@ -787,6 +799,7 @@ int LAN_AddFavAddr( const char *address );
 // cl_net_chan.c
 //
 void CL_Netchan_Transmit( netchan_t *chan, msg_t *msg );
+void CL_Netchan_Enqueue( netchan_t *chan, msg_t *msg, int times );
 qboolean CL_Netchan_Process( netchan_t *chan, msg_t *msg );
 
 //
@@ -822,10 +835,12 @@ void	CL_LoadJPG( const char *filename, byte **pic, int *width, int *height );
 
 //
 // cl_wav.c
-qboolean CL_OpenWAVForWriting( const char *filename, qboolean pipe );
-void CL_WriteWAVAudioFrame( const byte *pcmBuffer, int size );
-qboolean CL_CloseWAV( void );
-qboolean CL_WAVRecording( void );
+#ifdef USE_WAV
+//qboolean CL_OpenWAVForWriting( const char *filename, qboolean pipe, qboolean reopen );
+//void CL_WriteWAVAudioFrame( const byte *pcmBuffer, int size );
+//qboolean CL_CloseWAV( void );
+//qboolean CL_WAVRecording( void );
+#endif
 
 #ifdef USE_DISCORD
 void CL_DiscordInitialize(void);
@@ -839,6 +854,7 @@ void	HandleEvents( void );
 // platform-specific
 void	GLimp_InitGamma( glconfig_t *config );
 void	GLimp_SetGamma( unsigned char red[256], unsigned char green[256], unsigned char blue[256] );
+void	GLimp_FlashWindow( int state );
 
 // OpenGL
 #ifdef USE_OPENGL_API

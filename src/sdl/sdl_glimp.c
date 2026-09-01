@@ -56,6 +56,8 @@ GLimp_Shutdown
 */
 void GLimp_Shutdown( qboolean unloadDLL )
 {
+	const char* drv = SDL_GetCurrentVideoDriver();
+
 	IN_Shutdown();
 
 	// Destroy existing state if it exists
@@ -65,32 +67,37 @@ void GLimp_Shutdown( qboolean unloadDLL )
 		SDL_glContext = NULL;
 	}
 
-	SDL_DestroyWindow( SDL_window );
-	SDL_window = NULL;
+	if ( glw_state.isFullscreen ) {
+		if ( drv && strcmp( drv, "x11" ) == 0 ) {
+			SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+		} else {
+			SDL_ShowCursor( SDL_TRUE );
+		}
+	}
 
-	if ( glw_state.isFullscreen
-#ifdef __linux__
-		// wayland does not support 'SDL_WarpMouseGlobal' and crashes if called
-		&& Q_stricmp(SDL_GetCurrentVideoDriver(), "wayland")
-#endif
-	)
-		SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+	if ( SDL_window ) {
+		SDL_DestroyWindow( SDL_window );
+		SDL_window = NULL;
+	}
 
 	if ( unloadDLL )
 		SDL_QuitSubSystem( SDL_INIT_VIDEO );
 }
 
 
-/*
-===============
-GLimp_Minimize
-
-Minimize the game so that user is back at the desktop
-===============
-*/
-void GLimp_Minimize( void )
+void GLimp_FlashWindow( int state )
 {
-	SDL_MinimizeWindow( SDL_window );
+	if ( !SDL_window )
+		return;
+
+#if SDL_VERSION_ATLEAST(2, 0, 16)
+	if ( state == 1 )
+		SDL_FlashWindow( SDL_window, SDL_FLASH_BRIEFLY );
+	else if ( state == 2 )
+		SDL_FlashWindow( SDL_window, SDL_FLASH_UNTIL_FOCUSED );
+	else
+		SDL_FlashWindow( SDL_window, SDL_FLASH_CANCEL );
+#endif
 }
 
 
@@ -339,9 +346,13 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 				case 1 :
 					if (depthBits == 24)
 						depthBits = 16;
+					else if (depthBits == 16)
+						depthBits = 8;
 				case 3 :
-					if (stencilBits == 8)
-						stencilBits = 0;
+					if (stencilBits == 24)
+						stencilBits = 16;
+					else if (stencilBits == 16)
+						stencilBits = 8;
 			}
 		}
 
@@ -388,6 +399,10 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 			SDL_GL_SetAttribute( SDL_GL_RED_SIZE, perChannelColorBits );
 			SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, perChannelColorBits );
 			SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, perChannelColorBits );
+#ifndef __sgi
+			// prefer alpha if available, otherwise prefer smallest available alpha
+			SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, perChannelColorBits == 8 ? 8 : 0 );
+#endif
 			SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, testDepthBits );
 			SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, testStencilBits );
 
@@ -483,7 +498,7 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 		} // if ( !vulkan )
 
 
-		Com_Printf( "Using %d color bits, %d depth, %d stencil display.\n",	config->colorBits, config->depthBits, config->stencilBits );
+		Com_Printf( "Using %d color bits, %d depth, %d stencil display.\n", config->colorBits, config->depthBits, config->stencilBits );
 
 		break;
 	}
@@ -660,6 +675,13 @@ void GLimp_Init( glconfig_t *config )
 	config->driverType = GLDRV_ICD;
 	config->hardwareType = GLHW_GENERIC;
 
+	if ( Sys_IsSteamOverlayAttached() ) {
+		Com_Printf( S_COLOR_CYAN "Steam Overlay Detected\n" );
+	}
+	else {
+		Com_Printf( S_COLOR_WHITE "Steam Overlay Not Detected\n" );
+	}
+
 	// This depends on SDL_INIT_VIDEO, hence having it here
 	IN_Init();
 
@@ -761,6 +783,13 @@ void VKimp_Init( glconfig_t *config )
 	config->driverType = GLDRV_ICD;
 	config->hardwareType = GLHW_GENERIC;
 
+	if ( Sys_IsSteamOverlayAttached() ) {
+		Com_Printf( S_COLOR_CYAN "Steam Overlay Detected\n" );
+	}
+	else {
+		Com_Printf( S_COLOR_WHITE "Steam Overlay Not Detected\n" );
+	}
+
 	// This depends on SDL_INIT_VIDEO, hence having it here
 	IN_Init();
 
@@ -802,13 +831,22 @@ VKimp_Shutdown
 */
 void VKimp_Shutdown( qboolean unloadDLL )
 {
+	const char* drv = SDL_GetCurrentVideoDriver();
+
 	IN_Shutdown();
 
-	SDL_DestroyWindow( SDL_window );
-	SDL_window = NULL;
+	if ( glw_state.isFullscreen ) {
+		if ( drv && strcmp( drv, "x11" ) == 0 ) {
+			SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+		} else {
+			SDL_ShowCursor( SDL_TRUE );
+		}
+	}
 
-	if ( glw_state.isFullscreen )
-		SDL_WarpMouseGlobal( glw_state.desktop_width / 2, glw_state.desktop_height / 2 );
+	if ( SDL_window ) {
+		SDL_DestroyWindow( SDL_window );
+		SDL_window = NULL;
+	}
 
 	if ( unloadDLL )
 		SDL_QuitSubSystem( SDL_INIT_VIDEO );
@@ -833,7 +871,7 @@ void GLW_HideFullscreenWindow( void ) {
 Sys_GetClipboardData
 ===============
 */
-char *Sys_GetClipboardData( void )
+char *Sys_GetClipboardText( void )
 {
 #ifdef DEDICATED
 	return NULL;

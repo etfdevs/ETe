@@ -39,6 +39,190 @@ If you have questions concerning this license or the applicable additional terms
 #ifndef __BG_PUBLIC_H__
 #define __BG_PUBLIC_H__
 
+#if !defined(CGAMEDLL) && !defined(GAMEDLL) && !defined(UIDLL)
+
+#define MAX_CHARACTERS  16
+#define MAX_OID_TRIGGERS    18
+#define MAX_TAGCONNECTS     64
+#define MAX_FIRETEAMS       12
+#define MAX_MOTDLINES   6
+
+//
+// config strings are a general means of communicating variable length strings
+// from the server to all connected clients.
+//
+
+// CS_SERVERINFO and CS_SYSTEMINFO are defined in q_shared.h
+#define CS_MUSIC                        2
+#define CS_MESSAGE                      3       // from the map worldspawn's message field
+#define CS_MOTD                         4       // g_motd string for server message of the day
+#define CS_WARMUP                       5       // server time when the match will be restarted
+#define CS_VOTE_TIME                    6
+#define CS_VOTE_STRING                  7
+#define CS_VOTE_YES                     8
+#define CS_VOTE_NO                      9
+#define CS_GAME_VERSION                 10
+
+#define CS_LEVEL_START_TIME             11      // so the timer only shows the current level
+#define CS_INTERMISSION                 12      // when 1, intermission will start in a second or two
+#define CS_MULTI_INFO                   13
+#define CS_MULTI_MAPWINNER              14
+#define CS_MULTI_OBJECTIVE              15
+//
+#define CS_SCREENFADE                   17      // Ridah, used to tell clients to fade their screen to black/normal
+#define CS_FOGVARS                      18      //----(SA) used for saving the current state/settings of the fog
+#define CS_SKYBOXORG                    19      // this is where we should view the skybox from
+
+#define CS_TARGETEFFECT                 20      //----(SA)
+#define CS_WOLFINFO                     21      // NERVE - SMF
+#define CS_FIRSTBLOOD                   22      // Team that has first blood
+#define CS_ROUNDSCORES1                 23      // Axis round wins
+#define CS_ROUNDSCORES2                 24      // Allied round wins
+#define CS_MAIN_AXIS_OBJECTIVE          25      // Most important current objective
+#define CS_MAIN_ALLIES_OBJECTIVE        26      // Most important current objective
+#define CS_MUSIC_QUEUE                  27
+#define CS_SCRIPT_MOVER_NAMES           28
+#define CS_CONSTRUCTION_NAMES           29
+
+#define CS_VERSIONINFO                  30      // Versioning info for demo playback compatibility
+#define CS_REINFSEEDS                   31      // Reinforcement seeds
+#define CS_SERVERTOGGLES                32      // Shows current enable/disabled settings (for voting UI)
+#define CS_GLOBALFOGVARS                33
+#define CS_AXIS_MAPS_XP                 34
+#define CS_ALLIED_MAPS_XP               35
+#define CS_INTERMISSION_START_TIME      36      //
+#define CS_ENDGAME_STATS                37
+#define CS_CHARGETIMES                  38
+#define CS_FILTERCAMS                   39
+
+#define CS_MODELS                       64
+#define CS_SOUNDS                       ( CS_MODELS +               MAX_MODELS                  )
+#define CS_SHADERS                      ( CS_SOUNDS +               MAX_SOUNDS                  )
+#define CS_SHADERSTATE                  ( CS_SHADERS +              MAX_CS_SHADERS              ) // Gordon: this MUST be after CS_SHADERS
+#define CS_SKINS                        ( CS_SHADERSTATE +          1                           )
+#define CS_CHARACTERS                   ( CS_SKINS +                MAX_CS_SKINS                )
+#define CS_PLAYERS                      ( CS_CHARACTERS +           MAX_CHARACTERS              )
+#define CS_MULTI_SPAWNTARGETS           ( CS_PLAYERS +              MAX_CLIENTS                 )
+#define CS_OID_TRIGGERS                 ( CS_MULTI_SPAWNTARGETS +   MAX_MULTI_SPAWNTARGETS      )
+#define CS_OID_DATA                     ( CS_OID_TRIGGERS +         MAX_OID_TRIGGERS            )
+#define CS_DLIGHTS                      ( CS_OID_DATA +             MAX_OID_TRIGGERS            )
+#define CS_SPLINES                      ( CS_DLIGHTS +              MAX_DLIGHT_CONFIGSTRINGS    )
+#define CS_TAGCONNECTS                  ( CS_SPLINES +              MAX_SPLINE_CONFIGSTRINGS    )
+#define CS_FIRETEAMS                    ( CS_TAGCONNECTS +          MAX_TAGCONNECTS             )
+#define CS_CUSTMOTD                     ( CS_FIRETEAMS +            MAX_FIRETEAMS               )
+#define CS_STRINGS                      ( CS_CUSTMOTD +             MAX_MOTDLINES               )
+#define CS_MAX                          ( CS_STRINGS +              MAX_CSSTRINGS               )
+
+#if ( CS_MAX ) > MAX_CONFIGSTRINGS
+#error overflow: (CS_MAX) > MAX_CONFIGSTRINGS
+#endif
+
+typedef enum {
+	UIMENU_NONE = 0,
+	UIMENU_MAIN,
+	UIMENU_INGAME,
+	UIMENU_NEED_CD,
+	UIMENU_BAD_CD_KEY,
+	UIMENU_TEAM,
+	UIMENU_POSTGAME,
+	UIMENU_HELP,
+
+	UIMENU_WM_QUICKMESSAGE,
+	UIMENU_WM_QUICKMESSAGEALT,
+
+	UIMENU_WM_FTQUICKMESSAGE,
+	UIMENU_WM_FTQUICKMESSAGEALT,
+
+	UIMENU_WM_TAPOUT,
+	UIMENU_WM_TAPOUT_LMS,
+
+	UIMENU_WM_AUTOUPDATE,
+
+	// ydnar: say, team say, etc
+	UIMENU_INGAME_MESSAGEMODE,
+} uiMenuCommand_t;
+
+typedef enum {
+	PM_NORMAL = 0,      // can accelerate and turn
+	PM_NOCLIP,      // noclip movement
+	PM_SPECTATOR,   // still run into walls
+	PM_DEAD,        // no acceleration or turning, but free falling
+	PM_FREEZE,      // stuck in place with no control
+	PM_INTERMISSION // no movement or status bar
+} pmtype_t;
+
+// player_state->persistant[] indexes
+// these fields are the only part of player_state that isn't
+// cleared on respawn
+typedef enum {
+	PERS_SCORE = 0,                     // !!! MUST NOT CHANGE, SERVER AND GAME BOTH REFERENCE !!!
+	PERS_HITS,                      // total points damage inflicted so damage beeps can sound on change
+	PERS_RANK,
+	PERS_TEAM,
+	PERS_SPAWN_COUNT,               // incremented every respawn
+	PERS_ATTACKER,                  // clientnum of last damage inflicter
+	PERS_KILLED,                    // count of the number of times you died
+	// these were added for single player awards tracking
+	PERS_RESPAWNS_LEFT,             // DHM - Nerve :: number of remaining respawns
+	PERS_RESPAWNS_PENALTY,          // how many respawns you have to sit through before respawning again
+
+	PERS_REVIVE_COUNT,
+	PERS_BLEH_2,
+	PERS_BLEH_3,
+
+	// Rafael - mg42		// (SA) I don't understand these here.  can someone explain?
+	PERS_HWEAPON_USE,
+	// Rafael wolfkick
+	PERS_WOLFKICK
+} persEnum_t;
+
+
+// entityState_t->eFlags
+#define EF_DEAD             0x00000001      // don't draw a foe marker over players with EF_DEAD
+#define EF_NONSOLID_BMODEL  0x00000002      // bmodel is visible, but not solid
+#define EF_FORCE_END_FRAME  EF_NONSOLID_BMODEL  // force client to end of current animation (after loading a savegame)
+#define EF_TELEPORT_BIT     0x00000004      // toggled every time the origin abruptly changes
+#define EF_READY            0x00000008      // player is ready
+
+#define EF_CROUCHING        0x00000010      // player is crouching
+#define EF_MG42_ACTIVE      0x00000020      // currently using an MG42
+#define EF_NODRAW           0x00000040      // may have an event, but no model (unspawned items)
+#define EF_FIRING           0x00000080      // for lightning gun
+#define EF_INHERITSHADER    EF_FIRING       // some ents will never use EF_FIRING, hijack it for "USESHADER"
+
+#define EF_SPINNING         0x00000100      // (SA) added for level editor control of spinning pickup items
+#define EF_BREATH           EF_SPINNING     // Characters will not have EF_SPINNING set, hijack for drawing character breath
+#define EF_TALK             0x00000200      // draw a talk balloon
+#define EF_CONNECTION       0x00000400      // draw a connection trouble sprite
+#define EF_SMOKINGBLACK     0x00000800      // JPW NERVE -- like EF_SMOKING only darker & bigger
+
+#define EF_HEADSHOT         0x00001000      // last hit to player was head shot (Gordon: NOTE: not last hit, but has BEEN shot in the head since respawn)
+#define EF_SMOKING          0x00002000      // DHM - Nerve :: ET_GENERAL ents will emit smoke if set // JPW switched to this after my code change
+#define EF_OVERHEATING      ( EF_SMOKING | EF_SMOKINGBLACK )  // ydnar: light smoke/steam effect
+#define EF_VOTED            0x00004000      // already cast a vote
+#define EF_TAGCONNECT       0x00008000      // connected to another entity via tag
+#define EF_MOUNTEDTANK      EF_TAGCONNECT   // Gordon: duplicated for clarity
+
+#define EF_SPARE3           0x00010000      // Gordon: freed
+#define EF_PATH_LINK        0x00020000      // Gordon: linking trains together
+#define EF_ZOOMING          0x00040000      // client is zooming
+#define EF_PRONE            0x00080000      // player is prone
+
+#define EF_PRONE_MOVING     0x00100000      // player is prone and moving
+#define EF_VIEWING_CAMERA   0x00200000      // player is viewing a camera
+#define EF_AAGUN_ACTIVE     0x00400000      // Gordon: player is manning an AA gun
+#define EF_SPARE0           0x00800000      // Gordon: freed
+
+// !! NOTE: only place flags that don't need to go to the client beyond 0x00800000
+#define EF_SPARE1           0x01000000      // Gordon: freed
+#define EF_SPARE2           0x02000000      // Gordon: freed
+#define EF_BOUNCE           0x04000000      // for missiles
+#define EF_BOUNCE_HALF      0x08000000      // for missiles
+#define EF_MOVER_STOP       0x10000000      // will push otherwise	// (SA) moved down to make space for one more client flag
+#define EF_MOVER_BLOCKED    0x20000000      // mover was blocked dont lerp on the client // xkan, moved down to make space for client flag
+
+#else
+
 #define GAME_VERSION    "Enemy Territory"
 
 #if defined( _DEBUG )
@@ -2084,7 +2268,7 @@ pathCorner_t *BG_Find_PathCorner( const char *match );
 splinePath_t* BG_GetSplineData( int number, qboolean* backwards );
 void BG_AddPathCorner( const char* name, vec3_t origin );
 splinePath_t* BG_AddSplinePath( const char* name, const char* target, vec3_t origin );
-void BG_BuildSplinePaths();
+void BG_BuildSplinePaths(void);
 splinePath_t *BG_Find_Spline( const char *match );
 float BG_SplineLength( splinePath_t* pSpline );
 void BG_AddSplineControl( splinePath_t* spline, const char* name );
@@ -2121,8 +2305,8 @@ int trap_PC_ReadToken( int handle, pc_token_t *pc_token );
 int trap_PC_SourceFileAndLine( int handle, char *filename, int *line );
 int trap_PC_UnReadToken( int handle );
 
-void PC_SourceError( int handle, char *format, ... );
-void PC_SourceWarning( int handle, char *format, ... );
+void PC_SourceError( int handle, const char *format, ... ) Q_PRINTF_FUNC(2,3);
+void PC_SourceWarning( int handle, const char *format, ... ) Q_PRINTF_FUNC(2,3);
 
 #ifdef GAMEDLL
 const char* PC_String_Parse( int handle );
@@ -2194,7 +2378,7 @@ typedef struct {
 } voteType_t;
 
 extern const voteType_t voteToggles[];
-extern int numVotesAvailable;
+extern const int numVotesAvailable;
 
 // Tracemap
 #ifdef CGAMEDLL

@@ -1,0 +1,63 @@
+include_guard(GLOBAL)
+
+set(COMMON_SOURCES
+	"${SOURCE_DIR}/qcommon/cm_load.c"
+	"${SOURCE_DIR}/qcommon/cm_local.h"
+	"${SOURCE_DIR}/qcommon/cm_patch.c"
+	"${SOURCE_DIR}/qcommon/cm_patch.h"
+	"${SOURCE_DIR}/qcommon/cm_polylib.c"
+	"${SOURCE_DIR}/qcommon/cm_polylib.h"
+	"${SOURCE_DIR}/qcommon/cm_public.h"
+	"${SOURCE_DIR}/qcommon/cm_test.c"
+	"${SOURCE_DIR}/qcommon/cm_trace.c"
+	"${SOURCE_DIR}/qcommon/cmd.c"
+	"${SOURCE_DIR}/qcommon/common.c"
+	"${SOURCE_DIR}/qcommon/cvar.c"
+	"${SOURCE_DIR}/qcommon/files.c"
+	"${SOURCE_DIR}/qcommon/gameinfo.c"
+	"${SOURCE_DIR}/qcommon/history.c"
+	"${SOURCE_DIR}/qcommon/huffman.c"
+	"${SOURCE_DIR}/qcommon/huffman_static.c"
+	"${SOURCE_DIR}/qcommon/keys.c"
+	"${SOURCE_DIR}/qcommon/lexer.c"
+	"${SOURCE_DIR}/qcommon/lexer.h"
+	"${SOURCE_DIR}/qcommon/md4.c"
+	"${SOURCE_DIR}/qcommon/md5.c"
+	"${SOURCE_DIR}/qcommon/msg.c"
+	"${SOURCE_DIR}/qcommon/net_chan.c"
+	"${SOURCE_DIR}/qcommon/net_ip.c"
+	"${SOURCE_DIR}/qcommon/parser.c"
+	"${SOURCE_DIR}/qcommon/parser.h"
+	"${SOURCE_DIR}/qcommon/q_math.c"
+	"${SOURCE_DIR}/qcommon/q_platform.h"
+	"${SOURCE_DIR}/qcommon/q_shared.c"
+	"${SOURCE_DIR}/qcommon/q_shared.h"
+	"${SOURCE_DIR}/qcommon/qcommon.h"
+	"${SOURCE_DIR}/qcommon/qfiles.h"
+	"${SOURCE_DIR}/qcommon/surfaceflags.h"
+	"${SOURCE_DIR}/qcommon/unzip.c"
+	"${SOURCE_DIR}/qcommon/unzip.h"
+	"${SOURCE_DIR}/qcommon/vm.c"
+	"${SOURCE_DIR}/qcommon/vm_local.h"
+)
+
+set(SYSTEM_SOURCES
+    ${SYSTEM_PLATFORM_SOURCES}
+)
+
+set(SERVER_SOURCES
+	"${SOURCE_DIR}/server/server.h"
+	"${SOURCE_DIR}/server/sv_bot.c"
+	"${SOURCE_DIR}/server/sv_ccmds.c"
+	"${SOURCE_DIR}/server/sv_client.c"
+	"${SOURCE_DIR}/server/sv_filter.c"
+	"${SOURCE_DIR}/server/sv_game.c"
+	"${SOURCE_DIR}/server/sv_init.c"
+	"${SOURCE_DIR}/server/sv_main.c"
+	"${SOURCE_DIR}/server/sv_net_chan.c"
+	"${SOURCE_DIR}/server/sv_snapshot.c"
+	"${SOURCE_DIR}/server/sv_world.c"
+	"${SOURCE_DIR}/server/tlds.h"
+	"${SOURCE_DIR}/game/bg_public.h"
+	"${SOURCE_DIR}/game/g_public.h"
+)

@@ -167,10 +167,16 @@ CM_TestBoxInBrush
 static void CM_TestBoxInBrush( traceWork_t *tw, const cbrush_t *brush ) {
 	int			i;
 	cplane_t	*plane;
+#ifdef USE_FIXED_PRECISION
 	double		dist;
 	double		d1;
-	cbrushside_t	*side;
 	double		t;
+#else
+	float		dist;
+	float		d1;
+	float		t;
+#endif
+	cbrushside_t	*side;
 	vec3_t		startp;
 
 	if (!brush->numsides) {
@@ -199,16 +205,23 @@ static void CM_TestBoxInBrush( traceWork_t *tw, const cbrush_t *brush ) {
 			// adjust the plane distance appropriately for radius
 			dist = plane->dist + tw->sphere.radius;
 			// find the closest point on the capsule to the plane
+#ifdef USE_FIXED_PRECISION
 			t = DotProductDP( plane->normal, tw->sphere.offset );
-			if ( t > 0 )
-			{
+			if ( t > 0 ) {
 				VectorSubtractDP( tw->start, tw->sphere.offset, startp );
-			}
-			else
-			{
+			} else {
 				VectorAddDP( tw->start, tw->sphere.offset, startp );
 			}
 			d1 = DotProductDP( startp, plane->normal ) - dist;
+#else
+			t = DotProduct( plane->normal, tw->sphere.offset );
+			if ( t > 0 ) {
+				VectorSubtract( tw->start, tw->sphere.offset, startp );
+			} else {
+				VectorAdd( tw->start, tw->sphere.offset, startp );
+			}
+			d1 = DotProduct( startp, plane->normal ) - dist;
+#endif
 			// if completely in front of face, no intersection
 			if ( d1 > 0 ) {
 				return;
@@ -222,10 +235,13 @@ static void CM_TestBoxInBrush( traceWork_t *tw, const cbrush_t *brush ) {
 			plane = side->plane;
 
 			// adjust the plane distance appropriately for mins/maxs
+#ifdef USE_FIXED_PRECISION
 			dist = plane->dist - DotProduct( tw->offsets[ plane->signbits ], plane->normal );
-
 			d1 = DotProductDP( tw->start, plane->normal ) - dist;
-
+#else
+			dist = plane->dist - DotProduct( tw->offsets[ plane->signbits ], plane->normal );
+			d1 = DotProduct( tw->start, plane->normal ) - dist;
+#endif
 			// if completely in front of face, no intersection
 			if ( d1 > 0 ) {
 				return;
@@ -588,13 +604,19 @@ CM_TraceThroughBrush
 static void CM_TraceThroughBrush( traceWork_t *tw, const cbrush_t *brush ) {
 	int			i;
 	cplane_t	*plane, *clipplane;
+#ifdef USE_FIXED_PRECISION
 	double		dist;
-	float		enterFrac, leaveFrac;
 	double		d1, d2;
+	double		t;
+#else
+	float		dist;
+	float		d1, d2;
+	float		t;
+#endif
+	float		enterFrac, leaveFrac;
 	qboolean	getout, startout;
 	float		f;
 	cbrushside_t	*side, *leadside;
-	double		t;
 	vec3_t		startp;
 	vec3_t		endp;
 
@@ -627,6 +649,7 @@ static void CM_TraceThroughBrush( traceWork_t *tw, const cbrush_t *brush ) {
 			dist = plane->dist + tw->sphere.radius;
 
 			// find the closest point on the capsule to the plane
+#ifdef USE_FIXED_PRECISION
 			t = DotProductDP( plane->normal, tw->sphere.offset );
 			if ( t > 0 )
 			{
@@ -641,7 +664,22 @@ static void CM_TraceThroughBrush( traceWork_t *tw, const cbrush_t *brush ) {
 
 			d1 = DotProductDP( startp, plane->normal ) - dist;
 			d2 = DotProductDP( endp, plane->normal ) - dist;
+#else
+			t = DotProduct( plane->normal, tw->sphere.offset );
+			if ( t > 0 )
+			{
+				VectorSubtract( tw->start, tw->sphere.offset, startp );
+				VectorSubtract( tw->end, tw->sphere.offset, endp );
+			}
+			else
+			{
+				VectorAdd( tw->start, tw->sphere.offset, startp );
+				VectorAdd( tw->end, tw->sphere.offset, endp );
+			}
 
+			d1 = DotProduct( startp, plane->normal ) - dist;
+			d2 = DotProduct( endp, plane->normal ) - dist;
+#endif
 			if (d2 > 0) {
 				getout = qtrue;	// endpoint is not in solid
 			}
@@ -691,11 +729,17 @@ static void CM_TraceThroughBrush( traceWork_t *tw, const cbrush_t *brush ) {
 			plane = side->plane;
 
 			// adjust the plane distance appropriately for mins/maxs
+#ifdef USE_FIXED_PRECISION
 			dist = plane->dist - DotProductDP( tw->offsets[ plane->signbits ], plane->normal );
 
 			d1 = DotProductDP( tw->start, plane->normal ) - dist;
 			d2 = DotProductDP( tw->end, plane->normal ) - dist;
+#else
+			dist = plane->dist - DotProduct( tw->offsets[ plane->signbits ], plane->normal );
 
+			d1 = DotProduct( tw->start, plane->normal ) - dist;
+			d2 = DotProduct( tw->end, plane->normal ) - dist;
+#endif
 			if (d2 > 0) {
 				getout = qtrue;	// endpoint is not in solid
 			}
@@ -979,7 +1023,7 @@ static void CM_TraceThroughVerticalCylinder( traceWork_t *tw, const vec3_t origi
 	VectorSet(start2d, start[0], start[1], 0);
 	VectorSet(end2d, end[0], end[1], 0);
 	VectorSet(org2d, origin[0], origin[1], 0);
-	// if between lower and upper cylinder bounds
+	// if start is between lower and upper cylinder bounds
 	if (start[2] <= origin[2] + halfheight &&
 				start[2] >= origin[2] - halfheight) {
 		// if inside the cylinder
@@ -1183,7 +1227,11 @@ a smaller intercept fraction.
 static void CM_TraceThroughTree( traceWork_t *tw, int num, float p1f, float p2f, const vec3_t p1, const vec3_t p2 ) {
 	cNode_t		*node;
 	cplane_t	*plane;
+#ifdef USE_FIXED_PRECISION
 	double		t1, t2, offset;
+#else
+	float		t1, t2, offset;
+#endif
 	float		frac, frac2;
 	float		idist;
 	vec3_t		mid;
@@ -1213,8 +1261,13 @@ static void CM_TraceThroughTree( traceWork_t *tw, int num, float p1f, float p2f,
 		t2 = p2[plane->type] - plane->dist;
 		offset = tw->extents[plane->type];
 	} else {
+#ifdef USE_FIXED_PRECISION
 		t1 = DotProductDP( plane->normal, p1 ) - plane->dist;
 		t2 = DotProductDP( plane->normal, p2 ) - plane->dist;
+#else
+		t1 = DotProduct( plane->normal, p1 ) - plane->dist;
+		t2 = DotProduct( plane->normal, p2 ) - plane->dist;
+#endif
 		if ( tw->isPoint ) {
 			offset = 0;
 		} else {
@@ -1346,7 +1399,7 @@ static void CM_Trace( trace_t *results, const vec3_t start, const vec3_t end, co
 	// set basic parms
 	tw.contents = brushmask;
 
-	// adjust so that mins and maxs are always symetric, which
+	// adjust so that mins and maxs are always symmetric, which
 	// avoids some complications with plane expanding of rotated
 	// bmodels
 	for ( i = 0 ; i < 3 ; i++ ) {
@@ -1548,7 +1601,12 @@ static void CM_Trace( trace_t *results, const vec3_t start, const vec3_t end, co
 		VectorCopy (end, tw.trace.endpos);
 	} else {
 		for ( i=0 ; i<3 ; i++ ) {
+#ifdef USE_FIXED_PRECISION
+			// fix ledge at {463, -1067, -39} on q3dm12
+			tw.trace.endpos[i] = start[i] + tw.trace.fraction * (double)(end[i] - start[i]);
+#else
 			tw.trace.endpos[i] = start[i] + tw.trace.fraction * (end[i] - start[i]);
+#endif
 		}
 	}
 
@@ -1572,7 +1630,7 @@ void CM_BoxTrace( trace_t *results, const vec3_t start, const vec3_t end,
 ==================
 CM_TransformedBoxTrace
 
-Handles offseting and rotation of the end points for moving and
+Handles offsetting and rotation of the end points for moving and
 rotating entities
 ==================
 */
@@ -1599,7 +1657,7 @@ void CM_TransformedBoxTrace( trace_t *results, const vec3_t start, const vec3_t 
 		maxs = vec3_origin;
 	}
 
-	// adjust so that mins and maxs are always symetric, which
+	// adjust so that mins and maxs are always symmetric, which
 	// avoids some complications with plane expanding of rotated
 	// bmodels
 	for ( i = 0 ; i < 3 ; i++ ) {

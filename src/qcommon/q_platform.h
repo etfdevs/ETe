@@ -55,8 +55,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define OS_STRING "win_clang"
 #elif defined __MINGW32__
 #define OS_STRING "win_mingw"
-#elif defined __MINGW64__
-#define OS_STRING "win_mingw64"
 #else
 #error "Compiler not supported"
 #endif
@@ -317,5 +315,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define _GCC_SSE2
 #endif
 #endif // idx64
+
+// Modifier for printing size_t values portably
+
+#if (defined _WIN64)
+#define PRIz "I64"
+#elif (defined _WIN32)
+#define PRIz "I32"
+#elif (defined Q3_VM)
+#define PRIz ""
+#else
+#define PRIz "z"
+#endif
 
 #endif

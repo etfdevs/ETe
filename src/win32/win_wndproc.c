@@ -51,8 +51,11 @@ static LRESULT CALLBACK WinKeyHook( int code, WPARAM wParam, LPARAM lParam )
 	case WM_KEYDOWN:
 	case WM_SYSKEYDOWN:
 		if ( ( key->vkCode == VK_LWIN || key->vkCode == VK_RWIN ) && !(Key_GetCatcher() & KEYCATCH_CONSOLE) ) {
-			Sys_QueEvent( 0, SE_KEY, K_SUPER, qtrue, 0, NULL );
-			return 1;
+			const char* bind = Key_GetBinding( K_SUPER );
+			if ( bind && *bind != '\0' ) {
+				Sys_QueEvent( 0, SE_KEY, K_SUPER, qtrue, 0, NULL );
+				return 1;
+			}
 		}
 		if ( key->vkCode == VK_SNAPSHOT ) {
 			Sys_QueEvent( 0, SE_KEY, K_PRINT, qtrue, 0, NULL );
@@ -61,8 +64,11 @@ static LRESULT CALLBACK WinKeyHook( int code, WPARAM wParam, LPARAM lParam )
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
 		if ( ( key->vkCode == VK_LWIN || key->vkCode == VK_RWIN ) && !(Key_GetCatcher() & KEYCATCH_CONSOLE) ) {
-			Sys_QueEvent( 0, SE_KEY, K_SUPER, qfalse, 0, NULL );
-			return 1;
+			const char* bind = Key_GetBinding( K_SUPER );
+			if ( bind && *bind != '\0' ) {
+				Sys_QueEvent( 0, SE_KEY, K_SUPER, qfalse, 0, NULL );
+				return 1;
+			}
 		}
 		if ( key->vkCode == VK_SNAPSHOT ) {
 			Sys_QueEvent( 0, SE_KEY, K_PRINT, qfalse, 0, NULL );
@@ -536,14 +542,14 @@ BOOL Win_CheckHotkeyMod( void ) {
 	if ( !(HotKey & HK_MOD_XMASK) )
  		return TRUE;
 
- 	if ((HotKey&HK_MOD_LALT) && !GetAsyncKeyState(VK_LMENU)) return FALSE;
- 	if ((HotKey&HK_MOD_RALT) && !GetAsyncKeyState(VK_RMENU)) return FALSE;
- 	if ((HotKey&HK_MOD_LSHIFT) && !GetAsyncKeyState(VK_LSHIFT)) return FALSE;
- 	if ((HotKey&HK_MOD_RSHIFT) && !GetAsyncKeyState(VK_RSHIFT)) return FALSE;
- 	if ((HotKey&HK_MOD_LCONTROL) && !GetAsyncKeyState(VK_LCONTROL)) return FALSE;
- 	if ((HotKey&HK_MOD_RCONTROL) && !GetAsyncKeyState(VK_RCONTROL)) return FALSE;
- 	if ((HotKey&HK_MOD_LWIN) && !GetAsyncKeyState(VK_LWIN)) return FALSE;
- 	if ((HotKey&HK_MOD_RWIN) && !GetAsyncKeyState(VK_RWIN)) return FALSE;
+ 	if ((HotKey&HK_MOD_LALT) && !GetKeyState(VK_LMENU)) return FALSE;
+ 	if ((HotKey&HK_MOD_RALT) && !GetKeyState(VK_RMENU)) return FALSE;
+ 	if ((HotKey&HK_MOD_LSHIFT) && !GetKeyState(VK_LSHIFT)) return FALSE;
+ 	if ((HotKey&HK_MOD_RSHIFT) && !GetKeyState(VK_RSHIFT)) return FALSE;
+ 	if ((HotKey&HK_MOD_LCONTROL) && !GetKeyState(VK_LCONTROL)) return FALSE;
+ 	if ((HotKey&HK_MOD_RCONTROL) && !GetKeyState(VK_RCONTROL)) return FALSE;
+ 	if ((HotKey&HK_MOD_LWIN) && !GetKeyState(VK_LWIN)) return FALSE;
+ 	if ((HotKey&HK_MOD_RWIN) && !GetKeyState(VK_RWIN)) return FALSE;
 
  	return TRUE;
 }
@@ -974,7 +980,7 @@ LRESULT WINAPI MainWndProc( HWND hWnd, UINT uMsg, WPARAM  wParam, LPARAM lParam 
 	case WM_MOUSEMOVE:
 		if ( IN_MouseActive() ) {
 			int mstate = (wParam & (MK_LBUTTON|MK_RBUTTON)) + ((wParam & (MK_MBUTTON|MK_XBUTTON1|MK_XBUTTON2)) >> 2);
-			IN_Win32MouseEvent( LOWORD(lParam), HIWORD(lParam), mstate );
+			IN_Win32MouseEvent( mstate );
 			return 0;
 		}
 		break;
@@ -982,8 +988,10 @@ LRESULT WINAPI MainWndProc( HWND hWnd, UINT uMsg, WPARAM  wParam, LPARAM lParam 
 	case WM_INPUT:
 		if ( IN_MouseActive() ) {
 			IN_RawMouseEvent( lParam );
-			return 0;
+			//return 0;
 		}
+		// msdn says we must always call defwindowproc regardless for WM_INPUT
+		return DefWindowProc( hWnd, uMsg, wParam, lParam );
 		break;
 
 	case WM_SYSCOMMAND:
@@ -1036,7 +1044,7 @@ LRESULT WINAPI MainWndProc( HWND hWnd, UINT uMsg, WPARAM  wParam, LPARAM lParam 
 
 	case WM_SYSKEYDOWN:
 	case WM_KEYDOWN:
-		if ( wParam == VK_RETURN && ( uMsg == WM_SYSKEYDOWN || GetAsyncKeyState( VK_RMENU ) & 0x8000 ) ) {
+		if ( wParam == VK_RETURN && ( uMsg == WM_SYSKEYDOWN || GetKeyState( VK_RMENU ) & 0x8000 ) ) {
 			Cvar_SetIntegerValue( "r_fullscreen", glw_state.cdsFullscreen ? 0 : 1 );
 			Cbuf_AddText( "vid_restart\n" );
 			return 0;
@@ -1117,29 +1125,33 @@ void GLW_HideFullscreenWindow( void ) {
 Sys_GetClipboardData
 ================
 */
-char *Sys_GetClipboardData( void ) {
+char *Sys_GetClipboardText( void ) {
 	char *data = NULL;
 	char *cliptext;
 
 	if ( OpenClipboard( NULL ) ) {
 		HANDLE hClipboardData;
-		DWORD size;
 
 		// GetClipboardData performs implicit CF_UNICODETEXT => CF_TEXT conversion
 		if ( ( hClipboardData = GetClipboardData( CF_TEXT ) ) != 0 ) {
 			if ( ( cliptext = GlobalLock( hClipboardData ) ) != 0 ) {
-				size = GlobalSize( hClipboardData ) + 1;
+				DWORD size = GlobalSize( hClipboardData ) + 1;
 				data = Z_Malloc( size );
 				Q_strncpyz( data, cliptext, size );
 				GlobalUnlock( hClipboardData );
 				
-				strtok( data, "\n\r\b" );
+				(void)strtok( data, "\n\r\b" );
 			}
 		}
 		CloseClipboard();
 	}
 	return data;
 }
+
+void Sys_FreeClipboardText( char *data ) {
+	Z_Free( data );
+}
+
 
 
 /*
@@ -1166,4 +1178,20 @@ void Sys_SetClipboardBitmap( const byte *bitmap, int length )
 		SetClipboardData( CF_DIB, hMem );
 	}
 	CloseClipboard();
+}
+
+qboolean Sys_IsNumLockDown( void ) {
+	return ( GetKeyState( VK_NUMLOCK ) & 1 ) ? qtrue : qfalse;
+}
+
+qboolean Sys_IsKeyModActive( int modnum ) {
+	switch( modnum ) {
+	case K_KP_NUMLOCK: return ( GetKeyState( VK_NUMLOCK ) & 1 ) ? qtrue : qfalse;
+	case K_CAPSLOCK: return ( GetKeyState( VK_CAPITAL ) & 1 ) ? qtrue : qfalse;
+	case K_SCROLLOCK: return ( GetKeyState( VK_SCROLL ) & 1 ) ? qtrue : qfalse;
+	case K_SHIFT: return ( GetKeyState( VK_SHIFT ) & 1 ) ? qtrue : qfalse;
+	case K_ALT: return ( GetKeyState( VK_MENU ) & 1 ) ? qtrue : qfalse;
+	case K_CTRL: return ( GetKeyState( VK_CONTROL ) & 1 ) ? qtrue : qfalse;
+	default: return qfalse;
+	}
 }

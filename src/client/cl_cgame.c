@@ -30,22 +30,16 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "client.h"
 
-#ifdef ENABLE_SPLINES
-extern qboolean loadCamera( int camNum, const char *name );
-extern void startCamera( int camNum, int time );
-extern qboolean getCameraInfo( int camNum, int time, vec3_t *origin, vec3_t *angles, float *fov );
-#endif
-
 static void CL_Callvote_f( void ) {
 	CL_ForwardCommandToServer( Cmd_Cmd() );
 }
 
 
-static void CL_CompleteCallvote( char *args, int argNum ) {
+static void CL_CompleteCallvote( const char *args, int argNum ) {
 	if( argNum >= 2 )
 	{
-		char *p;
-		if ( argNum == 3 && !Q_stricmp( Cmd_Argv( 1 ), "map" ) ) {
+		const char *p;
+		if ( argNum == 3 && ( !Q_stricmp( Cmd_Argv( 1 ), "map" ) || !Q_stricmp( Cmd_Argv( 1 ), "devmap" ) ) ) {
 			if ( cl_connectedToPureServer ) {
 				Field_CompleteFilename( "maps", "bsp", qtrue, FS_MATCH_PK3s | FS_MATCH_STICK );
 			} else {
@@ -94,9 +88,7 @@ CL_GetClipboardData
 ====================
 */
 static void CL_GetClipboardData( char *buf, int buflen ) {
-	char	*cbd;
-
-	cbd = Sys_GetClipboardData();
+	char	*cbd = Sys_GetClipboardText();
 
 	if ( !cbd ) {
 		*buf = '\0';
@@ -105,7 +97,7 @@ static void CL_GetClipboardData( char *buf, int buflen ) {
 
 	Q_strncpyz( buf, cbd, buflen );
 
-	Z_Free( cbd );
+	Sys_FreeClipboardText( cbd );
 }
 
 
@@ -302,7 +294,9 @@ static void CL_ConfigstringModified( void ) {
 	}
 
 	if ( index == CS_SERVERINFO ) {
+#ifdef USE_DISCORD
 		CL_ParseServerInfo();
+#endif
 	} else if ( index == CS_SYSTEMINFO ) {
 		// parse serverId and other cvars
 		CL_SystemInfoChanged( qfalse );
@@ -643,6 +637,11 @@ static qboolean CL_CG_GetValue( char* value, int valueSize, const char* key ) {
 		return qtrue;
 	}
 
+	if ( !Q_stricmp( key, "trap_SysFlashWindow_Legacy" ) || !Q_stricmp( key, "trap_FlashWindow_ETE" ) ) {
+		Com_sprintf( value, valueSize, "%i", CG_FLASHWINDOW );
+		return qtrue;
+	}
+
 	// UTF-8 not yet supported
 	if ( !Q_stricmp( key, "cap_UTF8" ) ) {
 		Com_sprintf( value, valueSize, "%i", 0 );
@@ -651,11 +650,6 @@ static qboolean CL_CG_GetValue( char* value, int valueSize, const char* key ) {
 
 	if ( !Q_stricmp( key, "cap_TTF_RegisterFont" ) ) {
 		Com_sprintf( value, valueSize, "%i", 0 );
-		return qtrue;
-	}
-
-	if ( !Q_stricmp( key, "cap_SVG" ) ) {
-		Com_sprintf( value, valueSize, "%i", 1 );
 		return qtrue;
 	}
 
@@ -1083,35 +1077,16 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		return 0;*/
 
 	case CG_LOADCAMERA:
-#ifdef ENABLE_SPLINES
-		return loadCamera( args[1], VMA(2) );
-#else
 		return 0;
-#endif
 
 	case CG_STARTCAMERA:
-#ifdef ENABLE_SPLINES
-		if ( args[1] == 0 ) {  // CAM_PRIMARY
-			cl.cameraMode = qtrue;
-		}
-		startCamera( args[1], args[2] );
-#endif
 		return 0;
 
 	case CG_STOPCAMERA:
-#ifdef ENABLE_SPLINES
-		if ( args[1] == 0 ) {  // CAM_PRIMARY
-			cl.cameraMode = qfalse;
-		}
-#endif
 		return 0;
 
 	case CG_GETCAMERAINFO:
-#ifdef ENABLE_SPLINES
-		return getCameraInfo( args[1], args[2], VMA(3), VMA(4), VMA(5) );
-#else
 		return 0;
-#endif
 
 	case CG_GET_ENTITY_TOKEN:
 		return re.GetEntityToken( VMA(1), args[2] );
@@ -1210,6 +1185,13 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		cl.cmdMask = CMD_MASK_EXT;
 		return 0;
 
+	case CG_KEY_ISMODACTIVE:
+		return Sys_IsKeyModActive( args[1] );
+
+	case CG_FLASHWINDOW:
+		GLimp_FlashWindow( args[1] );
+		return 0;
+
 	case CG_TRAP_GETVALUE:
 		return CL_CG_GetValue( VMA(1), args[2], VMA(3) );
 
@@ -1271,7 +1253,7 @@ void CL_UpdateLevelHunkUsage( void ) {
 	char *buf, *outbuf;
 	char *outbuftrav;
 	const char *buftrav;
-	char *token;
+	const char *token;
 	char outstr[256];
 	int len, memusage;
 
@@ -1560,8 +1542,6 @@ static void CL_FirstSnapshot( void ) {
 		Cbuf_AddText( "\n" );
 		Cvar_Set( "activeAction", "" );
 	}
-
-	Sys_BeginProfiling();
 }
 
 
@@ -1619,8 +1599,8 @@ Returns either auto-nudge or cl_timeNudge value.
 static int CL_TimeNudge( void ) {
 	float autoNudge = cl_autoNudge->value;
 
-	if ( autoNudge != 0.0 )
-		return (int)((CL_AvgPing() * autoNudge) + 0.5) * -1;
+	if ( autoNudge != 0.0f )
+		return (int)((CL_AvgPing() * autoNudge) + 0.5f) * -1;
 	else
 		return cl_timeNudge->integer;
 }
@@ -1734,7 +1714,7 @@ void CL_SetCGameTime( void ) {
 
 	//while ( cl.serverTime >= cl.snap.serverTime ) {
 	while ( cl.serverTime - cl.snap.serverTime >= 0 ) {
-		// feed another messag, which should change
+		// feed another message, which should change
 		// the contents of cl.snap
 		CL_ReadDemoMessage();
 		if ( cls.state != CA_ACTIVE ) {

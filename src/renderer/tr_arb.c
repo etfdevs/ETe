@@ -147,18 +147,22 @@ static void ARB_Lighting( const shaderStage_t* pStage )
 	int numIndexes;
 	int clip;
 	int i;
+	qboolean isDirected;
 	
 	backEnd.pc.c_lit_vertices_lateculltest += tess.numVertexes;
 
 	dl = tess.light;
+	isDirected = (dl->flags & REF_DIRECTED_DLIGHT) != 0;
 
 	for ( i = 0; i < tess.numVertexes; ++i ) {
 		vec3_t dist;
 		VectorSubtract( dl->transformed, tess.xyz[i], dist );
 
-		if ( tess.surfType != SF_GRID && DotProduct( dist, tess.normal[i] ) <= 0.0f ) {
-			clipBits[ i ] = 63;
-			continue;
+		if ( tess.surfType != SF_GRID ) {
+			if ( !isDirected && DotProduct( dist, tess.normal[i] ) <= 0.0f ) {
+				clipBits[ i ] = 63;
+				continue;
+			}
 		}
 
 		clip = 0;
@@ -304,6 +308,11 @@ void ARB_SetupLightParams( void )
 		//qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 2, dl->transformed[0], dl->transformed[1], dl->transformed[2], 0 );
 		//qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 3, dl->transformed2[0], dl->transformed2[1], dl->transformed2[2], 0 );
 		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 4, ab[0], ab[1], ab[2], 1.0f / DotProduct( ab, ab ) );
+	}
+	else if ( dl->flags & REF_DIRECTED_DLIGHT )
+	{
+		// Pass the directional normal and intensity
+		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 2, dl->origin[0], dl->origin[1], dl->origin[2], dl->intensity );
 	}
 
 	qglProgramLocalParameter4fARB( GL_VERTEX_PROGRAM_ARB, 0, backEnd.orientation.viewOrigin[0], backEnd.orientation.viewOrigin[1], backEnd.orientation.viewOrigin[2], 0 );
@@ -476,8 +485,7 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 {
 	qboolean fog = qfalse;
 	qboolean linear = qfalse;
-	// TODO ensiform
-	// qboolean directional = qfalse;
+	qboolean directional = qfalse;
 	qboolean abslight = qfalse;
 
 	program[0] = '\0';
@@ -507,8 +515,7 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		case DLIGHT_DIRECTIONAL_FRAGMENT_FOG:
 		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT:
 		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG:
-			// TODO ensiform
-			//directional = qtrue;
+			directional = qtrue;
 			break;
 	}
 
@@ -526,9 +533,17 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 	strcat( program,
 	"!!ARBfp1.0 \n"
 	"OPTION ARB_precision_hint_fastest; \n"
-	"PARAM lightRGB = program.local[0]; \n"
+	"PARAM lightRGB = program.local[0]; \n" );
+
+	if ( directional ) {
+		// .xyz = direction normal, .w = intensity
+		strcat( program, "PARAM dirLV = program.local[2]; \n" );
+	}
+
 	//"PARAM lightRange2recip = program.local[1]; \n"
 	//"PARAM fogColor = program.local[5]; \n" // fogColor
+
+	strcat( program,
 	"TEMP base, tmp; \n"
 	"TEX base, fragment.texcoord[0], texture[0], 2D; \n" );
 
@@ -543,28 +558,42 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		// calculate light vector from projection point
 		"MAD dnLV, lightVector, tmp.x, LV; \n"
 		);
-	} else {
+	} else if ( !directional ) {
 		strcat( program, "ATTRIB dnLV = fragment.texcoord[1]; \n" );
 	}
 
 	strcat( program,
-	"ATTRIB dnEV = fragment.texcoord[2]; \n" // 2
-	"ATTRIB n = fragment.texcoord[3]; \n"    // 3
-	
-	// normalize light vector
-	"TEMP lv; \n"
-	"DP3 tmp.w, dnLV, dnLV; \n"
-	"RSQ lv.w, tmp.w; \n"
-	"MUL lv.xyz, dnLV, lv.w; \n"
+	"ATTRIB dnEV = fragment.texcoord[2]; \n"	// 2
+	"ATTRIB n = fragment.texcoord[3]; \n" );    // 3
 
-	// calculate light intensity
-	"TEMP light; \n"
-	"MUL tmp.x, tmp.w, lightRGB.w; \n"
-	"SUB tmp.x, {1.0}, tmp.x; \n"
-	// discard blank fragments
-	"KIL tmp.x; \n"
+	if ( directional ) {
+		strcat( program,
+		// use the direction vector directly and normalize
+		"TEMP lv; \n"
+		"DP3 tmp.w, dirLV, dirLV; \n"
+		"RSQ lv.w, tmp.w; \n"
+		"MUL lv.xyz, dirLV, lv.w; \n"
+		
+		// directional lights bypass distance attenuation
+		"TEMP light; \n"
+		"MOV light, lightRGB; \n" );
+	} else {
+		strcat( program,
+		// normalize light vector
+		"TEMP lv; \n"
+		"DP3 tmp.w, dnLV, dnLV; \n"
+		"RSQ lv.w, tmp.w; \n"
+		"MUL lv.xyz, dnLV, lv.w; \n"
 
-	"MUL light, lightRGB, tmp.x; \n" ); // light.rgb
+		// calculate light intensity
+		"TEMP light; \n"
+		"MUL tmp.x, tmp.w, lightRGB.w; \n"
+		"SUB tmp.x, {1.0}, tmp.x; \n"
+		// discard blank fragments
+		"KIL tmp.x; \n"
+
+		"MUL light, lightRGB, tmp.x; \n" ); // light.rgb
+	}
 
 	if ( r_dlightSpecColor->value > 0 )
 		strcat( program, va( "PARAM specRGB = %1.2f; \n", r_dlightSpecColor->value ) );
@@ -608,19 +637,39 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 	}
 
 	// diffuse
-	if ( abslight ) {
+	if ( directional ) {
 		strcat( program,
 		"TEMP bump; \n"
-		"DP3 bump.w, n, lv; \n"
-		// make sure that light and eye vectors are on the same plane side
-		"DP3 tmp.w, n, ev; \n"
-		"MUL tmp.w, tmp.w, bump.w; \n"
-		"KIL tmp.w; \n"
-		"ABS bump.w, bump.w; \n" );
+		"DP3 bump.w, n, lv; \n" );
+
+		if ( abslight ) {
+			strcat( program,
+			// make sure that light and eye vectors are on the same plane side
+			"DP3 tmp.w, n, ev; \n"
+			"MUL tmp.w, tmp.w, bump.w; \n"
+			"KIL tmp.w; \n"
+			"ABS bump.w, bump.w; \n" );
+		}
+		
+		strcat( program,
+		"MUL tmp.x, dirLV.w, {0.125}.x; \n" // remainder = intensity * 0.125
+		"MAD bump.w, bump.w, dirLV.w, tmp.x; \n" // modulate = dot * intensity + remainder
+		"MAX bump.w, bump.w, {0.0}.x; \n" ); // clamp to 0
 	} else {
-		strcat( program,
-		"TEMP bump; \n"
-		"DP3_SAT bump.w, n, lv; \n" );
+		if ( abslight ) {
+			strcat( program,
+			"TEMP bump; \n"
+			"DP3 bump.w, n, lv; \n"
+			// make sure that light and eye vectors are on the same plane side
+			"DP3 tmp.w, n, ev; \n"
+			"MUL tmp.w, tmp.w, bump.w; \n"
+			"KIL tmp.w; \n"
+			"ABS bump.w, bump.w; \n" );
+		} else {
+			strcat( program,
+			"TEMP bump; \n"
+			"DP3_SAT bump.w, n, lv; \n" );
+		}
 	}
 
 	strcat( program, "MAD base, base, bump.w, spec; \n" );
@@ -2002,8 +2051,7 @@ void R_BloomScreen( void )
 	{
 		if ( !backEnd.doneBloom && backEnd.doneSurfaces )
 		{
-			if ( !backEnd.projection2D )
-				RB_SetGL2D();
+			RB_SetGL2D();
 			qglColor4f( 1, 1, 1, 1 );
 			FBO_Bloom( 0, 0, qfalse );
 		}
@@ -2030,6 +2078,7 @@ void FBO_PostProcess( void )
 		qglMatrixMode( GL_MODELVIEW );
 		qglLoadIdentity();
 		backEnd.projection2D = qtrue;
+		// no need to setup shader time there
 	}
 
 	if ( blitMSfbo )

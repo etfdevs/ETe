@@ -148,7 +148,7 @@ R_CullModel
 static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 	//vec3_t bounds[2];
 	mdxHeader_t *oldFrameHeader, *newFrameHeader;
-	mdxFrame_t  *oldFrame, *newFrame;
+	mdxFrame_t  *_oldFrame, *newFrame;
 	int i;
 
 	newFrameHeader = R_GetModelByHandle( ent->e.frameModel )->model.mdx;
@@ -162,7 +162,7 @@ static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 	newFrame = ( mdxFrame_t * )( ( byte * ) newFrameHeader + newFrameHeader->ofsFrames +
 								 ent->e.frame * (int) ( sizeof( mdxBoneFrameCompressed_t ) ) * newFrameHeader->numBones +
 								 ent->e.frame * sizeof( mdxFrame_t ) );
-	oldFrame = ( mdxFrame_t * )( ( byte * ) oldFrameHeader + oldFrameHeader->ofsFrames +
+	_oldFrame = ( mdxFrame_t * )( ( byte * ) oldFrameHeader + oldFrameHeader->ofsFrames +
 								 ent->e.oldframe * (int) ( sizeof( mdxBoneFrameCompressed_t ) ) * oldFrameHeader->numBones +
 								 ent->e.oldframe * sizeof( mdxFrame_t ) );
 
@@ -188,10 +188,10 @@ static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 			int sphereCull, sphereCullB;
 
 			sphereCull  = R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius );
-			if ( newFrame == oldFrame ) {
+			if ( newFrame == _oldFrame ) {
 				sphereCullB = sphereCull;
 			} else {
-				sphereCullB = R_CullLocalPointAndRadius( oldFrame->localOrigin, oldFrame->radius );
+				sphereCullB = R_CullLocalPointAndRadius( _oldFrame->localOrigin, _oldFrame->radius );
 			}
 
 			if ( sphereCull == sphereCullB ) {
@@ -211,8 +211,8 @@ static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 
 	// calculate a bounding box in the current coordinate system
 	for ( i = 0 ; i < 3 ; i++ ) {
-		bounds[0][i] = oldFrame->bounds[0][i] < newFrame->bounds[0][i] ? oldFrame->bounds[0][i] : newFrame->bounds[0][i];
-		bounds[1][i] = oldFrame->bounds[1][i] > newFrame->bounds[1][i] ? oldFrame->bounds[1][i] : newFrame->bounds[1][i];
+		bounds[0][i] = _oldFrame->bounds[0][i] < newFrame->bounds[0][i] ? _oldFrame->bounds[0][i] : newFrame->bounds[0][i];
+		bounds[1][i] = _oldFrame->bounds[1][i] > newFrame->bounds[1][i] ? _oldFrame->bounds[1][i] : newFrame->bounds[1][i];
 	}
 
 	switch ( R_CullLocalBox( bounds ) )
@@ -360,7 +360,7 @@ void R_MDM_AddAnimSurfaces( trRefEntity_t *ent ) {
 
 #ifdef USE_PMLIGHT
 	numDlights = 0;
-	if ( r_dlightMode->integer >= 2 && ( !personalModel || tr.viewParms.portalView != PV_NONE ) ) {
+	if ( R_GetDlightMode() >= 2 && ( !personalModel || tr.viewParms.portalView != PV_NONE ) ) {
 		R_TransformDlights( tr.viewParms.num_dlights, tr.viewParms.dlights, &tr.orientation );
 		for ( n = 0; n < tr.viewParms.num_dlights; n++ ) {
 			dl = &tr.viewParms.dlights[ n ];
@@ -420,7 +420,7 @@ void R_MDM_AddAnimSurfaces( trRefEntity_t *ent ) {
 
 			if ( shader == tr.defaultShader ) {
 				ri.Printf( PRINT_DEVELOPER, "WARNING: no shader for surface %s in skin %s\n", surface->name, skin->name );
-			} else if ( shader->defaultShader )     {
+			} else if ( shader->defaultShader ) {
 				ri.Printf( PRINT_DEVELOPER, "WARNING: shader %s in skin %s not found\n", shader->name, skin->name );
 			}
 		} else {
@@ -443,7 +443,6 @@ void R_MDM_AddAnimSurfaces( trRefEntity_t *ent ) {
 			 && shader->sort == SS_OPAQUE ) {
 			R_AddDrawSurf( (void *)surface, tr.projectionShadowShader, 0, 0 );
 		}
-
 
 		// for testing polygon shadows (on /all/ models)
 		if ( r_shadows->integer == 4 ) {

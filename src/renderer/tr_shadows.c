@@ -138,7 +138,7 @@ void RB_ShadowTessEnd( void ) {
 	}
 
 #ifdef USE_PMLIGHT
-	if ( r_dlightMode->integer == 2 && r_shadows->integer == 2 )
+	if ( R_GetDlightMode() == 2 && r_shadows->integer == 2 )
 		VectorCopy( backEnd.currentEntity->shadowLightDir, lightDir );
 	else
 #endif
@@ -227,7 +227,7 @@ void RB_ShadowTessEnd( void ) {
 	if ( qglUnlockArraysEXT )
 		qglUnlockArraysEXT();
 
-	// reenable writing to the color buffer
+	// re-enable writing to the color buffer
 	qglColorMask(rgba[0], rgba[1], rgba[2], rgba[3]);
 
 	qglEnable( GL_TEXTURE_2D );
@@ -322,7 +322,7 @@ void RB_ProjectionShadowDeform( void ) {
 	groundDist = backEnd.orientation.origin[2] - backEnd.currentEntity->e.shadowPlane;
 
 #ifdef USE_PMLIGHT
-	if ( r_dlightMode->integer == 2 && r_shadows->integer == 2 )
+	if ( R_GetDlightMode() == 2 && r_shadows->integer == 2 )
 		VectorCopy( backEnd.currentEntity->shadowLightDir, lightDir );
 	else
 #endif

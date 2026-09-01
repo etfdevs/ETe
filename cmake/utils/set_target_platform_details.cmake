@@ -1,0 +1,27 @@
+include_guard(GLOBAL)
+
+# needs arch.cmake included before this file
+if(NOT DEFINED LIB_ARCH)
+	message(FATAL_ERROR "Must include arch.cmake first")
+    return()
+endif()
+
+function(set_target_platform_details target)
+
+	if(USE_ARCHLESS_FILENAMES OR LIB_ARCH STREQUAL "")
+		set_target_properties(${target} PROPERTIES OUTPUT_NAME "${target}" PREFIX "")
+		target_compile_definitions(${target} PRIVATE BINARY_NAME="${target}")
+	else()
+		get_target_property(TARGET_TYPE ${target} TYPE)
+		if(TARGET_TYPE STREQUAL "EXECUTABLE")
+			set_target_properties(${target} PROPERTIES OUTPUT_NAME "${target}.${LIB_ARCH}" PREFIX "")
+			target_compile_definitions(${target} PRIVATE BINARY_NAME="${target}.${LIB_ARCH}")
+		else()
+			set_target_properties(${target} PROPERTIES OUTPUT_NAME "${target}_${LIB_ARCH}" PREFIX "")
+			target_compile_definitions(${target} PRIVATE BINARY_NAME="${target}_${LIB_ARCH}")
+		endif()
+	endif()
+	if (APPLE)
+		set_target_properties(${target} PROPERTIES SUFFIX "")
+	endif()
+endfunction()

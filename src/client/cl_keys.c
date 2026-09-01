@@ -181,7 +181,7 @@ static void Field_Paste( field_t *edit ) {
 	char	*cbd;
 	int		pasteLen, i;
 
-	cbd = Sys_GetClipboardData();
+	cbd = Sys_GetClipboardText();
 
 	if ( !cbd ) {
 		return;
@@ -193,7 +193,7 @@ static void Field_Paste( field_t *edit ) {
 		Field_CharEvent( edit, cbd[i] );
 	}
 
-	Z_Free( cbd );
+	Sys_FreeClipboardText( cbd );
 }
 
 

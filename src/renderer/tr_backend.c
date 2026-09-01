@@ -451,6 +451,7 @@ static void RB_Hyperspace( void ) {
 
 	if ( tess.shader != tr.whiteShader ) {
 		RB_EndSurface();
+		RB_SetGL2D();
 		RB_BeginSurface( tr.whiteShader, 0 );
 	}
 
@@ -460,8 +461,8 @@ static void RB_Hyperspace( void ) {
 
 	RB_SetGL2D();
 
-	c[0] = c[1] = c[2] = (backEnd.refdef.time & 255);
-	c[3] = 255;
+	c.rgba[0] = c.rgba[1] = c.rgba[2] = (backEnd.refdef.time & 255);
+	c.rgba[3] = 255;
 
 	RB_AddQuadStamp2( backEnd.refdef.x, backEnd.refdef.y, backEnd.refdef.width, backEnd.refdef.height,
 		0.0, 0.0, 0.0, 0.0, c );
@@ -695,7 +696,7 @@ static void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 		// change the tess parameters if needed
 		// a "entityMergable" shader is a shader that can have surfaces from separate
 		// entities merged into a single batch, like smoke and blood puff sprites
-		if ( ( (oldSort ^ drawSurfs->sort ) & ~QSORT_REFENTITYNUM_MASK ) || !shader->entityMergable ) {
+		if ( ( (oldSort ^ drawSurf->sort ) & ~QSORT_REFENTITYNUM_MASK ) || !shader->entityMergable ) {
 			if ( oldShader != NULL ) {
 				RB_EndSurface();
 			}
@@ -738,7 +739,7 @@ static void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 				// set up the dynamic lighting if needed
 #ifdef USE_LEGACY_DLIGHTS
 #ifdef USE_PMLIGHT
-				if ( !r_dlightMode->integer )
+				if ( !R_GetDlightMode() )
 #endif
 				if ( backEnd.currentEntity->needDlights ) {
 					R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.orientation );
@@ -757,7 +758,7 @@ static void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 				backEnd.orientation = backEnd.viewParms.world;
 #ifdef USE_LEGACY_DLIGHTS
 #ifdef USE_PMLIGHT
-				if ( !r_dlightMode->integer )
+				if ( !R_GetDlightMode() )
 #endif
 				R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.orientation );
 #endif // USE_LEGACY_DLIGHTS
@@ -837,7 +838,7 @@ static void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	backEnd.orientation = backEnd.viewParms.world;
 #ifdef USE_LEGACY_DLIGHTS
 #ifdef USE_PMLIGHT
-	if ( !r_dlightMode->integer )
+	if ( !R_GetDlightMode() )
 #endif
 		R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.orientation );
 #endif // USE_LEGACY_DLIGHTS
@@ -1060,6 +1061,11 @@ RB_SetGL2D
 ================
 */
 void RB_SetGL2D( void ) {
+
+	if ( backEnd.projection2D ) {
+		return;
+	}
+
 	backEnd.projection2D = qtrue;
 
 	// set 2D virtual screen size
@@ -1132,6 +1138,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 
 	if ( !tr.scratchImage[ client ] ) {
 		tr.scratchImage[ client ] = R_CreateImage( va( "*scratch%i", client ), NULL, data, cols, rows, IMGFLAG_CLAMPTOEDGE | IMGFLAG_RGB | IMGFLAG_NOSCALE );
+		return;
 	}
 
 	image = tr.scratchImage[ client ];
@@ -1165,10 +1172,10 @@ static const void *RB_SetColor( const void *data ) {
 
 	cmd = (const setColorCommand_t *)data;
 
-	backEnd.color2D[0] = cmd->color[0] * 255;
-	backEnd.color2D[1] = cmd->color[1] * 255;
-	backEnd.color2D[2] = cmd->color[2] * 255;
-	backEnd.color2D[3] = cmd->color[3] * 255;
+	backEnd.color2D.rgba[0] = cmd->color[0] * 255;
+	backEnd.color2D.rgba[1] = cmd->color[1] * 255;
+	backEnd.color2D.rgba[2] = cmd->color[2] * 255;
+	backEnd.color2D.rgba[3] = cmd->color[3] * 255;
 
 	return (const void *)(cmd + 1);
 }
@@ -1187,9 +1194,8 @@ static const void *RB_StretchPic( const void *data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		backEnd.currentEntity = &backEnd.entity2D;
 		RB_BeginSurface( shader, 0 );
 	}
@@ -1198,9 +1204,7 @@ static const void *RB_StretchPic( const void *data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_FBO
 	//Check if it's time for BLOOM!
@@ -1254,9 +1258,8 @@ static const void* RB_Draw2dPolys( const void* data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		backEnd.currentEntity = &backEnd.entity2D;
 		RB_BeginSurface( shader, 0 );
 	}
@@ -1265,9 +1268,7 @@ static const void* RB_Draw2dPolys( const void* data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_FBO
 	//Check if it's time for BLOOM!
@@ -1291,10 +1292,7 @@ static const void* RB_Draw2dPolys( const void* data ) {
 		tess.texCoords[0][ tess.numVertexes ][0] = cmd->verts[i].st[0];
 		tess.texCoords[0][ tess.numVertexes ][1] = cmd->verts[i].st[1];
 
-		tess.vertexColors[ tess.numVertexes ][0] = cmd->verts[i].modulate[0];
-		tess.vertexColors[ tess.numVertexes ][1] = cmd->verts[i].modulate[1];
-		tess.vertexColors[ tess.numVertexes ][2] = cmd->verts[i].modulate[2];
-		tess.vertexColors[ tess.numVertexes ][3] = cmd->verts[i].modulate[3];
+		tess.vertexColors[ tess.numVertexes ] = cmd->verts[i].modulate;
 		tess.numVertexes++;
 	}
 
@@ -1318,9 +1316,8 @@ static const void *RB_RotatedPic( const void *data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		backEnd.currentEntity = &backEnd.entity2D;
 		RB_BeginSurface( shader, 0 );
 	}
@@ -1329,9 +1326,7 @@ static const void *RB_RotatedPic( const void *data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_FBO
 	//Check if it's time for BLOOM!
@@ -1352,10 +1347,10 @@ static const void *RB_RotatedPic( const void *data ) {
 	tess.indexes[ numIndexes + 4 ] = numVerts + 0;
 	tess.indexes[ numIndexes + 5 ] = numVerts + 1;
 
-	*(int *)tess.vertexColors[ numVerts ] =
-		*(int *)tess.vertexColors[ numVerts + 1 ] =
-			*(int *)tess.vertexColors[ numVerts + 2 ] =
-				*(int *)tess.vertexColors[ numVerts + 3 ] = *(int *)backEnd.color2D;
+	tess.vertexColors[numVerts + 0] =
+	tess.vertexColors[numVerts + 1] =
+	tess.vertexColors[numVerts + 2] =
+	tess.vertexColors[numVerts + 3] = backEnd.color2D;
 
 	angle = cmd->angle * M_TAU;
 	tess.xyz[ numVerts ][0] = cmd->x + ( cos( angle ) * cmd->w );
@@ -1407,9 +1402,8 @@ static const void *RB_StretchPicGradient( const void *data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		backEnd.currentEntity = &backEnd.entity2D;
 		RB_BeginSurface( shader, 0 );
 	}
@@ -1418,9 +1412,7 @@ static const void *RB_StretchPicGradient( const void *data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_FBO
 	//Check if it's time for BLOOM!
@@ -1446,11 +1438,11 @@ static const void *RB_StretchPicGradient( const void *data ) {
 //		*(int *)tess.vertexColors[ numVerts + 2 ] =
 //		*(int *)tess.vertexColors[ numVerts + 3 ] = *(int *)backEnd.color2D;
 
-	*(int *)tess.vertexColors[ numVerts ] =
-		*(int *)tess.vertexColors[ numVerts + 1 ] = *(int *)backEnd.color2D;
+	tess.vertexColors[ numVerts + 0 ] =
+	tess.vertexColors[ numVerts + 1 ] = backEnd.color2D;
 
-	*(int *)tess.vertexColors[ numVerts + 2 ] =
-		*(int *)tess.vertexColors[ numVerts + 3 ] = *(int *)cmd->gradientColor;
+	tess.vertexColors[ numVerts + 2 ] =
+	tess.vertexColors[ numVerts + 3 ] = cmd->gradientColor;
 
 	tess.xyz[ numVerts ][0] = cmd->x;
 	tess.xyz[ numVerts ][1] = cmd->y;
@@ -1710,9 +1702,7 @@ void RB_ShowImages( void ) {
 	const vec2_t t[4] = { {0,0}, {1,0}, {0,1}, {1,1} };
 	vec3_t v[4];
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 	qglClear( GL_COLOR_BUFFER_BIT );
 
@@ -1849,8 +1839,7 @@ static const void *RB_FinishBloom( const void *data )
 		{
 			if ( !backEnd.doneBloom && backEnd.doneSurfaces )
 			{
-				if ( !backEnd.projection2D )
-					RB_SetGL2D();
+				RB_SetGL2D();
 				qglColor4f( 1, 1, 1, 1 );
 				FBO_Bloom( 0, 0, qfalse );
 			}
@@ -2109,9 +2098,6 @@ void RB_ExecuteRenderCommands( const void *data ) {
 			//bani
 		case RC_FINISH:
 			data = RB_Finish( data );
-			break;
-		case RC_DRAW_OMNIBOT:
-			data = ri.Sys_OmnibotRender( data );
 			break;
 		case RC_END_OF_LIST:
 		default:

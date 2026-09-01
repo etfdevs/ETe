@@ -238,14 +238,14 @@ void SV_LinkEntity( sharedEntity_t *gEnt ) {
 		// Gordon: for the origin only bmodel checks
 		ent->originCluster = CM_LeafCluster( CM_PointLeafnum( gEnt->r.currentOrigin ) );
 	} else if ( gEnt->r.contents & ( CONTENTS_SOLID | CONTENTS_BODY ) ) {
-		// assume that x/y are equal and symetric
+		// assume that x/y are equal and symmetric
 		i = gEnt->r.maxs[0];
 		if (i<1)
 			i = 1;
 		if (i>255)
 			i = 255;
 
-		// z is not symetric
+		// z is not symmetric
 		j = (-gEnt->r.mins[2]);
 		if (j<1)
 			j = 1;
@@ -654,6 +654,10 @@ void SV_Trace( trace_t *results, const vec3_t start, const vec3_t mins, const ve
 	}
 
 	Com_Memset ( &clip, 0, sizeof ( clip ) );
+
+	if ( passEntityNum != -2 && (unsigned)passEntityNum > MAX_GENTITIES - 1 ) {
+		passEntityNum = ENTITYNUM_NONE;
+	}
 
 	// clip to world
 	CM_BoxTrace( &clip.trace, start, end, mins, maxs, 0, contentmask, capsule );

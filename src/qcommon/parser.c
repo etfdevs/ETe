@@ -69,7 +69,7 @@ define_t *globaldefines;
 // Returns:					-
 // Changes Globals:		-
 //============================================================================
-static void FORMAT_PRINTF(2, 3) QDECL SourceError(source_t *source, const char *fmt, ...)
+static void Q_PRINTF_FUNC(2, 3) QDECL SourceError(source_t *source, const char *fmt, ...)
 {
 	char text[MAXPRINTMSG];
 	va_list ap;
@@ -85,7 +85,7 @@ static void FORMAT_PRINTF(2, 3) QDECL SourceError(source_t *source, const char *
 // Returns:					-
 // Changes Globals:		-
 //===========================================================================
-static void FORMAT_PRINTF(2, 3) QDECL SourceWarning(source_t *source, const char *fmt, ...)
+static void Q_PRINTF_FUNC(2, 3) QDECL SourceWarning(source_t *source, const char *fmt, ...)
 {
 	char text[MAXPRINTMSG];
 	va_list ap;

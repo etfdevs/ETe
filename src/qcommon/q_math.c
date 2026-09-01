@@ -1188,7 +1188,7 @@ Q_isfinite
 ================
 */
 #ifdef USE_QISFINITE
-static int Q_isfinite( float f )
+int Q_isfinite( float f )
 {
 	floatint_t fi;
 	fi.f = f;
@@ -1238,7 +1238,8 @@ Q_log2f
 */
 float Q_log2f( float f )
 {
-	return logf( f ) / M_LN2;
+	const float v = logf( f );
+	return v / M_LN2;
 }
 
 

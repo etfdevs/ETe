@@ -28,6 +28,9 @@ If you have questions concerning this license or the applicable additional terms
 
 // g_public.h -- game module information visible to server
 
+#ifndef __G_PUBLIC_H__
+#define __G_PUBLIC_H__
+
 #define GAME_API_VERSION    8
 
 // entity->svFlags
@@ -531,3 +534,4 @@ typedef enum {
 	GAME_EXPORT_LAST
 } gameExport_t;
 
+#endif

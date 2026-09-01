@@ -261,7 +261,7 @@ extern cvar_t *s_muteWhenUnfocused;
 
 extern cvar_t *s_testsound;
 
-#if defined(USE_SDL)
+#if defined(USE_SDL2) || defined(USE_SDL3)
 extern cvar_t *s_sdlDriver;
 #endif
 

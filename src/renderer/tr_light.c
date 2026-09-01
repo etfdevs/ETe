@@ -65,44 +65,6 @@ void R_TransformDlights( int count, dlight_t *dl, orientationr_t *or) {
 }
 
 
-/*
-R_CullDlights()
-frustum culls dynamic lights
-only used by skybox portal rendering
-*/
-#if 0
-void R_CullDlights( void ) {
-	int i, numDlights, dlightBits;
-	dlight_t    *dl;
-
-
-	/* limit */
-	if ( tr.refdef.num_dlights > MAX_DLIGHTS ) {
-		tr.refdef.num_dlights = MAX_DLIGHTS;
-	}
-
-	R_TransformDlights( tr.refdef.num_dlights, tr.refdef.dlights, &tr.orientation );
-
-	/* walk dlight list */
-	numDlights = 0;
-	dlightBits = 0;
-	for ( i = 0, dl = tr.refdef.dlights; i < tr.refdef.num_dlights; i++, dl++ )
-	{
-		if ( R_CullDlight( dl ) != CULL_OUT ) {
-			numDlights = i + 1;
-			dlightBits |= ( 1 << i );
-		}
-	}
-
-	/* reset count */
-	tr.refdef.num_dlights = numDlights;
-
-	/* set bits */
-	tr.refdef.dlightBits = dlightBits;
-}
-#endif
-
-
 #ifdef USE_LEGACY_DLIGHTS
 /*
 =============
@@ -247,11 +209,18 @@ static void R_SetupEntityLightingGrid( trRefEntity_t *ent ) {
 		data = gridData;
 		for ( j = 0 ; j < 3 ; j++ ) {
 			if ( i & ( 1 << j ) ) {
+				if ( pos[j] + 1 > tr.world->lightGridBounds[j] - 1 ) {
+					break; // ignore values outside lightgrid
+				}
 				factor *= frac[j];
 				data += gridStep[j];
 			} else {
 				factor *= ( 1.0f - frac[j] );
 			}
+		}
+
+		if ( j != 3 ) {
+			continue;
 		}
 
 		if ( !( data[0] + data[1] + data[2] ) ) {
@@ -426,7 +395,7 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 	d = VectorLength( ent->directedLight );
 	VectorScale( ent->lightDir, d, lightDir );
 #ifdef USE_PMLIGHT
-	if ( r_dlightMode->integer == 2 ) { 
+	if ( R_GetDlightMode() == 2 ) {
 		// only direct lights
 		// but we need to deal with shadow light direction
 		VectorCopy( lightDir, shadowLightDir );
@@ -450,7 +419,7 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 				VectorMA( shadowLightDir, d, dir, shadowLightDir );
 			}
 		} // if ( r_shadows->integer == 2 )
-	}  // if ( r_dlightMode->integer == 2 )
+	}  // if ( R_GetDlightMode() == 2 )
 	else
 #endif
 	for ( i = 0 ; i < refdef->num_dlights ; i++ ) {
@@ -543,7 +512,7 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 	}
 
 #ifdef USE_PMLIGHT
-	if ( r_shadows->integer == 2 && r_dlightMode->integer == 2 ) {
+	if ( r_shadows->integer == 2 && R_GetDlightMode() == 2 ) {
 		VectorNormalize( shadowLightDir );
 		ent->shadowLightDir[0] = DotProduct( shadowLightDir, ent->e.axis[0] );
 		ent->shadowLightDir[1] = DotProduct( shadowLightDir, ent->e.axis[1] );
@@ -581,3 +550,29 @@ int R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, ve
 
 	return qtrue;
 }
+
+/*
+=============
+R_GetDlightMode
+
+Get the dynamic lighing method used
+
+Return 0 for legacy vertex lighting
+       1 for per pixel lighting
+	   2 for per pixel lighting also affecting MD3 models
+=============
+*/
+
+int R_GetDlightMode( void )
+{
+#ifdef USE_PMLIGHT
+	if (!qglGenProgramsARB) {
+		return 0;
+	} else {
+		return r_dlightMode->integer;
+	}
+#else
+	return 0;
+#endif
+}
+

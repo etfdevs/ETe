@@ -193,13 +193,6 @@ cvar_t	*r_debugSort;
 cvar_t	*r_printShaders;
 cvar_t	*r_saveFontData;
 
-// Ridah
-cvar_t  *r_cache;
-cvar_t  *r_cacheShaders;
-cvar_t  *r_cacheModels;
-
-cvar_t  *r_cacheGathering;
-
 cvar_t  *r_buildScript;
 
 cvar_t  *r_bonesDebug;
@@ -292,7 +285,7 @@ static void R_ClearSymTables( void )
 
 // for modular renderer
 #ifdef USE_RENDERER_DLOPEN
-void FORMAT_PRINTF(2,3) QDECL Com_Error( errorParm_t code, const char *fmt, ... )
+void Q_NO_RETURN Q_PRINTF_FUNC(2,3) QDECL Com_Error( errorParm_t code, const char *fmt, ... )
 {
 	char buf[ MAXPRINTMSG ];
 	va_list	argptr;
@@ -302,7 +295,7 @@ void FORMAT_PRINTF(2,3) QDECL Com_Error( errorParm_t code, const char *fmt, ... 
 	ri.Error( code, "%s", buf );
 }
 
-void FORMAT_PRINTF(1,2) QDECL Com_Printf( const char *fmt, ... )
+void Q_PRINTF_FUNC(1,2) QDECL Com_Printf( const char *fmt, ... )
 {
 	char buf[ MAXPRINTMSG ];
 	va_list	argptr;
@@ -699,6 +692,14 @@ static void R_InitExtensions( void )
 
 	//ri.Cvar_Set( "r_highQualityVideo", "1" );
 	ri.Cvar_Set( "r_lastValidRenderer", glConfig.renderer_string );
+
+	// Check if dynamic lights are available
+#ifdef USE_PMLIGHT	
+	if (r_dlightMode->integer && !qglGenProgramsARB) 
+	{
+			ri.Printf( PRINT_ALL, "...Per-pixel dynamic lights disabled. Missing ARB shader support\n" );
+	}
+#endif
 }
 
 
@@ -1454,6 +1455,11 @@ static const cplane_t *RE_GetFrustum( void )
 	return tr.viewParms.frustum;
 }
 
+static qboolean RE_IsMainScene(void)
+{
+	return (tr.viewCount <= 1) ? qtrue : qfalse;
+}
+
 
 /*
 ================
@@ -1654,10 +1660,15 @@ static const cmdListItem_t r_cmds[] = {
 	{ "screenshotJPEG", R_ScreenShot_f, NULL },
 	{ "shaderlist", R_ShaderList_f, NULL },
 	{ "skinlist", R_SkinList_f, NULL },
-	{ "taginfo", R_TagInfo_f, NULL },
+	//{ "taginfo", R_TagInfo_f, NULL },
 	{ "texmodelist", TexModeList_f, NULL },
 };
 
+#ifdef USE_SDL3
+#define R_FBO_DEFAULT "1"
+#else
+#define R_FBO_DEFAULT "0"
+#endif
 
 /*
 ===============
@@ -1872,7 +1883,6 @@ static void R_Register( void )
 	ri.Cvar_SetDescription( r_printShaders, "Debugging tool to print on console of the number of shaders used" );
 	r_saveFontData = ri.Cvar_Get( "r_saveFontData", "0", 0 );
 	// Ridah
-	r_cacheGathering = ri.Cvar_Get( "cl_cacheGathering", "0", 0 );
 	r_bonesDebug = ri.Cvar_Get( "r_bonesDebug", "0", CVAR_CHEAT );
 	// done.
 
@@ -1891,8 +1901,9 @@ static void R_Register( void )
 	r_portalOnly = ri.Cvar_Get( "r_portalOnly", "0", CVAR_CHEAT );
 	ri.Cvar_SetDescription( r_portalOnly, "Set to 1 to render only first mirror/portal view if it is present on the scene" );
 
-	r_flareSize = ri.Cvar_Get( "r_flareSize", "40", CVAR_CHEAT );
+	r_flareSize = ri.Cvar_Get( "r_flareSize", "40", CVAR_ARCHIVE_ND );
 	ri.Cvar_SetDescription( r_flareSize, "Radius of light flares. Requires \\r_flares 1" );
+	ri.Cvar_CheckRange( r_flareSize, "1", "40", CV_FLOAT );
 	ri.Cvar_Set( "r_flareFade", "5" ); // to force this when people already have "7" in their config
 	r_flareFade = ri.Cvar_Get( "r_flareFade", "5", CVAR_CHEAT );
 	ri.Cvar_SetDescription( r_flareFade, "Distance to fade out light flares. Requires \\r_flares 1" );
@@ -2005,7 +2016,12 @@ static void R_Register( void )
 	ri.Cvar_SetDescription( r_flares, "Enables corona effects on light sources" );
 
 #ifdef USE_FBO
-	r_fbo = ri.Cvar_Get( "r_fbo", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
+	r_fbo = ri.Cvar_Get( "r_fbo", R_FBO_DEFAULT, CVAR_ARCHIVE_ND | CVAR_LATCH );
+#ifdef USE_SDL3
+	ri.Cvar_CheckRange( r_fbo, "1", "1", CV_INTEGER );
+#else
+	ri.Cvar_CheckRange( r_fbo, "0", "1", CV_INTEGER );
+#endif
 	ri.Cvar_SetDescription( r_fbo, "Use framebuffer objects, enables gamma correction in windowed mode and allows arbitrary video size and screenshot/video capture.\n Required for bloom, HDR rendering, anti-aliasing and greyscale effects.\n OpenGL 3.0+ required" );
 
 	r_ext_supersample = ri.Cvar_Get( "r_ext_supersample", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
@@ -2028,19 +2044,6 @@ static void R_Register( void )
 		" 3 - linear filtering, stretch to full size\n"
 		" 4 - linear filtering, preserve aspect ratio (black bars on sides)\n" );
 #endif // USE_FBO
-
-	// Ridah
-	// TTimo show_bug.cgi?id=440
-	//   with r_cache enabled, non-win32 OSes were leaking 24Mb per R_Init..
-	r_cache = ri.Cvar_Get( "r_cache", "1", CVAR_LATCH );  // leaving it as this for backwards compability. but it caches models and shaders also
-// (SA) disabling cacheshaders
-//	ri.Cvar_Set( "r_cacheShaders", "0");
-	// Gordon: enabling again..
-	r_cacheShaders = ri.Cvar_Get( "r_cacheShaders", "1", CVAR_LATCH );
-//----(SA)	end
-
-	r_cacheModels = ri.Cvar_Get( "r_cacheModels", "1", CVAR_LATCH );
-	// done
 }
 
 qboolean modIsETF = qfalse;
@@ -2076,13 +2079,7 @@ void R_Init( void ) {
 	// init function tables
 	//
 	for ( i = 0; i < FUNCTABLE_SIZE; i++ ) {
-		if ( i == 0 ) {
-			tr.sinTable[i] = FUNCTABLE_EPSILON;
-		} else if ( i == (FUNCTABLE_SIZE - 1) ) {
-			tr.sinTable[i] = -FUNCTABLE_EPSILON;
-		} else {
-			tr.sinTable[i] = sin( DEG2RAD( i * 360.0f / ((float)(FUNCTABLE_SIZE - 1)) ) );
-		}
+		tr.sinTable[i] = sin( DEG2RAD( i * 360.0f / FUNCTABLE_SIZE ) + 0.0001f );
 		tr.squareTable[i] = (i < FUNCTABLE_SIZE / 2) ? 1.0f : -1.0f;
 		if ( i == 0 ) {
 			tr.sawToothTable[i] = FUNCTABLE_EPSILON;
@@ -2104,9 +2101,6 @@ void R_Init( void ) {
 			tr.triangleTable[i] = -tr.triangleTable[i - FUNCTABLE_SIZE / 2];
 		}
 	}
-
-	// Ridah, init the virtual memory
-	R_Hunk_Begin();
 
 	R_NoiseInit();
 
@@ -2143,11 +2137,6 @@ void R_Init( void ) {
 	ri.Printf( PRINT_ALL, "----- finished R_Init -----\n" );
 }
 
-void R_PurgeCache( void ) {
-	R_PurgeShaders( 9999999 );
-	R_PurgeBackupImages( 9999999 );
-	R_PurgeModels( 9999999 );
-}
 
 /*
 ===============
@@ -2160,27 +2149,11 @@ static void RE_Shutdown( refShutdownCode_t code ) {
 
 	ri.Cmd_UnregisterModule();
 
-	// Ridah, keep a backup of the current images if possible
-	// clean out any remaining unused media from the last backup
-	R_PurgeCache();
 
-	if ( r_cache->integer ) {
-		if ( tr.registered ) {
-			if ( code != REF_KEEP_CONTEXT ) {
-				//R_IssuePendingRenderCommands();
-				R_DeleteTextures();
-			} else {
-				// backup the current media
-
-				R_BackupModels();
-				R_BackupShaders();
-				R_BackupImages();
-			}
-		}
-	} else if ( tr.registered ) {
+	//if ( tr.registered ) {
 		//R_IssuePendingRenderCommands();
 		R_DeleteTextures();
-	}
+	//}
 
 	R_DoneFreeType();
 
@@ -2198,17 +2171,18 @@ static void RE_Shutdown( refShutdownCode_t code ) {
 		Com_Memset( &glState, 0, sizeof( glState ) );
 
 		if ( code != REF_KEEP_WINDOW ) {
-			ri.GLimp_Shutdown( code == REF_UNLOAD_DLL ? qtrue : qfalse );
+			if ( ri.GLimp_Shutdown ) {
+				ri.GLimp_Shutdown( code == REF_UNLOAD_DLL ? qtrue : qfalse );
+			}
 			Com_Memset( &glConfig, 0, sizeof( glConfig ) );
 			gl_extensions = NULL;
 			gl_version = 0;
 		}
 
-		// Ridah, release the virtual memory
-		R_Hunk_End();
 		R_FreeImageBuffer();
-		ri.Tag_Free();  // wipe all render alloc'd zone memory
+		//ri.Tag_Free();  // wipe all render alloc'd zone memory
 	}
+	ri.Tag_Free();  // wipe all render alloc'd zone memory
 
 	tr.registered = qfalse;
 	tr.inited = qfalse;
@@ -2316,8 +2290,6 @@ refexport_t *GetRefAPI ( int apiVersion, refimport_t *rimp ) {
 
 	re.inPVS = R_inPVS;
 
-	re.purgeCache       = R_PurgeCache;
-
 	//bani
 	re.LoadDynamicShader = RE_LoadDynamicShader;
 	re.GetTextureId = R_GetTextureId;
@@ -2335,6 +2307,7 @@ refexport_t *GetRefAPI ( int apiVersion, refimport_t *rimp ) {
 	re.GetConfig = RE_GetConfig;
 	re.SyncRender = RE_SyncRender;
 	re.GetFrustum = RE_GetFrustum;
+	re.IsMainScene = RE_IsMainScene;
 	re.GetImageBuffer = R_GetImageBuffer;
 	return &re;
 }

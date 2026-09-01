@@ -218,7 +218,13 @@ static const unsigned mpbin_checksum = 2004278281u;
 #define USE_PK3_CACHE_FILE
 
 #define USE_HANDLE_CACHE
-#define MAX_CACHED_HANDLES 384
+#define MAX_CACHED_HANDLES	250			// minimal from win32|linux|mac
+
+#if defined (MAX_CACHED_HANDLES) && (MAX_CACHED_HANDLES < 4)
+// to avoid infitine loops in FS_AddToHandleList()
+// assume that at least (FS_LOCK_REF + 1) can be kept locked
+#error "invalid filesystem configruation"
+#endif
 
 #define MAX_ZPATH			256
 #define MAX_FILEHASH_SIZE	4096
@@ -227,7 +233,7 @@ typedef struct fileInPack_s {
 	char					*name;		// name of the file
 	unsigned long			pos;		// file info position in zip
 	unsigned long			size;		// file size
-	struct	fileInPack_s*	next;		// next file in the hash
+	struct	fileInPack_s*	next;		// next file in the hash bucket
 } fileInPack_t;
 
 typedef struct pack_s {
@@ -243,12 +249,12 @@ typedef struct pack_s {
 	int				hashSize;					// hash table size (power of 2)
 	fileInPack_t*	*hashTable;					// hash table
 	fileInPack_t*	buildBuffer;				// buffer with the filenames etc.
-	int				index;
+	int				index;						// serial index assigned at FS_Startup()
 
 	int				handleUsed;
 
 #ifdef USE_HANDLE_CACHE
-	struct pack_s	*next_h;						// double-linked list of unreferenced paks with open file handles
+	struct pack_s	*next_h;					// double-linked list of unreferenced paks with open file handles
 	struct pack_s	*prev_h;
 #endif
 

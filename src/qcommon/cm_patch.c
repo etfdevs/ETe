@@ -150,20 +150,44 @@ static int CM_SignbitsForNormal( const vec3_t normal ) {
 =====================
 CM_PlaneFromPoints
 
-Returns false if the triangle is degenrate.
+Returns false if the triangle is degenerate.
 The normal will point out of the clock for clockwise ordered points
 =====================
 */
 static qboolean CM_PlaneFromPoints( vec4_t plane, const vec3_t a, const vec3_t b, const vec3_t c ) {
-	vec3_t	d1, d2;
+
+#ifdef USE_FIXED_PRECISION
+	double d1[3], d2[3], dplane[4];
+	double a1[3], b1[3], c1[3];
+
+	VectorCopy( a, a1 );
+	VectorCopy( b, b1 );
+	VectorCopy( c, c1 );
+
+	VectorSubtract( b1, a1, d1 );
+	VectorSubtract( c1, a1, d2 );
+
+	CrossProduct_( d2, d1, dplane );
+
+	if ( VectorNormalizeDP( dplane ) == 0.0 ) {
+		return qfalse;
+	}
+
+	dplane[3] = DotProduct( a, dplane );
+	Vector4Copy( dplane, plane );
+#else
+	vec3_t d1, d2;
 
 	VectorSubtract( b, a, d1 );
 	VectorSubtract( c, a, d2 );
-	CrossProductDP( d2, d1, plane );
-	if ( VectorNormalizeDP( plane ) == 0.0 )
+
+	CrossProduct( d2, d1, plane );
+	if ( VectorNormalize( plane ) == 0.0 )
 		return qfalse;
 
-	plane[3] = DotProductDPf( a, plane );
+	plane[3] = DotProduct( a, plane );
+#endif
+
 	return qtrue;
 }
 
@@ -185,6 +209,29 @@ collision detection purposes
 =================
 */
 static qboolean	CM_NeedsSubdivision( const vec3_t a, const vec3_t b, const vec3_t c ) {
+#ifdef USE_FIXED_PRECISION
+	double		cmid[3];
+	double		lmid[3];
+	double		delta[3];
+	double		dist;
+	int			i;
+
+	// calculate the linear midpoint
+	for ( i = 0; i < 3; i++ ) {
+		lmid[i] = 0.5 *(a[i] + c[i]);
+	}
+
+	// calculate the exact curve midpoint
+	for ( i = 0; i < 3; i++ ) {
+		cmid[i] = 0.5 * (0.5 * (a[i] + b[i]) + 0.5 * (b[i] + c[i]));
+	}
+
+	// see if the curve is far enough away from the linear mid
+	VectorSubtract( cmid, lmid, delta );
+	dist = DotProduct( delta, delta );
+
+	return dist >= (SUBDIVIDE_DISTANCE * SUBDIVIDE_DISTANCE);
+#else
 	vec3_t		cmid;
 	vec3_t		lmid;
 	vec3_t		delta;
@@ -206,6 +253,7 @@ static qboolean	CM_NeedsSubdivision( const vec3_t a, const vec3_t b, const vec3_
 	dist = VectorLength( delta );
 
 	return dist >= SUBDIVIDE_DISTANCE;
+#endif
 }
 
 
@@ -221,9 +269,21 @@ static void CM_Subdivide( const vec3_t a, const vec3_t b, const vec3_t c, vec3_t
 	int		i;
 
 	for ( i = 0 ; i < 3 ; i++ ) {
+#ifdef USE_FIXED_PRECISION
+		double ax = a[i];
+		double bx = b[i];
+		double cx = c[i];
+		double o1 = 0.5 * (ax + bx);
+		double o3 = 0.5 * (bx + cx);
+		double o2 = 0.5 * (o1 + o3);
+		out1[i] = o1;
+		out2[i] = o2;
+		out3[i] = o3;
+#else
 		out1[i] = 0.5 * (a[i] + b[i]);
 		out3[i] = 0.5 * (b[i] + c[i]);
 		out2[i] = 0.5 * (out1[i] + out3[i]);
+#endif
 	}
 }
 
@@ -315,7 +375,7 @@ static void CM_SetGridWrapWidth( cGrid_t *grid ) {
 CM_SubdivideGridColumns
 
 Adds columns as necessary to the grid until
-all the aproximating points are within SUBDIVIDE_DISTANCE
+all the approximating points are within SUBDIVIDE_DISTANCE
 from the true curve
 =================
 */
@@ -324,11 +384,11 @@ static void CM_SubdivideGridColumns( cGrid_t *grid ) {
 
 	for ( i = 0 ; i < grid->width - 2 ;  ) {
 		// grid->points[i][x] is an interpolating control point
-		// grid->points[i+1][x] is an aproximating control point
+		// grid->points[i+1][x] is an approximating control point
 		// grid->points[i+2][x] is an interpolating control point
 
 		//
-		// first see if we can collapse the aproximating column away
+		// first see if we can collapse the approximating column away
 		//
 		for ( j = 0 ; j < grid->height ; j++ ) {
 			if ( CM_NeedsSubdivision( grid->points[i][j], grid->points[i+1][j], grid->points[i+2][j] ) ) {
@@ -376,7 +436,7 @@ static void CM_SubdivideGridColumns( cGrid_t *grid ) {
 
 		grid->width += 2;
 
-		// the new aproximating point at i+1 may need to be removed
+		// the new approximating point at i+1 may need to be removed
 		// or subdivided farther, so don't advance i
 	}
 }
@@ -542,11 +602,9 @@ static int CM_FindPlane2( const float plane[4], qboolean *flipped ) {
 	Vector4Copy( plane, planes[numPlanes].plane );
 	planes[numPlanes].signbits = CM_SignbitsForNormal( plane );
 
-	numPlanes++;
-
 	*flipped = qfalse;
 
-	return numPlanes-1;
+	return numPlanes++;
 }
 
 
@@ -558,6 +616,39 @@ CM_FindPlane
 static int CM_FindPlane( const float *p1, const float *p2, const float *p3 ) {
 	float	plane[4];
 	int		i;
+#ifdef USE_FIXED_PRECISION
+	double	d;
+
+	if ( !CM_PlaneFromPoints( plane, p1, p2, p3 ) ) {
+		return -1;
+	}
+
+	// see if the points are close enough to an existing plane
+	for ( i = 0 ; i < numPlanes ; i++ ) {
+		if ( DotProductDPf( plane, planes[i].plane ) < 0 ) {
+			continue;	// allow backwards planes?
+		}
+
+		d = DotProductDPf( p1, planes[i].plane ) - planes[i].plane[3];
+		if ( d < -PLANE_TRI_EPSILON || d > PLANE_TRI_EPSILON ) {
+			continue;
+		}
+
+		d = DotProductDPf( p2, planes[i].plane ) - planes[i].plane[3];
+		if ( d < -PLANE_TRI_EPSILON || d > PLANE_TRI_EPSILON ) {
+			continue;
+		}
+
+		d = DotProductDPf( p3, planes[i].plane ) - planes[i].plane[3];
+		if ( d < -PLANE_TRI_EPSILON || d > PLANE_TRI_EPSILON ) {
+			continue;
+		}
+
+		// found it
+		return i;
+	}
+
+#else
 	float	d;
 
 	if ( !CM_PlaneFromPoints( plane, p1, p2, p3 ) ) {
@@ -588,6 +679,7 @@ static int CM_FindPlane( const float *p1, const float *p2, const float *p3 ) {
 		// found it
 		return i;
 	}
+#endif
 
 	// add a new plane
 	if ( numPlanes == MAX_PATCH_PLANES ) {
@@ -597,9 +689,7 @@ static int CM_FindPlane( const float *p1, const float *p2, const float *p3 ) {
 	Vector4Copy( plane, planes[numPlanes].plane );
 	planes[numPlanes].signbits = CM_SignbitsForNormal( plane );
 
-	numPlanes++;
-
-	return numPlanes-1;
+	return numPlanes++;
 }
 
 
@@ -610,14 +700,22 @@ CM_PointOnPlaneSide
 */
 static int CM_PointOnPlaneSide( const float *p, int planeNum ) {
 	const float *plane;
-	double	d;
+#ifdef USE_FIXED_PRECISION
+	double d;
+#else
+	float d;
+#endif
 
 	if ( planeNum == -1 ) {
 		return SIDE_ON;
 	}
 	plane = planes[ planeNum ].plane;
 
+#ifdef USE_FIXED_PRECISION
 	d = DotProductDPf( p, plane ) - plane[3];
+#else
+	d = DotProduct( p, plane ) - plane[3];
+#endif
 
 	if ( d > PLANE_TRI_EPSILON ) {
 		return SIDE_FRONT;
@@ -890,7 +988,6 @@ static void CM_AddFacetBevels( facet_t *facet ) {
 	float plane[4], /*d, minBack,*/ newplane[4];
 	winding_t *w, *w2;
 	vec3_t mins, maxs, vec, vec2;
-	double d, d1[3], d2[3];
 
 	Vector4Copy( planes[ facet->surfacePlane ].plane, plane );
 
@@ -971,16 +1068,26 @@ static void CM_AddFacetBevels( facet_t *facet ) {
 	// test the non-axial plane edges
 	for ( j = 0 ; j < w->numpoints ; j++ )
 	{
+#ifdef USE_FIXED_PRECISION
+		double dvec[3], d1[3], d2[3];
 		k = (j+1)%w->numpoints;
 		VectorCopy( w->p[j], d1 );
 		VectorCopy( w->p[k], d2 );
-		VectorSubtractDP( d1, d2, vec );
+		VectorSubtract( d1, d2, dvec );
 		//if it's a degenerate edge
-		if ( VectorNormalizeDP( vec ) < 0.5 )
+		if ( VectorNormalizeDP( dvec ) < 0.5 )
 			continue;
-		CM_SnapVector(vec);
+		VectorCopy( dvec, vec );
+#else
+		k = (j+1)%w->numpoints;
+		VectorSubtract( w->p[j], w->p[k], vec );
+		//if it's a degenerate edge
+		if ( VectorNormalize( vec ) < 0.5 )
+			continue;
+#endif
+		CM_SnapVector( vec );
 		for ( k = 0; k < 3 ; k++ )
-			if ( vec[k] == -1 || vec[k] == 1 )
+			if ( vec[k] == -1.0 || vec[k] == 1.0 )
 			//if ( vec[k] == -1.0f || vec[k] == 1.0f || ( vec[k] == 0.0f && vec[( k + 1 ) % 3] == 0.0f ) )
 				break;	// axial
 		if ( k < 3 )
@@ -992,18 +1099,36 @@ static void CM_AddFacetBevels( facet_t *facet ) {
 			for ( dir = -1 ; dir <= 1 ; dir += 2 )
 			{
 				// construct a plane
-				VectorClear(vec2);
-				vec2[axis] = dir;
-				CrossProductDP( vec, vec2, plane );
-				if ( VectorNormalizeDP( plane ) < 0.5 )
-					continue;
-				plane[3] = DotProductDPf( w->p[j], plane );
+#ifdef USE_FIXED_PRECISION 
+				double dplane[4];
+				VectorClear( vec2 );
+				vec2[ axis ] = dir;
+				CrossProduct_( vec, vec2, dplane );
 
+				if ( VectorNormalizeDP( dplane ) < 0.5 )
+					continue;
+
+				dplane[3] = DotProduct( d1 /*w->p[j]*/, dplane );
+				Vector4Copy( dplane, plane );
+#else
+				VectorClear( vec2 );
+				vec2[axis] = dir;
+				CrossProduct( vec, vec2, plane );
+
+				if ( VectorNormalize( plane ) < 0.5 )
+					continue;
+
+				plane[3] = DotProduct( w->p[j], plane );
+#endif
 				// if all the points of the facet winding are
 				// behind this plane, it is a proper edge bevel
 				for ( l = 0 ; l < w->numpoints ; l++ )
 				{
-					d = DotProductDPf( w->p[l], plane ) - plane[3];
+#ifdef USE_FIXED_PRECISION
+					double d = DotProduct( w->p[l], dplane ) - dplane[3];
+#else
+					float d = DotProduct( w->p[l], plane ) - plane[3];
+#endif
 					if ( d > 0.1 )
 						break;	// point in front
 				}
@@ -1170,7 +1295,7 @@ static void CM_PatchCollideFromGrid( const cGrid_t *grid, patchCollide_t *pf ) {
 
 			if ( gridPlanes[i][j][0] == gridPlanes[i][j][1] ) {
 				if ( gridPlanes[i][j][0] == -1 ) {
-					continue;		// degenrate
+					continue;		// degenerate
 				}
 				facet->surfacePlane = gridPlanes[i][j][0];
 				facet->numBorders = 4;
@@ -1253,7 +1378,7 @@ CM_GeneratePatchCollide
 Creates an internal structure that will be used to perform
 collision detection with a patch mesh.
 
-Points is packed as concatenated rows.
+Points are packed as concatenated rows.
 ===================
 */
 struct patchCollide_s *CM_GeneratePatchCollide( int width, int height, vec3_t *points ) {
@@ -1441,12 +1566,21 @@ CM_CheckFacetPlane
 ====================
 */
 static int CM_CheckFacetPlane( const float *plane, const vec3_t start, const vec3_t end, float *enterFrac, float *leaveFrac, int *hit ) {
+#ifdef USE_FIXED_PRECISION
+	double d1, d2, f;
+
+	*hit = qfalse;
+
+	d1 = DotProductDPf( start, plane ) - plane[3];
+	d2 = DotProductDPf( end, plane ) - plane[3];
+#else
 	float d1, d2, f;
 
 	*hit = qfalse;
 
 	d1 = DotProduct( start, plane ) - plane[3];
 	d2 = DotProduct( end, plane ) - plane[3];
+#endif
 
 	// if completely in front of face, no intersection with the entire facet
 	if (d1 > 0 && ( d2 >= SURFACE_CLIP_EPSILON || d2 >= d1 )  ) {
@@ -1648,7 +1782,7 @@ qboolean CM_PositionTestInPatchCollide( traceWork_t *tw, const struct patchColli
 		VectorCopy(pp->plane, plane);
 		plane[3] = pp->plane[3];
 		if ( tw->sphere.use ) {
-			// adjust the plane distance apropriately for radius
+			// adjust the plane distance appropriately for radius
 			plane[3] += tw->sphere.radius;
 
 			// find the closest point on the capsule to the plane
@@ -1681,7 +1815,7 @@ qboolean CM_PositionTestInPatchCollide( traceWork_t *tw, const struct patchColli
 				plane[3] = pp->plane[3];
 			}
 			if ( tw->sphere.use ) {
-				// adjust the plane distance apropriately for radius
+				// adjust the plane distance appropriately for radius
 				plane[3] += tw->sphere.radius;
 
 				// find the closest point on the capsule to the plane

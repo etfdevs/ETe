@@ -41,7 +41,7 @@ int SV_BotAllocateClient( int clientNum ) {
 
 	// Arnout: added possibility to request a clientnum
 	if ( clientNum > 0 ) {
-		if ( clientNum >= sv_maxclients->integer ) {
+		if ( clientNum >= sv.maxclients ) {
 			return -1;
 		}
 
@@ -53,7 +53,7 @@ int SV_BotAllocateClient( int clientNum ) {
 		}
 	} else {
 		// find a client slot
-		for ( i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++ ) {
+		for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
 			// Wolfenstein, never use the first slot, otherwise if a bot connects before the first client on a listen server, game won't start
 			if ( i < 1 ) {
 				continue;
@@ -65,7 +65,7 @@ int SV_BotAllocateClient( int clientNum ) {
 		}
 	}
 
-	if ( i == sv_maxclients->integer ) {
+	if ( i == sv.maxclients ) {
 		return -1;
 	}
 
@@ -92,7 +92,7 @@ SV_BotFreeClient
 void SV_BotFreeClient( int clientNum ) {
 	client_t	*cl;
 
-	if ( (unsigned) clientNum >= sv_maxclients->integer ) {
+	if ( (unsigned) clientNum >= sv.maxclients ) {
 		Com_Error( ERR_DROP, "SV_BotFreeClient: bad clientNum: %i", clientNum );
 	}
 
@@ -132,7 +132,7 @@ SV_BotGetConsoleMessage
 ==================
 */
 int SV_BotGetConsoleMessage( int client, char *buf, int size ) {
-	if ( (unsigned) client < sv_maxclients->integer ) {
+	if ( (unsigned) client < sv.maxclients ) {
 		client_t* cl;
 		int index;
 
@@ -150,7 +150,7 @@ int SV_BotGetConsoleMessage( int client, char *buf, int size ) {
 			return qfalse;
 		}
 
-		//Q_strncpyz( buf, cl->reliableCommands[index], size );
+		Q_strncpyz( buf, cl->reliableCommands[index], size );
 		return qtrue;
 	} else {
 		return qfalse;
@@ -187,7 +187,7 @@ SV_BotGetSnapshotEntity
 ==================
 */
 int SV_BotGetSnapshotEntity( int client, int sequence ) {
-	if ( (unsigned) client < sv_maxclients->integer ) {
+	if ( (unsigned) client < sv.maxclients ) {
 		const client_t* cl = &svs.clients[client];
 		const clientSnapshot_t* frame = &cl->frames[cl->netchan.outgoingSequence & PACKET_MASK];
 		if ( (unsigned) sequence >= frame->num_entities ) {

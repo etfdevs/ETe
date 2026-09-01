@@ -468,9 +468,7 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 		return;
 	}
 
-#ifndef USE_VULKAN
 	glState.finishCalled = qfalse;
-#endif
 
 #ifdef USE_VULKAN
 	backEnd.doneBloom = qfalse;
@@ -480,6 +478,15 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 
 	tr.frameCount++;
 	tr.frameSceneNum = 0;
+
+#ifndef USE_BUFFER_CLEAR
+	if ( r_fastsky->modified && vk.clearAttachment ) {
+#else
+	if ( r_fastsky->modified ) {
+#endif
+		vk_set_clearcolor();
+		r_fastsky->modified = qfalse;
+	}
 
 	if ( ( cmd = R_GetCommandBuffer( sizeof( *cmd ) ) ) == NULL )
 		return;
@@ -513,8 +520,9 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 #endif
 	}
 
+#ifndef USE_BUFFER_CLEAR
 #ifdef USE_VULKAN
-	if ( vk.fastSky && (r_fastsky->integer /*|| (tr.world && tr.world->globalFog >= 0 )*/))  {
+	if ( vk.clearAttachment && (r_fastsky->integer || (tr.world && tr.world->globalFog >= 0 )))  {
 #else
 	if ( r_fastsky->integer ) {
 #endif
@@ -525,6 +533,7 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 			clrcmd->commandId = RC_CLEARCOLOR;
 		}
 	}
+#endif // USE_BUFFER_CLEAR
 
 	tr.refdef.stereoFrame = stereoFrame;
 }
@@ -551,9 +560,9 @@ void RE_EndFrame( int *frontEndMsec, int *backEndMsec ) {
 	}
 	cmd->commandId = RC_SWAP_BUFFERS;
 
-	R_PerformanceCounters();
-
 	R_IssueRenderCommands();
+
+	R_PerformanceCounters();
 
 	R_InitNextFrame();
 
@@ -716,24 +725,4 @@ void RE_Finish( void ) {
 		return;
 	}
 	cmd->commandId = RC_FINISH;*/
-}
-
-
-/*
-==================
-RE_RenderOmnibot
-==================
-*/
-void RE_RenderOmnibot( void ) {
-	renderOmnibot_t *cmd;
-	
-	if (!tr.registered) {
-		return;
-	}
-	cmd = R_GetCommandBuffer( sizeof( *cmd ) );
-
-	if ( !cmd ) {
-		return;
-	}
-	cmd->commandId = RC_DRAW_OMNIBOT;
 }

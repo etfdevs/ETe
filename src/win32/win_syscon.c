@@ -26,7 +26,12 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 // win_syscon.h
+#ifdef DEDICATED
+#include "../qcommon/q_shared.h"
+#include "../qcommon/qcommon.h"
+#else
 #include "../client/client.h"
+#endif
 #include "win_local.h"
 #include "resource.h"
 
@@ -592,13 +597,13 @@ static LRESULT WINAPI InputLineWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
 	case WM_KEYDOWN:
 	{
-		if ( wParam == 'L' && ( GetAsyncKeyState( VK_LCONTROL ) & 0x8000 || GetAsyncKeyState( VK_RCONTROL ) & 0x8000 ) ) {
+		if ( wParam == 'L' && ( GetKeyState( VK_CONTROL ) & 0x8000 ) ) {
 			ConClear();
 			return 0;
 		}
 
 		if ( wParam == VK_PRIOR ) {
-			if ( GetAsyncKeyState( VK_LCONTROL ) & 0x8000 || GetAsyncKeyState( VK_RCONTROL ) & 0x8000 )
+			if ( GetKeyState( VK_CONTROL ) & 0x8000 )
 				SendMessage( s_wcd.hwndBuffer, EM_SCROLL, (WPARAM)SB_PAGEUP, 0 );
 			else
 				SendMessage( s_wcd.hwndBuffer, EM_SCROLL, (WPARAM)SB_LINEUP, 0 );
@@ -606,7 +611,7 @@ static LRESULT WINAPI InputLineWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 		}
 
 		if ( wParam == VK_NEXT ) {
-			if ( GetAsyncKeyState( VK_LCONTROL ) & 0x8000 || GetAsyncKeyState( VK_RCONTROL ) & 0x8000 )
+			if ( GetKeyState( VK_CONTROL ) & 0x8000 )
 				SendMessage( s_wcd.hwndBuffer, EM_SCROLL, (WPARAM)SB_PAGEDOWN, 0 );
 			else
 				SendMessage( s_wcd.hwndBuffer, EM_SCROLL, (WPARAM)SB_LINEDOWN, 0 );
@@ -649,8 +654,8 @@ static LRESULT WINAPI InputLineWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 			while ( *s == '\\' || *s == '/' ) // skip leading slashes
 				s++;
 
-			strncat( s_wcd.consoleText, s, sizeof( s_wcd.consoleText ) - strlen( s_wcd.consoleText ) - 2 );
-			strcat( s_wcd.consoleText, "\n" );
+			Q_strcat( s_wcd.consoleText, sizeof( s_wcd.consoleText ), s );
+			Q_strcat( s_wcd.consoleText, sizeof( s_wcd.consoleText ), "\n" );
 
 			SetWindowText( s_wcd.hwndInputLine, T("") );
 			Field_Clear( &console );
@@ -939,7 +944,7 @@ void Sys_ShowConsole( int visLevel, qboolean quitOnClose )
 		ShowWindow( s_wcd.hWnd, SW_MINIMIZE );
 		break;
 	default:
-		Sys_Error( "Invalid visLevel %d sent to Sys_ShowConsole\n", visLevel );
+		Com_Error( ERR_FATAL, "Invalid visLevel %d sent to Sys_ShowConsole\n", visLevel );
 		break;
 	}
 }
@@ -950,7 +955,7 @@ void Sys_ShowConsole( int visLevel, qboolean quitOnClose )
 Sys_SetStatus
 =============
 */
-void FORMAT_PRINTF(1, 2) QDECL Sys_SetStatus( const char *format, ... )
+void Q_PRINTF_FUNC(1, 2) QDECL Sys_SetStatus( const char *format, ... )
 {
 	va_list		argptr;
 	char		text[256];
@@ -1155,8 +1160,8 @@ void HandleConsoleEvents( void ) {
 	MSG msg;
 
 	// pump the message loop
-	while ( PeekMessage( &msg, NULL, 0, 0, PM_NOREMOVE ) ) {
-		if ( GetMessage( &msg, NULL, 0, 0 ) <= 0 ) {
+	while ( PeekMessage( &msg, s_wcd.hWnd, 0, 0, PM_NOREMOVE ) ) {
+		if ( GetMessage( &msg, s_wcd.hWnd, 0, 0 ) <= 0 ) {
 			Cmd_Clear();
 			Com_Quit_f();
 		}

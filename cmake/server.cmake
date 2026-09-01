@@ -1,0 +1,60 @@
+
+if(NOT BUILD_SERVER)
+    return()
+endif()
+
+include(utils/arch)
+include(utils/set_target_platform_details)
+include(shared_sources)
+
+set(SERVER_BINARY ${SERVER_NAME})
+
+if(USE_ARCHLESS_FILENAMES)
+    list(APPEND SERVER_DEFINITIONS USE_ARCHLESS_FILENAMES)
+endif()
+
+if(DEFAULT_MOD AND NOT DEFAULT_MOD STREQUAL ${BASEGAME})
+    list(APPEND SERVER_DEFINITIONS DEFAULT_GAME="${DEFAULT_MOD}")
+endif()
+
+list(APPEND SERVER_DEFINITIONS DEDICATED)
+
+list(APPEND SERVER_BINARY_SOURCES
+    ${SERVER_SOURCES}
+    ${COMMON_SOURCES}
+    ${SYSTEM_SOURCES}
+    ${ASM_SOURCES}
+    #${SERVER_LIBRARY_SOURCES}
+)
+
+add_executable(${SERVER_BINARY} ${SERVER_EXECUTABLE_OPTIONS} ${SERVER_BINARY_SOURCES})
+
+target_link_libraries(${SERVER_BINARY} PRIVATE c_compiler_opts)
+
+target_include_directories(     ${SERVER_BINARY} PRIVATE ${SERVER_INCLUDE_DIRS})
+target_compile_definitions(     ${SERVER_BINARY} PRIVATE ${SERVER_DEFINITIONS})
+target_compile_options(         ${SERVER_BINARY} PRIVATE ${SERVER_COMPILE_OPTIONS})
+target_link_libraries(          ${SERVER_BINARY} PRIVATE ${COMMON_LIBRARIES} ${SERVER_LIBRARIES})
+target_link_options(            ${SERVER_BINARY} PRIVATE ${SERVER_LINK_OPTIONS})
+
+set_target_properties(${SERVER_BINARY} PROPERTIES
+	FOLDER Engine
+	RUNTIME_OUTPUT_DIRECTORY "${BASE_DIR_PATH}"
+	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BASE_DIR_PATH}"
+	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BASE_DIR_PATH}")
+set_target_platform_details(${SERVER_BINARY})
+
+if (CMAKE_GENERATOR MATCHES "Visual Studio")
+	get_target_property(SERVER_EXE ${SERVER_BINARY} OUTPUT_NAME)
+	set_target_properties(${SERVER_BINARY} PROPERTIES
+			VS_DEBUGGER_COMMAND "${ET_PATH}\\${SERVER_EXE}.exe"
+			VS_DEBUGGER_COMMAND_ARGUMENTS "+set fs_basepath . +set fs_homepath \"${ET_PATH}\" +set fs_game ${ET_MOD}"
+			VS_DEBUGGER_WORKING_DIRECTORY "$(SolutionDir)"
+	)
+endif ()
+
+if(POST_SERVER_CONFIGURE_FUNCTION)
+    cmake_language(CALL ${POST_SERVER_CONFIGURE_FUNCTION})
+endif()
+
+install(TARGETS ${SERVER_BINARY} RUNTIME DESTINATION .)

@@ -23,8 +23,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "tr_local.h"
 
-#include <string.h> // memcpy
-
 trGlobals_t		tr;
 
 static const float s_flipMatrix[16] = {
@@ -331,7 +329,7 @@ int R_CullPointAndRadius( const vec3_t pt, float radius )
 {
 	int		i;
 	float	dist;
-	cplane_t	*frust;
+	const cplane_t	*frust;
 	qboolean mightBeClipped = qfalse;
 
 	if ( r_nocull->integer ) {
@@ -413,7 +411,7 @@ int R_CullDlight( const dlight_t* dl )
 R_LocalNormalToWorld
 =================
 */
-void R_LocalNormalToWorld( const vec3_t local, vec3_t world ) {
+static void R_LocalNormalToWorld( const vec3_t local, vec3_t world ) {
 	world[0] = local[0] * tr.orientation.axis[0][0] + local[1] * tr.orientation.axis[1][0] + local[2] * tr.orientation.axis[2][0];
 	world[1] = local[0] * tr.orientation.axis[0][1] + local[1] * tr.orientation.axis[1][1] + local[2] * tr.orientation.axis[2][1];
 	world[2] = local[0] * tr.orientation.axis[0][2] + local[1] * tr.orientation.axis[1][2] + local[2] * tr.orientation.axis[2][2];
@@ -1604,8 +1602,8 @@ static qboolean R_MirrorViewBySurface( const drawSurf_t *drawSurf, int entityNum
 	}
 #endif
 
-#ifdef USE_VULKAN
-	if ( tess.numVertexes > 2 && r_fastsky->integer && vk.fastSky ) {
+#if defined (USE_VULKAN) && !defined (USE_BUFFER_CLEAR)
+	if ( tess.numVertexes > 2 && r_fastsky->integer && vk.clearAttachment ) {
 #else
 	if ( tess.numVertexes > 2 && r_fastsky->integer ) {
 #endif
@@ -1687,7 +1685,7 @@ DRAWSURF SORTING
 R_Radix
 ===============
 */
-static ID_INLINE void R_Radix( int byte, int size, const drawSurf_t *source, drawSurf_t *dest )
+static void R_Radix( int _byte, int size, const drawSurf_t *source, drawSurf_t *dest )
 {
   int           count[ 256 ] = { 0 };
   int           index[ 256 ];
@@ -1695,7 +1693,7 @@ static ID_INLINE void R_Radix( int byte, int size, const drawSurf_t *source, dra
   unsigned char *sortKey;
   unsigned char *end;
 
-  sortKey = ( (unsigned char *)&source[ 0 ].sort ) + byte;
+  sortKey = ( (unsigned char *)&source[ 0 ].sort ) + _byte;
   end = sortKey + ( size * sizeof( drawSurf_t ) );
   for( ; sortKey < end; sortKey += sizeof( drawSurf_t ) )
     ++count[ *sortKey ];
@@ -1705,7 +1703,7 @@ static ID_INLINE void R_Radix( int byte, int size, const drawSurf_t *source, dra
   for( i = 1; i < 256; ++i )
     index[ i ] = index[ i - 1 ] + count[ i - 1 ];
 
-  sortKey = ( (unsigned char *)&source[ 0 ].sort ) + byte;
+  sortKey = ( (unsigned char *)&source[ 0 ].sort ) + _byte;
   for( i = 0; i < size; ++i, sortKey += sizeof( drawSurf_t ) )
     dest[ index[ *sortKey ]++ ] = source[ i ];
 }
@@ -1966,8 +1964,8 @@ static void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 			if ( r_portalOnly->integer ) {
 				return;
 			}
-#ifdef USE_VULKAN
-			if ( r_fastsky->integer == 0 || !vk.fastSky ) {
+#if defined (USE_VULKAN) && !defined (USE_BUFFER_CLEAR)
+			if ( r_fastsky->integer == 0 || !vk.clearAttachment ) {
 #else
 			if ( r_fastsky->integer == 0 ) {
 #endif
@@ -2163,21 +2161,6 @@ void R_RenderView( const viewParms_t *parms ) {
 	if ( parms->viewportWidth <= 0 || parms->viewportHeight <= 0 ) {
 		return;
 	}
-
-	// Ridah, purge media that were left over from the last level
-	if ( r_cache->integer ) {
-		extern void R_PurgeBackupImages( int purgeCount );
-		static int lastTime;
-
-		if ( ( lastTime > tr.refdef.time ) || ( lastTime < ( tr.refdef.time - 200 ) ) ) {
-			R_FreeImageBuffer();    // clear all image buffers
-			//R_PurgeShaders( 10 );
-			//R_PurgeBackupImages( 1 );
-			R_PurgeModels( 1 );
-			lastTime = tr.refdef.time;
-		}
-	}
-	// done.
 
 	tr.viewCount++;
 

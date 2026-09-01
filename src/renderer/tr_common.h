@@ -19,8 +19,8 @@ along with Quake III Arena source code; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
-#ifndef TR_COMMON_H
-#define TR_COMMON_H
+#ifndef __TR_COMMON_H__
+#define __TR_COMMON_H__
 
 #include "../qcommon/q_shared.h"
 #include "../renderercommon/tr_public.h"
@@ -121,6 +121,7 @@ qhandle_t RE_RegisterShaderFromImage(const char *name, int lightmapIndex, image_
 void R_InitFreeType( void );
 void R_DoneFreeType( void );
 void RE_RegisterFont(const char *fontName, int pointSize, fontInfo_t *font);
+void R_FontList_f(void);
 
 /*
 =============================================================
@@ -134,7 +135,6 @@ void R_LoadBMP( const char *name, byte **pic, int *width, int *height );
 void R_LoadJPG( const char *name, byte **pic, int *width, int *height );
 void R_LoadPCX( const char *name, byte **pic, int *width, int *height );
 void R_LoadPNG( const char *name, byte **pic, int *width, int *height );
-void R_LoadSVG( const char *name, byte **pic, int *width, int *height );
 void R_LoadTGA( const char *name, byte **pic, int *width, int *height );
 
 /*
@@ -144,5 +144,7 @@ IMPLEMENTATION SPECIFIC FUNCTIONS
 
 ====================================================================
 */
+
+int R_GetDlightMode( void );
 
 #endif

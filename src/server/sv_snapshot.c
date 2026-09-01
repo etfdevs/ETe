@@ -125,7 +125,7 @@ static void SV_EmitPacketEntities( const clientSnapshot_t *from, const clientSna
 SV_WriteSnapshotToClient
 ==================
 */
-static void SV_WriteSnapshotToClient( const client_t *client, msg_t *msg ) {
+static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 	const clientSnapshot_t	*oldframe;
 	const clientSnapshot_t	*frame;
 	int					lastframe;
@@ -136,28 +136,28 @@ static void SV_WriteSnapshotToClient( const client_t *client, msg_t *msg ) {
 	frame = &client->frames[ client->netchan.outgoingSequence & PACKET_MASK ];
 
 	// try to use a previous frame as the source for delta compressing the snapshot
-	if ( /* client->deltaMessage <= 0 || */ client->state != CS_ACTIVE ) {
+	if ( client->state != CS_ACTIVE || !client->deltaActive || client->deltaStart - client->messageAcknowledge > 0 ) {
 		// client is asking for a retransmit
 		oldframe = NULL;
 		lastframe = 0;
-	} else if ( client->netchan.outgoingSequence - client->deltaMessage >= (PACKET_BACKUP - 3) ) {
+	} else if ( client->netchan.outgoingSequence - client->messageAcknowledge >= (PACKET_BACKUP - 3) ) {
 		// client hasn't gotten a good message through in a long time
 		if ( com_developer->integer ) {
-			if ( client->deltaMessage != client->netchan.outgoingSequence - ( PACKET_BACKUP + 1 ) ) {
-				Com_Printf( "%s: Delta request from out of date packet.\n", client->name );
-			}
+			Com_Printf( S_COLOR_DEVEL "%s: Delta request from out of date packet.\n", client->name );
 		}
 		oldframe = NULL;
 		lastframe = 0;
 	} else {
 		// we have a valid snapshot to delta from
-		oldframe = &client->frames[ client->deltaMessage & PACKET_MASK ];
-		lastframe = client->netchan.outgoingSequence - client->deltaMessage;
+		oldframe = &client->frames[ client->messageAcknowledge & PACKET_MASK ];
+		lastframe = client->netchan.outgoingSequence - client->messageAcknowledge;
 		// we may refer on outdated frame
 		if ( oldframe->frameNum - svs.lastValidFrame < 0 ) {
 			Com_DPrintf( "%s: Delta request from out of date frame.\n", client->name );
 			oldframe = NULL;
 			lastframe = 0;
+		} else {
+			client->deltaStart = client->messageAcknowledge; // adjust delta range
 		}
 	}
 
@@ -960,17 +960,23 @@ void SV_SendClientMessages( void )
 	sv.ubpsTotalBytes = 0;      // NERVE - SMF - net debugging
 
 	// send a message to each connected client
-	for( i = 0; i < sv_maxclients->integer; i++ )
+	for ( i = 0; i < sv.maxclients; i++ )
 	{
 		c = &svs.clients[ i ];
-		
-		// rain - changed <= CS_ZOMBIE to < CS_ZOMBIE so that the
-		// disconnect reason is properly sent in the network stream
-		if ( c->state < CS_ZOMBIE )
-			continue;       // not connected
 
-		if ( *c->downloadName )
+		// rain - changed <= CS_ZOMBIE to == CS_FREE so that the
+		// disconnect reason is properly sent in the network stream
+		if ( c->state == CS_FREE )
+			continue;		// not connected
+
+		//if ( *c->downloadName )
+		//	continue;		// Client is downloading, don't send snapshots
+
+		if ( c->state == CS_CONNECTED )
 			continue;		// Client is downloading, don't send snapshots
+
+		//if ( !c->gamestateAcked )
+		//	continue;		// waiting usercmd/downloading
 
 		// RF, needed to insert this otherwise bots would cause error drops in sv_net_chan.c:
 		// --> "netchan queue is not properly initialized in SV_Netchan_TransmitNextFragment\n"
@@ -989,7 +995,7 @@ void SV_SendClientMessages( void )
 			c->rateDelayed = qtrue;
 			continue;		// Drop this snapshot if the packet queue is still full or delta compression will break
 		}
-	
+
 		if ( SV_RateMsec( c ) > 0 )
 		{
 			// Not enough time since last packet passed through the line

@@ -36,9 +36,9 @@ If you have questions concerning this license or the applicable additional terms
 gameInfo_t com_gameInfo;
 static qboolean firstLaunch = qtrue;
 
-void Com_InitGameInfo( void ) {
+/*void Com_InitGameInfo( void ) {
 	memset( &com_gameInfo, 0, sizeof( com_gameInfo ) );
-}
+}*/
 
 void Com_GetGameInfo( void ) {
 	union {

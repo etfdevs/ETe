@@ -113,7 +113,7 @@ void R_LoadTGA ( const char *name, byte **pic, int *width, int *height)
 		&& targa_header.image_type != 3 ) 
 	{
 		ri.FS_FreeFile( buffer.v );
-		ri.Error( ERR_DROP, "LoadTGA: Only type 2 (RGB), 3 (gray), and 10 (RGB) TGA images supported" );
+		ri.Error( ERR_DROP, "LoadTGA: Only type 2 (RGB), 3 (gray), and 10 (RLE-RGB) TGA images supported" );
 	}
 
 	if ( targa_header.colormap_type != 0 )

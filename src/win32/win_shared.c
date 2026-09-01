@@ -101,6 +101,7 @@ const char *WtoA( const LPWSTR s )
 #endif
 
 
+#ifdef USE_WINDOWS_PROFILES
 static qboolean StrIsAscii( const signed char *text, size_t len ) {
 	size_t i;
 	for( i = 0; i < len; i++ ) {
@@ -110,6 +111,7 @@ static qboolean StrIsAscii( const signed char *text, size_t len ) {
 	}
 	return qtrue;
 }
+#endif
 
 
 /*
@@ -379,3 +381,14 @@ qboolean Sys_SetAffinityMask( const uint64_t mask )
 	return qfalse;
 }
 #endif // USE_AFFINITY_MASK
+
+qboolean Sys_IsSteamOverlayAttached( void )
+{
+  HMODULE gameoverlaydll = GetModuleHandle( T( "GameOverlayRenderer.dll" ) );
+
+  if( gameoverlaydll != NULL ) {
+    return qtrue;
+  }
+
+  return qfalse;
+}

@@ -25,8 +25,8 @@ If you have questions concerning this license or the applicable additional terms
 
 ===========================================================================
 */
-#ifndef VM_LOCAL_H
-#define VM_LOCAL_H
+#ifndef __VM_LOCAL_H__
+#define __VM_LOCAL_H__
 
 #include "q_shared.h"
 #include "qcommon.h"

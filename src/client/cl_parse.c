@@ -29,9 +29,8 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "client.h"
 
-static const char *svc_strings[256] = {
+static const char *svc_strings[] = {
 	"svc_bad",
-
 	"svc_nop",
 	"svc_gamestate",
 	"svc_configstring",
@@ -384,7 +383,6 @@ static void CL_ParseSnapshot( msg_t *msg ) {
 			// The frame that the server did the delta from
 			// is too old, so we can't reconstruct it properly.
 			Com_Printf ("Delta frame too old.\n");
-		//} else if ( cl.parseEntitiesNum - old->parseEntitiesNum > MAX_PARSE_ENTITIES - 128 ) {
 		} else if ( cl.parseEntitiesNum - old->parseEntitiesNum > MAX_PARSE_ENTITIES - MAX_SNAPSHOT_ENTITIES ) {
 			Com_Printf ("Delta parseEntitiesNum too old.\n");
 		} else {
@@ -479,13 +477,11 @@ new information out of it.  This will happen at every
 gamestate, and possibly during gameplay.
 ==================
 */
-void CL_PurgeCache( void );
 void CL_SystemInfoChanged( qboolean onlyGame ) {
 	const char		*systemInfo;
 	const char		*s, *t;
 	char			key[BIG_INFO_KEY];
 	char			value[BIG_INFO_VALUE];
-	int				oldPureState;
 
 	systemInfo = cl.gameState.stringData + cl.gameState.stringOffsets[ CS_SYSTEMINFO ];
 	// NOTE TTimo:
@@ -502,7 +498,6 @@ void CL_SystemInfoChanged( qboolean onlyGame ) {
 	}
 
 	s = Info_ValueForKey( systemInfo, "sv_pure" );
-	oldPureState = cl_connectedToPureServer;
 	cl_connectedToPureServer = atoi( s );
 
 	s = Info_ValueForKey( systemInfo, "cm_optimizePatchPlanes" );
@@ -610,15 +605,6 @@ void CL_SystemInfoChanged( qboolean onlyGame ) {
 		}
 	}
 	while ( *s != '\0' );
-
-	// Arnout: big hack to clear the image cache on a pure change
-	if ( cl_connectedToPureServer ) {
-		if ( !oldPureState && cls.state <= CA_CONNECTED )
-			CL_PurgeCache();
-	} else {
-		if ( oldPureState && cls.state <= CA_CONNECTED )
-			CL_PurgeCache();
-	}
 }
 
 
@@ -638,9 +624,9 @@ qboolean CL_GameSwitch( void )
 CL_ParseServerInfo
 ==================
 */
+#ifdef USE_DISCORD
 void CL_ParseServerInfo( void )
 {
-#ifdef USE_DISCORD
 	const char *serverInfo;
 
 	serverInfo = cl.gameState.stringData
@@ -658,8 +644,8 @@ void CL_ParseServerInfo( void )
 	Q_CleanStr(cl.discord.hostName);
 	Q_CleanStr(cl.discord.mapName);
 	Q_strlwr(cl.discord.mapName);
-#endif
 }
+#endif
 
 #ifdef USE_DISCORD
 #define ETF_CS_PLAYERS (800)
@@ -839,7 +825,9 @@ static void CL_ParseGamestate( msg_t *msg ) {
 	Cvar_VariableStringBuffer( "fs_game", oldGame, sizeof( oldGame ) );
 
 	// parse useful values out of CS_SERVERINFO
+#ifdef USE_DISCORD
 	CL_ParseServerInfo();
+#endif
 
 	// parse serverId and other cvars
 	CL_SystemInfoChanged( qtrue );
@@ -1082,8 +1070,7 @@ static void CL_ParseDownload( msg_t *msg ) {
 		// loading right away.  If we take a while to load, the server is happily trying
 		// to send us that last block over and over.
 		// Write it twice to help make sure we acknowledge the download
-		CL_WritePacket();
-		CL_WritePacket();
+		CL_WritePacket( 1 );
 
 		// get another file if needed
 		CL_NextDownload();
@@ -1193,19 +1180,19 @@ void CL_ParseServerMessage( msg_t *msg ) {
 	// parse the message
 	while ( 1 ) {
 		if ( msg->readcount > msg->cursize ) {
-			Com_Error( ERR_DROP, "CL_ParseServerMessage: read past end of server message" );
+			Com_Error( ERR_DROP,"%s: read past end of server message", __func__ );
 			break;
 		}
 
 		cmd = MSG_ReadByte( msg );
 
-		if ( cmd == svc_EOF) {
+		if ( cmd == svc_EOF ) {
 			SHOWNET( msg, "END OF MESSAGE" );
 			break;
 		}
 
 		if ( cl_shownet->integer >= 2 ) {
-			if ( (cmd < 0) || (!svc_strings[cmd]) ) {
+			if ( (unsigned) cmd >= ARRAY_LEN( svc_strings ) ) {
 				Com_Printf( "%3i:BAD CMD %i\n", msg->readcount-1, cmd );
 			} else {
 				SHOWNET( msg, svc_strings[cmd] );
@@ -1215,7 +1202,7 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		// other commands
 		switch ( cmd ) {
 		default:
-			Com_Error( ERR_DROP, "CL_ParseServerMessage: Illegible server message %d", cmd );
+			Com_Error( ERR_DROP, "%s: Illegible server message %d", __func__, cmd );
 			break;
 		case svc_nop:
 			break;

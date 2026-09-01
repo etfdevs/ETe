@@ -68,7 +68,7 @@ void GL_Bind( image_t *image ) {
 
 	//if ( glState.currenttextures[glState.currenttmu] != texnum ) {
 		image->frameUsed = tr.frameCount;
-		vk_update_descriptor( glState.currenttmu + 2, image->descriptor );
+		vk_update_descriptor( glState.currenttmu + VK_DESC_TEXTURE_BASE, image->descriptor );
 
 	//}
 #else
@@ -455,6 +455,7 @@ static void RB_Hyperspace( void ) {
 
 	if ( tess.shader != tr.whiteShader ) {
 		RB_EndSurface();
+		RB_SetGL2D();
 		RB_BeginSurface( tr.whiteShader, 0 );
 	}
 
@@ -464,7 +465,11 @@ static void RB_Hyperspace( void ) {
 
 	RB_SetGL2D();
 
-	c.rgba[0] = c.rgba[1] = c.rgba[2] = (backEnd.refdef.time & 255);
+	//if ( r_teleporterFlash->integer == 0 ) {
+	//	c.rgba[0] = c.rgba[1] = c.rgba[2] = 0; // fade to black
+	//} else {
+		c.rgba[0] = c.rgba[1] = c.rgba[2] = (backEnd.refdef.time & 255); // fade to white
+	//}
 	c.rgba[3] = 255;
 
 	RB_AddQuadStamp2( backEnd.refdef.x, backEnd.refdef.y, backEnd.refdef.width, backEnd.refdef.height,
@@ -510,15 +515,19 @@ to actually render the visible surfaces for this view
 static void RB_BeginDrawingView( void ) {
 #ifndef USE_VULKAN
 	int clearBits = 0;
+#endif
 
 	// sync with gl if needed
 	if ( r_finish->integer == 1 && !glState.finishCalled ) {
+#ifdef USE_VULKAN
+		vk_queue_wait_idle();
+#else
 		qglFinish();
+#endif
 		glState.finishCalled = qtrue;
 	} else if ( r_finish->integer == 0 ) {
 		glState.finishCalled = qtrue;
 	}
-#endif
 
 	// we will need to change the projection matrix before drawing
 	// 2D images again
@@ -630,10 +639,10 @@ static void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 		// change the tess parameters if needed
 		// a "entityMergable" shader is a shader that can have surfaces from separate
 		// entities merged into a single batch, like smoke and blood puff sprites
-		if ( ( (oldSort ^ drawSurfs->sort ) & ~QSORT_REFENTITYNUM_MASK ) || !shader->entityMergable ) {
-			if ( oldShader != NULL ) {
+		if ( ( (oldSort ^ drawSurf->sort ) & ~QSORT_REFENTITYNUM_MASK ) || !shader->entityMergable ) {
+			//if ( oldShader != NULL ) {
 				RB_EndSurface();
-			}
+			//}
 #ifdef USE_PMLIGHT
 			#define INSERT_POINT SS_FOG
 			if ( backEnd.refdef.numLitSurfs && oldShaderSort < INSERT_POINT && shader->sort >= INSERT_POINT ) {
@@ -1033,6 +1042,11 @@ RB_SetGL2D
 ================
 */
 static void RB_SetGL2D( void ) {
+
+	if ( backEnd.projection2D ) {
+		return;
+	}
+
 	backEnd.projection2D = qtrue;
 
 #ifdef USE_VULKAN
@@ -1113,11 +1127,14 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 
 	if ( !tr.scratchImage[ client ] ) {
 		tr.scratchImage[ client ] = R_CreateImage( va( "*scratch%i", client ), NULL, data, cols, rows, IMGFLAG_CLAMPTOEDGE | IMGFLAG_RGB | IMGFLAG_NOSCALE );
+		return;
 	}
 
 	image = tr.scratchImage[ client ];
 
+#ifndef USE_VULKAN
 	GL_Bind( image );
+#endif
 
 	// if the scratchImage isn't in the format we want, specify it as a new texture
 	if ( cols != image->width || rows != image->height ) {
@@ -1125,7 +1142,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 		image->height = image->uploadHeight = rows;
 #ifdef USE_VULKAN
 		vk_create_image( image, cols, rows, 1 );
-		vk_upload_image_data( image, 0, 0, cols, rows, 1, data, cols * rows * 4 );
+		vk_upload_image_data( image, 0, 0, cols, rows, 1, data, cols * rows * 4, qfalse );
 #else
 		qglTexImage2D( GL_TEXTURE_2D, 0, image->internalFormat, cols, rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, data );
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -1137,7 +1154,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 		// otherwise, just subimage upload it so that drivers can tell we are going to be changing
 		// it and don't try and do a texture compression
 #ifdef USE_VULKAN
-		vk_upload_image_data( image, 0, 0, cols, rows, 1, data, cols * rows * 4 );
+		vk_upload_image_data( image, 0, 0, cols, rows, 1, data, cols * rows * 4, qtrue );
 #else
 		qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, GL_RGBA, GL_UNSIGNED_BYTE, data );
 #endif
@@ -1177,10 +1194,9 @@ static const void *RB_StretchPic( const void *data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
 		backEnd.currentEntity = &backEnd.entity2D;
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		RB_BeginSurface( shader, 0 );
 	}
 
@@ -1188,9 +1204,7 @@ static const void *RB_StretchPic( const void *data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_VULKAN
 	if ( r_bloom->integer ) {
@@ -1199,7 +1213,6 @@ static const void *RB_StretchPic( const void *data ) {
 #endif
 
 	RB_AddQuadStamp2( cmd->x, cmd->y, cmd->w, cmd->h, cmd->s1, cmd->t1, cmd->s2, cmd->t2, backEnd.color2D );
-
 	return (const void *)(cmd + 1);
 }
 
@@ -1243,10 +1256,9 @@ static const void* RB_Draw2dPolys( const void* data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
 		backEnd.currentEntity = &backEnd.entity2D;
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		RB_BeginSurface( shader, 0 );
 	}
 
@@ -1254,9 +1266,7 @@ static const void* RB_Draw2dPolys( const void* data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_VULKAN
 	if ( r_bloom->integer ) {
@@ -1308,10 +1318,9 @@ static const void *RB_RotatedPic( const void *data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
 		backEnd.currentEntity = &backEnd.entity2D;
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		RB_BeginSurface( shader, 0 );
 	}
 
@@ -1319,9 +1328,7 @@ static const void *RB_RotatedPic( const void *data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_VULKAN
 	if ( r_bloom->integer ) {
@@ -1398,10 +1405,9 @@ static const void *RB_StretchPicGradient( const void *data ) {
 
 	shader = cmd->shader;
 	if ( shader != tess.shader ) {
-		if ( tess.numIndexes ) {
-			RB_EndSurface();
-		}
+		RB_EndSurface();
 		backEnd.currentEntity = &backEnd.entity2D;
+		RB_SetGL2D(); // set correct shader time before RB_BeginSurface() on 3D->2D transition
 		RB_BeginSurface( shader, 0 );
 	}
 
@@ -1409,9 +1415,7 @@ static const void *RB_StretchPicGradient( const void *data ) {
 	VBO_UnBind();
 #endif
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 #ifdef USE_VULKAN
 	if ( r_bloom->integer ) {
@@ -1699,7 +1703,7 @@ static const void *RB_DrawBuffer( const void *data ) {
 	// force depth range and viewport/scissor updates
 	vk.cmd->depth_range = DEPTH_RANGE_COUNT;
 
-	if ( r_clear->integer ) {
+	if ( r_clear->integer && vk.clearAttachment ) {
 		const vec4_t color = {1, 0, 0.5, 1};
 		backEnd.projection2D = qtrue; // to ensure we have viewport that occupies entire window
 		vk_clear_color( color );
@@ -1734,11 +1738,45 @@ void RB_ShowImages( void )
 {
 	int i;
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
-	vk_clear_color( colorBlack );
+	// draw full-screen quad
+	tess.numVertexes = 4;
+
+	tess.svars.colors[0][0].u32 = ~0U; // 255-255-255-255
+	tess.svars.colors[0][1].u32 = ~0U;
+	tess.svars.colors[0][2].u32 = ~0U;
+	tess.svars.colors[0][3].u32 = ~0U;
+
+	tess.svars.texcoords[0][0][0] = 0.0f;
+	tess.svars.texcoords[0][0][1] = 0.0f;
+
+	tess.svars.texcoords[0][1][0] = 1.0f;
+	tess.svars.texcoords[0][1][1] = 0.0f;
+
+	tess.svars.texcoords[0][2][0] = 0.0f;
+	tess.svars.texcoords[0][2][1] = 1.0f;
+
+	tess.svars.texcoords[0][3][0] = 1.0f;
+	tess.svars.texcoords[0][3][1] = 1.0f;
+
+	tess.svars.texcoordPtr[0] = tess.svars.texcoords[0];
+
+	tess.xyz[0][0] = 0.0f;
+	tess.xyz[0][1] = 0.0f;
+
+	tess.xyz[1][0] = (float)glConfig.vidWidth;
+	tess.xyz[1][1] = 0.0f;
+
+	tess.xyz[2][0] = 0.0f;
+	tess.xyz[2][1] = (float)glConfig.vidHeight;
+
+	tess.xyz[3][0] = (float)glConfig.vidWidth;
+	tess.xyz[3][1] = (float)glConfig.vidHeight;
+
+	vk_bind_pipeline( vk.images_debug_pipeline2 );
+	vk_bind_geometry( TESS_XYZ | TESS_RGBA0 | TESS_ST0 );
+	vk_draw_geometry( DEPTH_RANGE_NORMAL, qfalse );
 
 	for ( i = 0; i < tr.numImages; i++ ) {
 		image_t *image = tr.images[i];
@@ -1754,39 +1792,21 @@ void RB_ShowImages( void )
 			h *= image->uploadHeight / 512.0f;
 		}
 
-		GL_Bind( image );
-
-		tess.svars.colors[0][0].u32 = ~0U; // 255-255-255-255
-		tess.svars.colors[0][1].u32 = ~0U;
-		tess.svars.colors[0][2].u32 = ~0U;
-		tess.svars.colors[0][3].u32 = ~0U;
-
-		tess.numVertexes = 4;
-
 		tess.xyz[0][0] = x;
 		tess.xyz[0][1] = y;
-		tess.svars.texcoords[0][0][0] = 0;
-		tess.svars.texcoords[0][0][1] = 0;
 
 		tess.xyz[1][0] = x + w;
 		tess.xyz[1][1] = y;
-		tess.svars.texcoords[0][1][0] = 1;
-		tess.svars.texcoords[0][1][1] = 0;
 
 		tess.xyz[2][0] = x;
 		tess.xyz[2][1] = y + h;
-		tess.svars.texcoords[0][2][0] = 0;
-		tess.svars.texcoords[0][2][1] = 1;
 
 		tess.xyz[3][0] = x + w;
 		tess.xyz[3][1] = y + h;
-		tess.svars.texcoords[0][3][0] = 1;
-		tess.svars.texcoords[0][3][1] = 1;
 
-		tess.svars.texcoordPtr[0] = tess.svars.texcoords[0];
-
+		GL_Bind( image );
 		vk_bind_pipeline( vk.images_debug_pipeline );
-		vk_bind_geometry( TESS_XYZ | TESS_RGBA0 | TESS_ST0 );
+		vk_bind_geometry( TESS_XYZ );
 		vk_draw_geometry( DEPTH_RANGE_NORMAL, qfalse );
 	}
 
@@ -1802,9 +1822,7 @@ void RB_ShowImages( void ) {
 	const vec2_t t[4] = { {0,0}, {1,0}, {0,1}, {1,1} };
 	vec3_t v[4];
 
-	if ( !backEnd.projection2D ) {
-		RB_SetGL2D();
-	}
+	RB_SetGL2D();
 
 	qglClear( GL_COLOR_BUFFER_BIT );
 
@@ -1885,7 +1903,7 @@ static const void *RB_ClearDepth( const void *data )
 	return (const void *)(cmd + 1);
 }
 
-static const vec4_t colorFastSky = { 0.05f, 0.05f, 0.05f, 1.0f };
+//static const vec4_t colorFastSky = { 0.05f, 0.05f, 0.05f, 1.0f };
 
 /*
 =============
@@ -1898,17 +1916,16 @@ static const void *RB_ClearColor( const void *data )
 
 #ifdef USE_VULKAN
 	backEnd.projection2D = qtrue;
-	/*if ( tr.world && tr.world->globalFog >= 0 )
+	if( r_fastsky->integer )
+	{
+		vk_clear_color( tr.clearColor );
+	}
+	else
 	{
 		const fogParms_t *fog = &tr.world->fogs[tr.world->globalFog].shader->fogParms;
 		vec4_t fogColor;
 		Vector4Set( fogColor, fog->color[0] * tr.identityLight, fog->color[1] * tr.identityLight, fog->color[2] * tr.identityLight, 1.0f );
 		vk_clear_color( fogColor );
-		//ri.Printf( PRINT_ALL, "World Fog Color\n" );
-	}
-	else*/
-	{
-		vk_clear_color( colorFastSky );
 	}
 	backEnd.projection2D = qfalse;
 #else
@@ -1968,6 +1985,10 @@ static const void *RB_SwapBuffers( const void *data ) {
 
 #ifdef USE_VULKAN
 	vk_end_frame();
+
+	if ( backEnd.doneSurfaces && !glState.finishCalled ) {
+		vk_queue_wait_idle();
+	}
 #else
 	if ( backEnd.doneSurfaces && !glState.finishCalled ) {
 		qglFinish();
@@ -2007,7 +2028,9 @@ static const void *RB_SwapBuffers( const void *data ) {
 		backEnd.screenshotMask = 0;
 	}
 
-#ifndef USE_VULKAN
+#ifdef USE_VULKAN
+	vk_present_frame();
+#else
 	ri.GLimp_EndFrame();
 #endif
 
@@ -2133,16 +2156,11 @@ void RB_ExecuteRenderCommands( const void *data ) {
 		case RC_FINISH:
 			data = RB_Finish( data );
 			break;
-		case RC_DRAW_OMNIBOT:
-			data = ri.Sys_OmnibotRender( data );
-			break;
 		case RC_END_OF_LIST:
 		default:
 			// stop rendering
 #ifdef USE_VULKAN
-			if ( vk.frame_count ) {
-				vk_end_frame();
-			}
+			vk_end_frame();
 //			if (com_errorEntered && (begin_frame_called && !end_frame_called)) {
 //				vk_end_frame();
 //			}

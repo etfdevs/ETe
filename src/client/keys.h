@@ -29,7 +29,7 @@ If you have questions concerning this license or the applicable additional terms
 #ifndef __CL_KEYS_H__
 #define __CL_KEYS_H__
 
-#include "../ui/keycodes.h"
+#include "keycodes.h"
 
 typedef struct {
 	qboolean	down;

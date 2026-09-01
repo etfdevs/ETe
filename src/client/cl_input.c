@@ -46,7 +46,7 @@ When a key event issues a button command (+forward, +attack, etc), it appends
 its key number as argv(1) so it can be matched up with the release.
 
 argv(2) will be set to the time the event happened, which allows exact
-control even at low framerates when the down and up events may both get qued
+control even at low framerates when the down and up events may both get queued
 at the same time.
 
 ===============================================================================
@@ -172,7 +172,7 @@ static void IN_KeyUp( kbutton_t *b ) {
 	} else if ( b->down[1] == k ) {
 		b->down[1] = 0;
 	} else {
-		return;		// key up without coresponding down (menu pass through)
+		return;		// key up without corresponding down (menu pass through)
 	}
 	if ( b->down[0] || b->down[1] ) {
 		return;		// some other key is still holding it down
@@ -345,7 +345,7 @@ static void CL_KeyMove( usercmd_t *cmd ) {
 	//
 	// adjust for speed key / running
 	// the walking flag is to keep animations consistent
-	// even during acceleration and develeration
+	// even during acceleration and deceleration
 	//
 	if ( kb[KB_SPEED].active ^ cl_run->integer ) {
 		movespeed = 127;
@@ -478,6 +478,20 @@ static void CL_JoystickMove( usercmd_t *cmd ) {
 	//int		movespeed;
 	float	anglespeed;
 
+#if (defined(USE_SDL2) || defined(USE_SDL3)) && defined(USE_JOYSTICK)
+	float yaw     = j_yaw->value     * cl.joystickAxis[j_yaw_axis->integer];
+	float right   = j_side->value    * cl.joystickAxis[j_side_axis->integer];
+	float forward = j_forward->value * cl.joystickAxis[j_forward_axis->integer];
+	float pitch   = j_pitch->value   * cl.joystickAxis[j_pitch_axis->integer];
+	float up      = j_up->value      * cl.joystickAxis[j_up_axis->integer];
+#else
+	float yaw     = /*j_yaw->value     **/ cl.joystickAxis[AXIS_YAW];
+	float right   = /*j_side->value    **/ cl.joystickAxis[AXIS_SIDE];
+	float forward = /*j_forward->value **/ cl.joystickAxis[AXIS_FORWARD];
+	float pitch   = /*j_pitch->value   **/ cl.joystickAxis[AXIS_PITCH];
+	float up      = /*j_up->value      **/ cl.joystickAxis[AXIS_UP];
+#endif
+
 	if ( kb[KB_SPEED].active ^ cl_run->integer ) {
 		//movespeed = 2;
 	} else {
@@ -492,17 +506,21 @@ static void CL_JoystickMove( usercmd_t *cmd ) {
 	}
 
 	if ( !kb[KB_STRAFE].active ) {
-		cl.viewangles[YAW] += anglespeed * cl_yawspeed->value * cl.joystickAxis[AXIS_SIDE];
+		cl.viewangles[YAW] += anglespeed * yaw;
+		cmd->rightmove = ClampCharMove( cmd->rightmove + (int)right );
 	} else {
-		cmd->rightmove = ClampCharMove( cmd->rightmove + cl.joystickAxis[AXIS_SIDE] );
+		cl.viewangles[YAW] += anglespeed * right;
+		cmd->rightmove = ClampCharMove( cmd->rightmove + (int)yaw );
 	}
 	if ( kb[KB_MLOOK].active ) {
-		cl.viewangles[PITCH] += anglespeed * cl_pitchspeed->value * cl.joystickAxis[AXIS_FORWARD];
+		cl.viewangles[PITCH] += anglespeed * forward;
+		cmd->forwardmove = ClampCharMove( cmd->forwardmove + (int)pitch );
 	} else {
-		cmd->forwardmove = ClampCharMove( cmd->forwardmove + cl.joystickAxis[AXIS_FORWARD] );
+		cl.viewangles[PITCH] += anglespeed * pitch;
+		cmd->forwardmove = ClampCharMove( cmd->forwardmove + (int)forward );
 	}
 
-	cmd->upmove = ClampCharMove( cmd->upmove + cl.joystickAxis[AXIS_UP] );
+	cmd->upmove = ClampCharMove( cmd->upmove + (int)up );
 }
 
 
@@ -860,7 +878,7 @@ During normal gameplay, a client packet will contain something like:
 
 ===================
 */
-void CL_WritePacket( void ) {
+void CL_WritePacket( int repeat ) {
 	msg_t		buf;
 	byte		data[ MAX_MSGLEN_BUF ];
 	int			i, j, n;
@@ -920,11 +938,10 @@ void CL_WritePacket( void ) {
 		}
 
 		// begin a client move command
-		if ( cl_nodelta->integer || !cl.snap.valid || clc.demowaiting
-			|| clc.serverMessageSequence != cl.snap.messageNum ) {
-			MSG_WriteByte (&buf, clc_moveNoDelta);
+		if ( cl_nodelta->integer || !cl.snap.valid || clc.demowaiting || clc.serverMessageSequence != cl.snap.messageNum ) {
+			MSG_WriteByte( &buf, clc_moveNoDelta );
 		} else {
-			MSG_WriteByte (&buf, clc_move);
+			MSG_WriteByte( &buf, clc_move );
 		}
 
 		// write the command count
@@ -959,7 +976,21 @@ void CL_WritePacket( void ) {
 		Com_Printf( "%i ", buf.cursize );
 	}
 
-	CL_Netchan_Transmit( &clc.netchan, &buf );
+	MSG_WriteByte( &buf, clc_EOF );
+
+	if ( buf.overflowed ) {
+		if ( cls.state >= CA_CONNECTED && cls.state != CA_CINEMATIC ) {
+			cls.state = CA_CONNECTING; // to avoid recursive error
+		}
+		Com_Error( ERR_DROP, "%s: message overflowed", __func__ );
+	}
+
+	if ( repeat == 0 || clc.netchan.remoteAddress.type == NA_LOOPBACK ) {
+		CL_Netchan_Transmit( &clc.netchan, &buf );
+	} else {
+		CL_Netchan_Enqueue( &clc.netchan, &buf, repeat + 1 );
+		NET_FlushPacketQueue( 0 );
+	}
 }
 
 
@@ -992,7 +1023,7 @@ void CL_SendCmd( void ) {
 		return;
 	}
 
-	CL_WritePacket();
+	CL_WritePacket( 0 );
 }
 
 static const cmdListItem_t input_cmds[] = {
