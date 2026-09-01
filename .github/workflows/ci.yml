@@ -20,266 +20,160 @@ on:
     types: [published]
 
 jobs:
-  msvc:
-    name: Windows ${{ matrix.arch }} ${{ matrix.config }} 
-    runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x86, x64]
-        config: [Release]
-        include:
-          - arch: x86
-            platform: Win32
-            pkg_suffix: x86
-
-          - arch: x64
-            platform: x64
-            suffix: .x64
-            pkg_suffix: x64
-
-    steps:
-    - uses: microsoft/setup-msbuild@v3
-
-    #- name: Install v141_xp Toolset
-    #  shell: powershell
-    #  run: |
-    #    Set-Location "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
-    #    $InstallPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
-    #    $WorkLoads = '--add Microsoft.VisualStudio.Component.WinXP'
-    #    $Arguments = ('/c', "vs_installer.exe", 'modify', '--installPath', "`"$InstallPath`"", $WorkLoads, '--quiet', '--norestart', '--nocache')
-    #    $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
-    #    if ($process.ExitCode -eq 0) {
-    #        Write-Host "components have been successfully added"
-    #    } else {
-    #        Write-Host "components were not installed"
-    #    }
-
-    - uses: actions/checkout@v7
-      with:
-        submodules: recursive
-
-    - name: Build
-      run: |
-        mkdir bin
-
-        msbuild src\win32\msvc2017\ete-ded.vcxproj -m -p:PlatformToolset=v143,TargetName=ETe.ded,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }}
-        copy src\win32\msvc2017\output\${{ matrix.config }}\ETe.ded.exe bin\ETe.ded${{ matrix.suffix }}.exe
-        msbuild src\win32\msvc2017\ete-ded.vcxproj -m -p:PlatformToolset=v143,TargetName=ETe.ded,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }} -t:Clean
-
-        msbuild src\win32\msvc2017\renderer.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }}
-        msbuild src\win32\msvc2017\ete.vcxproj -m -p:PlatformToolset=v143,TargetName=ETe,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }},UseWasapi=USE_WASAPI=0
-        copy src\win32\msvc2017\output\${{ matrix.config }}\ETe.exe bin\ETe${{ matrix.suffix }}.exe
-        msbuild src\win32\msvc2017\renderer.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }} -t:Clean
-        msbuild src\win32\msvc2017\ete.vcxproj -m -p:PlatformToolset=v143,TargetName=ETe,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }},UseWasapi=USE_WASAPI=0 -t:Clean
-
-        msbuild src\win32\msvc2017\renderervk.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }}
-        msbuild src\win32\msvc2017\ete.vcxproj -m -p:PlatformToolset=v143,TargetName=ETe,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }},UseWasapi=USE_WASAPI=0
-        copy src\win32\msvc2017\output\${{ matrix.config }}\ETe.exe bin\ETe-vulkan${{ matrix.suffix }}.exe
-        msbuild src\win32\msvc2017\renderervk.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }} -t:Clean
-        msbuild src\win32\msvc2017\ete.vcxproj -m -p:PlatformToolset=v143,TargetName=ETe,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }},UseWasapi=USE_WASAPI=0 -t:Clean
-
-        msbuild src\win32\msvc2017\game.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }}
-        msbuild src\win32\msvc2017\ui.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }}
-        msbuild src\win32\msvc2017\cgame.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }}
-
-        copy src\win32\msvc2017\output\${{ matrix.config }}\qagame_mp_${{ matrix.pkg_suffix }}.dll bin\
-        copy src\win32\msvc2017\output\${{ matrix.config }}\ui_mp_${{ matrix.pkg_suffix }}.dll bin\
-        copy src\win32\msvc2017\output\${{ matrix.config }}\cgame_mp_${{ matrix.pkg_suffix }}.dll bin\
-
-        msbuild src\win32\msvc2017\game.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }} -t:Clean
-        msbuild src\win32\msvc2017\ui.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }} -t:Clean
-        msbuild src\win32\msvc2017\cgame.vcxproj -m -p:PlatformToolset=v143,Configuration=${{ matrix.config }},Platform=${{ matrix.platform }} -t:Clean
-
-    - uses: actions/upload-artifact@v7
-      if: ${{ matrix.config == 'Release' }}
-      with:
-        name: windows-${{ matrix.pkg_suffix }}
-        path: bin
-        if-no-files-found: error
-        retention-days: 5
-
-  ubuntu:
-    name: Ubuntu ${{ matrix.arch }} ${{ matrix.config }}
+  linux:
+    name: Linux
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         arch: [x86, x86_64]
-        config: [Release]
-        include:
-          - config: Release
-            rule: install
-          - arch: x86
-            use_sdl: true
-          - arch: x86_64
-            use_sdl: true
-
     steps:
-    - name: Setup Build Environment
+    - uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install libsdl2-dev
+    - name: Compile
       run: |
         if [ ${{ matrix.arch }} == "x86" ]; then
-          sudo dpkg --add-architecture i386
-          sudo apt-get -qq update
-          sudo apt-get -y install aptitude
-          sudo apt-get -y install gcc-multilib g++-multilib ninja-build
-          sudo apt-get -y install --allow-downgrades libpcre2-8-0:i386 libjpeg-dev:i386 libcurl4-openssl-dev:i386
-          sudo aptitude -y install libglib2.0-dev:i386 libsdl2-dev:i386
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-x86-linux.cmake
         else
-          sudo apt-get -qq update
-          sudo apt-get -y install ninja-build libjpeg-dev libsdl2-dev libcurl4-openssl-dev
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE
         fi
-    - uses: actions/checkout@v7
-      with:
-        submodules: recursive
-
-    - name: Configure CMake
-      run: |
-        cmake -E make_directory bin
-        if [ ${{ matrix.arch }} == "x86" ]; then
-          cmake -S src -B bin -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DUSE_SDL2=${{ matrix.use_sdl }} -DBUILD_ETMAIN_MOD=ON -DCMAKE_TOOLCHAIN_FILE=../src/cmake/toolchains/linux-i686.cmake
-        else
-          cmake -S src -B bin -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DUSE_SDL2=${{ matrix.use_sdl }} -DBUILD_ETMAIN_MOD=ON
-        fi
-
-    - name: Build
-      working-directory: bin
-      run: cmake --build . --config ${{ matrix.config }} --parallel
-
-    - uses: actions/upload-artifact@v7
-      if: matrix.config == 'Release'
-      with:
-        name: linux-${{ matrix.arch }}
-        path: | 
-          bin/ete*.${{ matrix.arch }}
-          bin/*.so
-        if-no-files-found: error
-        retention-days: 5
-
-  #macos:
-  #  name: macOS ${{ matrix.arch }} ${{ matrix.config }}
-  #  runs-on: ${{ matrix.runner }}
-  #  strategy:
-  #    fail-fast: false
-  #    matrix:
-  #      runner: [macos-13] #, macos-14]
-  #      config: [Release]
-  #      include:
-  #        - runner: macos-13
-  #          arch: x86_64
-  #        #- runner: macos-14
-  #        #  arch: arm64
-  #        - config: Release
-  #          rule: install
-  #
-  #  steps:
-  #  - name: Setup Build Environment
-  #    run: brew install coreutils ninja sdl2
-  #
-  #  - uses: actions/checkout@v7
-  #    with:
-  #      submodules: recursive
-  #
-  #  - name: Configure CMake
-  #    run: |
-  #      cmake -E make_directory bin
-  #      cmake -S src -B bin -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DUSE_SDL2=TRUE -DBUILD_ETMAIN_MOD=ON -DUSE_SYSTEM_JPEG=OFF
-  #
-  #  - name: Build
-  #    working-directory: bin
-  #    run: cmake --build . --config ${{ matrix.config }} --parallel
-  #
-  #  - uses: actions/upload-artifact@v7
-  #    if: matrix.config == 'Release'
-  #    with:
-  #      name: macos-${{ matrix.arch }}
-  #      path: |
-  #        bin/ete*.${{ matrix.arch }}
-  #        bin/*_mac
-  #      if-no-files-found: error
-  #      retention-days: 5
-
-  create-testing:
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: [msvc, ubuntu] #, macos]
-    runs-on: ubuntu-latest
+        cmake --build build
+    #- name: Upload
+    #  uses: actions/upload-artifact@v4
+    #  with:
+    #    name: ${{ github.event.repository.name }}-linux-${{ needs.versions.outputs.base }}
+    #    path: |
+    #      build/Release/**/*
+  windows-msvc:
+    name: Windows MSVC
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [Win32, x64]
     steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
+    - uses: actions/checkout@v4
+    - name: Compile
+      run: |
+        cmake -S . -B build -G "Visual Studio 17 2022" -A "${{ matrix.arch }}"
+        cmake --build build --config Release
+    #- name: Upload
+    #  uses: actions/upload-artifact@v4
+    #  with:
+    #    name: ${{ github.event.repository.name }}-windows-msvc-${{ needs.versions.outputs.base }}
+    #    path: |
+    #      build/Release/**/*.dll
+    #      build/Release/**/*.exe
+  windows-mingw:
+    name: Windows MinGW
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x86_64]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Compile
+      run: |
+        if [ ${{ matrix.arch }} == "x86" ]; then
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-mingw-x86-windows.cmake
+        else
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        fi
+        cmake --build build
+    #- name: Upload
+    #  uses: actions/upload-artifact@v4
+    #  with:
+    #    name: ${{ github.event.repository.name }}-windows-mingw-${{ needs.versions.outputs.base }}
+    #    path: |
+    #      build/Release/**/*.dll
+    #      build/Release/**/*.exe
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@v8
-
-      - name: Create binary archives
-        run: |
-          7z a -r ete-linux-x86.zip            ./linux-x86/* -x!*.so
-          7z a -r ete-linux-x86_64.zip         ./linux-x86_64/* -x!*.so
-          7z a -r ete-windows-msvc-x86.zip     ./windows-x86/* -x!*.dll
-          7z a -r ete-windows-msvc-x64.zip     ./windows-x64/* -x!*.dll
-          #7z a -r ete-macos-x86_64.zip         ./macos-x86_64/* -x!*_mac
-          7z a -r ete-linux-x86.zip            ./steam/steam_appid.txt
-          7z a -r ete-linux-x86_64.zip         ./steam/steam_appid.txt
-          7z a -r ete-windows-msvc-x86.zip     ./steam/steam_appid.txt
-          7z a -r ete-windows-msvc-x64.zip     ./steam/steam_appid.txt
-          #7z a -r ete-macos-x86_64.zip         ./steam/steam_appid.txt
-          mkdir -p etmain
-          mv -t  ./etmain/ ./linux-x86/*.so
-          mv -t  ./etmain/ ./linux-x86_64/*.so
-          mv -t  ./etmain/ ./windows-x86/*.dll
-          mv -t  ./etmain/ ./windows-x64/*.dll
-          #mv -t  ./etmain/ ./macos-x86_64/*_mac
-          cd etmain
-          7z a -r -tzip mp_bina.pk3      ./cgame*.so
-          7z a -r -tzip mp_bina.pk3      ./ui*.so
-          7z a -r -tzip mp_bina.pk3      ./cgame*.dll
-          7z a -r -tzip mp_bina.pk3      ./ui*.dll
-          #7z a -r -tzip mp_bina.pk3      ./cgame_mac
-          #7z a -r -tzip mp_bina.pk3      ./ui_mac
-          cd ..
-          7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*.pk3
-          7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*.so
-          7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*.dll
-          #7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*_mac
-
-      - name: Create Client Hashes
-        run: |
-          md5sum ./linux-x86/ete.x86 > ete.x86.md5
-          sha1sum ./linux-x86/ete.x86 > ete.x86.sha1
-          md5sum ./linux-x86_64/ete.x86_64 > ete.x86_64.md5
-          sha1sum ./linux-x86_64/ete.x86_64 > ete.x86_64.sha1
-          md5sum ./windows-x86/ETe.exe > ETe.exe.md5
-          sha1sum ./windows-x86/ETe.exe > ETe.exe.sha1
-          md5sum ./windows-x64/ETe.x64.exe > ETe.x64.exe.md5
-          sha1sum ./windows-x64/ETe.x64.exe > ETe.x64.exe.sha1
-          md5sum ./windows-x86/ETe-vulkan.exe > ETe-vulkan.exe.md5
-          sha1sum ./windows-x86/ETe-vulkan.exe > ETe-vulkan.exe.sha1
-          md5sum ./windows-x64/ETe-vulkan.x64.exe > ETe-vulkan.x64.exe.md5
-          sha1sum ./windows-x64/ETe-vulkan.x64.exe > ETe-vulkan.x64.exe.sha1
-          #md5sum ./macos-x86_64/ete.x86_64 > ete_mac.x86_64.md5
-          #sha1sum ./macos-x86_64/ete.x86_64 > ete_mac.x86_64.sha1
-          7z a -r ete-client-hashes.zip *.md5 *.sha1
-
-#TODO other builds
-#NOTE purposely skipping etmain for macos as it is not really functional
-#7z a -r ete-windows-mingw-x86.zip    ./windows-mingw-x86/* -x!*.dll
-#7z a -r ete-windows-mingw-x86_64.zip ./windows-mingw-x86_64/* -x!*.dll
-#7z a -r ete-windows-msvc-arm64.zip   ./windows-arm64/* -x!*.dll
-#7z a -r ete-macos-arm64.zip         ./macos-arm64/* -x!*.dylib
-#7z a -r ete-linux-aarch64.zip  ./linux-aarch64/*
-#7z a -r ete-linux-armv7.zip    ./linux-armv7/*
-#7z a -r -tzip mp_bina.pk3      ./*.dylib
-
-      - name: Create docs archive
-        run: |
-          7z a -r ete-docs.zip ./docs/*
-
-      - name: Create latest build
-        uses: czietz/action-automatic-releases@latest
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: "latest"
-          prerelease: false
-          title: Latest Build
-          files: |
-            *.zip
+#  create-testing:
+#    if: github.ref == 'refs/heads/master' && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+#    needs: [msvc, ubuntu] #, macos]
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v7
+#        with:
+#          submodules: recursive
+#
+#      - name: Download Artifacts
+#        uses: actions/download-artifact@v8
+#
+#      - name: Create binary archives
+#        run: |
+#          7z a -r ete-linux-x86.zip            ./linux-x86/* -x!*.so
+#          7z a -r ete-linux-x86_64.zip         ./linux-x86_64/* -x!*.so
+#          7z a -r ete-windows-msvc-x86.zip     ./windows-x86/* -x!*.dll
+#          7z a -r ete-windows-msvc-x64.zip     ./windows-x64/* -x!*.dll
+#          #7z a -r ete-macos-x86_64.zip         ./macos-x86_64/* -x!*_mac
+#          7z a -r ete-linux-x86.zip            ./steam/steam_appid.txt
+#          7z a -r ete-linux-x86_64.zip         ./steam/steam_appid.txt
+#          7z a -r ete-windows-msvc-x86.zip     ./steam/steam_appid.txt
+#          7z a -r ete-windows-msvc-x64.zip     ./steam/steam_appid.txt
+#          #7z a -r ete-macos-x86_64.zip         ./steam/steam_appid.txt
+#          mkdir -p etmain
+#          mv -t  ./etmain/ ./linux-x86/*.so
+#          mv -t  ./etmain/ ./linux-x86_64/*.so
+#          mv -t  ./etmain/ ./windows-x86/*.dll
+#          mv -t  ./etmain/ ./windows-x64/*.dll
+#          #mv -t  ./etmain/ ./macos-x86_64/*_mac
+#          cd etmain
+#          7z a -r -tzip mp_bina.pk3      ./cgame*.so
+#          7z a -r -tzip mp_bina.pk3      ./ui*.so
+#          7z a -r -tzip mp_bina.pk3      ./cgame*.dll
+#          7z a -r -tzip mp_bina.pk3      ./ui*.dll
+#          #7z a -r -tzip mp_bina.pk3      ./cgame_mac
+#          #7z a -r -tzip mp_bina.pk3      ./ui_mac
+#          cd ..
+#          7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*.pk3
+#          7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*.so
+#          7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*.dll
+#          #7z a -r ete-etmain-mod-replacement-allplatform.zip      ./etmain/*_mac
+#
+#      - name: Create Client Hashes
+#        run: |
+#          md5sum ./linux-x86/ete.x86 > ete.x86.md5
+#          sha1sum ./linux-x86/ete.x86 > ete.x86.sha1
+#          md5sum ./linux-x86_64/ete.x86_64 > ete.x86_64.md5
+#          sha1sum ./linux-x86_64/ete.x86_64 > ete.x86_64.sha1
+#          md5sum ./windows-x86/ETe.exe > ETe.exe.md5
+#          sha1sum ./windows-x86/ETe.exe > ETe.exe.sha1
+#          md5sum ./windows-x64/ETe.x64.exe > ETe.x64.exe.md5
+#          sha1sum ./windows-x64/ETe.x64.exe > ETe.x64.exe.sha1
+#          md5sum ./windows-x86/ETe-vulkan.exe > ETe-vulkan.exe.md5
+#          sha1sum ./windows-x86/ETe-vulkan.exe > ETe-vulkan.exe.sha1
+#          md5sum ./windows-x64/ETe-vulkan.x64.exe > ETe-vulkan.x64.exe.md5
+#          sha1sum ./windows-x64/ETe-vulkan.x64.exe > ETe-vulkan.x64.exe.sha1
+#          #md5sum ./macos-x86_64/ete.x86_64 > ete_mac.x86_64.md5
+#          #sha1sum ./macos-x86_64/ete.x86_64 > ete_mac.x86_64.sha1
+#          7z a -r ete-client-hashes.zip *.md5 *.sha1
+#
+##TODO other builds
+##NOTE purposely skipping etmain for macos as it is not really functional
+##7z a -r ete-windows-mingw-x86.zip    ./windows-mingw-x86/* -x!*.dll
+##7z a -r ete-windows-mingw-x86_64.zip ./windows-mingw-x86_64/* -x!*.dll
+##7z a -r ete-windows-msvc-arm64.zip   ./windows-arm64/* -x!*.dll
+##7z a -r ete-macos-arm64.zip         ./macos-arm64/* -x!*.dylib
+##7z a -r ete-linux-aarch64.zip  ./linux-aarch64/*
+##7z a -r ete-linux-armv7.zip    ./linux-armv7/*
+##7z a -r -tzip mp_bina.pk3      ./*.dylib
+#
+#      - name: Create docs archive
+#        run: |
+#          7z a -r ete-docs.zip ./docs/*
+#
+#      - name: Create latest build
+#        uses: czietz/action-automatic-releases@latest
+#        with:
+#          repo_token: ${{ secrets.GITHUB_TOKEN }}
+#          automatic_release_tag: "latest"
+#          prerelease: false
+#          title: Latest Build
+#          files: |
+#            *.zip
+#
