@@ -4,7 +4,7 @@ if(NOT UNIX OR APPLE)
     return()
 endif()
 
-if(USE_SDL2 or USE_SDL3)
+if(USE_SDL2 OR USE_SDL3)
     list(APPEND CLIENT_DEFINITIONS USE_ICON)
 endif()
 
