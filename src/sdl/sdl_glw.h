@@ -27,12 +27,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 //#define USE_JOYSTICK
 
-#include <stdio.h>
-
-typedef enum { qfalse = 0, qtrue = 1 } qboolean;
-
-struct glconfig_t;
-
 typedef struct
 {
 	FILE *log_fp;

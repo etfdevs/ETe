@@ -84,17 +84,8 @@ qboolean Sys_IsNumLockDown( void ) {
 	if ( !SDL_WasInit( SDL_INIT_VIDEO ) ) {
 		return qfalse;
 	}
-	return ( SDL_GetModState() & SDL_KMOD_NUM ) ? qtrue : qfalse;
+	return ( SDL_GetModState() & KMOD_NUM ) ? qtrue : qfalse;
 }	
-
-qboolean Sys_IsNumLockDown( void ) {
-	// note recent SDL builds probably needed for this to fully work
-	if (SDL_GetModState() & KMOD_NUM)
-	{
-		return qtrue;
-	}
-	return qfalse;
-}
 
 #if !SDL_VERSION_ATLEAST(2, 0, 17)
 #define KMOD_SCROLL KMOD_RESERVED
