@@ -1531,6 +1531,8 @@ typedef struct {
 #endif
 
 	compressionState_t		allowCompress; // temporary variable for shader parsing
+
+	vec4_t					clearColor;
 } trGlobals_t;
 
 
@@ -1635,7 +1637,8 @@ extern	cvar_t	*r_offsetUnits;
 extern	cvar_t	*r_lightmap;					// render lightmaps only
 
 extern	cvar_t	*r_showtris;					// enables wireframe rendering of the world
-extern	cvar_t	*r_trisColor;                    // enables modifying of the wireframe colour (in 0xRRGGBB[AA] format, alpha defaults to FF)
+extern	cvar_t	*r_trisMode;
+extern	cvar_t	*r_trisColor;					// enables modifying of the wireframe colour (in 0xRRGGBB[AA] format, alpha defaults to FF)
 extern	cvar_t	*r_showsky;						// forces sky in front of all surfaces
 extern	cvar_t	*r_shownormals;					// draws wireframe normals
 extern	cvar_t	*r_normallength;                 // length of the normals
@@ -1933,6 +1936,8 @@ void RB_AddQuadStamp2( float x, float y, float w, float h, float s1, float t1, f
 void RB_ShowImages( void );
 
 void RB_DrawBounds( vec3_t mins, vec3_t maxs ); // ydnar
+
+void R_SetTrisColor( void );
 
 /*
 ============================================================

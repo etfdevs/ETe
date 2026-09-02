@@ -45,9 +45,9 @@ jobs:
     - name: Compile
       run: |
         if [ ${{ matrix.arch }} == "x86" ]; then
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-x86-linux.cmake
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DUSE_SDL3=OFF -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-x86-linux.cmake
         else
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DUSE_SDL3=OFF
         fi
         cmake --build build
     #- name: Upload

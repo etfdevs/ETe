@@ -112,6 +112,8 @@ Draws triangle outlines for debugging
 static void DrawTris( const shaderCommands_t *input ) {
 #ifdef USE_VULKAN
 	uint32_t pipeline;
+	//uint32_t flags;
+	qboolean alpha = qfalse;
 
 	if ( r_showtris->integer == 1 && backEnd.drawConsole )
 		return;
@@ -122,27 +124,44 @@ static void DrawTris( const shaderCommands_t *input ) {
 	if ( r_fastsky->integer && input->shader->isSky )
 		return;
 
+	GL_Bind( tr.whiteImage );
+
+	pipeline = vk.tris_debug_pipelines[backEnd.viewParms.portalView == PV_MIRROR][r_trisMode->integer][alpha];
+
+	// color = white / default
+
 #ifdef USE_VBO
 	if ( tess.vboIndex ) {
 #ifdef USE_PMLIGHT
-		if ( tess.dlightPass )
-			pipeline = backEnd.viewParms.portalView == PV_MIRROR ? vk.tris_mirror_debug_red_pipeline : vk.tris_debug_red_pipeline;
+		if ( tess.dlightPass ) {
+			// color = red
+			;
+		}
 		else
 #endif
-			pipeline = backEnd.viewParms.portalView == PV_MIRROR ? vk.tris_mirror_debug_green_pipeline : vk.tris_debug_green_pipeline;
-	} else
+		{
+			// color = green
+			;
+		}
 #endif
-	{
+	}
+	else {
 #ifdef USE_PMLIGHT
-		if ( tess.dlightPass )
-			pipeline = backEnd.viewParms.portalView == PV_MIRROR ? vk.tris_mirror_debug_red_pipeline : vk.tris_debug_red_pipeline;
+		if ( tess.dlightPass ) {
+			// color = red
+			;
+		}
 		else
 #endif
-			pipeline = backEnd.viewParms.portalView == PV_MIRROR ? vk.tris_mirror_debug_pipeline : vk.tris_debug_pipeline;
+		{
+			// color = white / default
+			;
+		}
 	}
 
 	vk_bind_pipeline( pipeline );
-	vk_draw_geometry( DEPTH_RANGE_ZERO, qtrue );
+	vk_bind_geometry( TESS_RGBA0 );
+	vk_draw_geometry( r_trisMode->integer ? DEPTH_RANGE_ZERO : DEPTH_RANGE_NORMAL, qtrue );
 
 #else
 	if ( r_showtris->integer == 1 && backEnd.drawConsole )
