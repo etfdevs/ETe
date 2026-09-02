@@ -148,7 +148,7 @@ R_CullModel
 static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 	//vec3_t bounds[2];
 	mdxHeader_t *oldFrameHeader, *newFrameHeader;
-	mdxFrame_t  *_oldFrame, *newFrame;
+	mdxFrame_t  *oldF, *newF;
 	int i;
 
 	newFrameHeader = R_GetModelByHandle( ent->e.frameModel )->model.mdx;
@@ -159,17 +159,17 @@ static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 	}
 
 	// compute frame pointers
-	newFrame = ( mdxFrame_t * )( ( byte * ) newFrameHeader + newFrameHeader->ofsFrames +
+	newF = ( mdxFrame_t * )( ( byte * ) newFrameHeader + newFrameHeader->ofsFrames +
 								 ent->e.frame * (int) ( sizeof( mdxBoneFrameCompressed_t ) ) * newFrameHeader->numBones +
 								 ent->e.frame * sizeof( mdxFrame_t ) );
-	_oldFrame = ( mdxFrame_t * )( ( byte * ) oldFrameHeader + oldFrameHeader->ofsFrames +
+	oldF = ( mdxFrame_t * )( ( byte * ) oldFrameHeader + oldFrameHeader->ofsFrames +
 								 ent->e.oldframe * (int) ( sizeof( mdxBoneFrameCompressed_t ) ) * oldFrameHeader->numBones +
 								 ent->e.oldframe * sizeof( mdxFrame_t ) );
 
 	// cull bounding sphere ONLY if this is not an upscaled entity
 	if ( !ent->e.nonNormalizedAxes ) {
 		if ( ent->e.frame == ent->e.oldframe && ent->e.frameModel == ent->e.oldframeModel ) {
-			switch ( R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius ) )
+			switch ( R_CullLocalPointAndRadius( newF->localOrigin, newF->radius ) )
 			{
 			case CULL_OUT:
 				tr.pc.c_sphere_cull_md3_out++;
@@ -187,11 +187,11 @@ static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 		{
 			int sphereCull, sphereCullB;
 
-			sphereCull  = R_CullLocalPointAndRadius( newFrame->localOrigin, newFrame->radius );
-			if ( newFrame == _oldFrame ) {
+			sphereCull  = R_CullLocalPointAndRadius( newF->localOrigin, newF->radius );
+			if ( newF == oldF ) {
 				sphereCullB = sphereCull;
 			} else {
-				sphereCullB = R_CullLocalPointAndRadius( _oldFrame->localOrigin, _oldFrame->radius );
+				sphereCullB = R_CullLocalPointAndRadius( oldF->localOrigin, oldF->radius );
 			}
 
 			if ( sphereCull == sphereCullB ) {
@@ -211,8 +211,8 @@ static int R_CullModel( trRefEntity_t *ent, vec3_t bounds[] ) {
 
 	// calculate a bounding box in the current coordinate system
 	for ( i = 0 ; i < 3 ; i++ ) {
-		bounds[0][i] = _oldFrame->bounds[0][i] < newFrame->bounds[0][i] ? _oldFrame->bounds[0][i] : newFrame->bounds[0][i];
-		bounds[1][i] = _oldFrame->bounds[1][i] > newFrame->bounds[1][i] ? _oldFrame->bounds[1][i] : newFrame->bounds[1][i];
+		bounds[0][i] = oldF->bounds[0][i] < newF->bounds[0][i] ? oldF->bounds[0][i] : newF->bounds[0][i];
+		bounds[1][i] = oldF->bounds[1][i] > newF->bounds[1][i] ? oldF->bounds[1][i] : newF->bounds[1][i];
 	}
 
 	switch ( R_CullLocalBox( bounds ) )
@@ -247,8 +247,8 @@ static float RB_CalcMDMLod( refEntity_t *refent, vec3_t origin, float radius, fl
 
 //		ri.Printf (PRINT_ALL, "projected radius: %f\n", projectedRadius);
 
-		float lodScale = r_lodscale->value;   // fudge factor since MDS uses a much smoother method of LOD
-		flod = projectedRadius * lodScale * modelScale;
+		float localLodScale = r_lodscale->value;   // fudge factor since MDS uses a much smoother method of LOD
+		flod = projectedRadius * localLodScale * modelScale;
 	} else
 	{
 		// object intersects near view plane, e.g. view weapon
@@ -280,10 +280,10 @@ R_ComputeFogNum
 
 =================
 */
-static int R_ComputeFogNum( trRefEntity_t *ent ) {
+static int R_ComputeFogNum( const trRefEntity_t *ent ) {
 	int i, j;
-	fog_t           *fog;
-	mdxHeader_t     *header;
+	const fog_t           *fog;
+	const mdxHeader_t     *header;
 	mdxFrame_t      *mdxFrame;
 	vec3_t localOrigin;
 
@@ -562,30 +562,30 @@ static ID_INLINE void SLerp_Normal( vec3_t from, vec3_t to, float tt, vec3_t out
 #define SIN_TABLE( i )      tr.sinTable[ ( i ) >> FUNCTABLE_SHIFT ];
 #define COS_TABLE( i )      tr.sinTable[ ( ( ( i ) >> FUNCTABLE_SHIFT ) + ( FUNCTABLE_SIZE / 4 ) ) & FUNCTABLE_MASK ];
 
-static ID_INLINE void LocalIngleVector( int ingles[ 3 ], vec3_t forward ) {
-	sy = SIN_TABLE( ingles[ YAW ] & 65535 );
-	cy = COS_TABLE( ingles[ YAW ] & 65535 );
-	sp = SIN_TABLE( ingles[ PITCH ] & 65535 );
-	cp = COS_TABLE( ingles[ PITCH ] & 65535 );
+static ID_INLINE void LocalIngleVector( int inIngles[ 3 ], vec3_t forward ) {
+	sy = SIN_TABLE( inIngles[ YAW ] & 65535 );
+	cy = COS_TABLE( inIngles[ YAW ] & 65535 );
+	sp = SIN_TABLE( inIngles[ PITCH ] & 65535 );
+	cp = COS_TABLE( inIngles[ PITCH ] & 65535 );
 
-	//%	sy = sin( SHORT2ANGLE( ingles[ YAW ] ) * (M_PI*2 / 360) );
-	//%	cy = cos( SHORT2ANGLE( ingles[ YAW ] ) * (M_PI*2 / 360) );
-	//%	sp = sin( SHORT2ANGLE( ingles[ PITCH ] ) * (M_PI*2 / 360) );
-	//%	cp = cos( SHORT2ANGLE( ingles[ PITCH ] ) *  (M_PI*2 / 360) );
+	//%	sy = sin( SHORT2ANGLE( inIngles[ YAW ] ) * (M_PI*2 / 360) );
+	//%	cy = cos( SHORT2ANGLE( inIngles[ YAW ] ) * (M_PI*2 / 360) );
+	//%	sp = sin( SHORT2ANGLE( inIngles[ PITCH ] ) * (M_PI*2 / 360) );
+	//%	cp = cos( SHORT2ANGLE( inIngles[ PITCH ] ) *  (M_PI*2 / 360) );
 
 	forward[ 0 ] = cp * cy;
 	forward[ 1 ] = cp * sy;
 	forward[ 2 ] = -sp;
 }
 
-static void InglesToAxis( int ingles[ 3 ], vec3_t axis[ 3 ] ) {
+static void InglesToAxis( int inIngles[ 3 ], vec3_t axis[ 3 ] ) {
 	// get sine/cosines for angles
-	sy = SIN_TABLE( ingles[ YAW ] & 65535 );
-	cy = COS_TABLE( ingles[ YAW ] & 65535 );
-	sp = SIN_TABLE( ingles[ PITCH ] & 65535 );
-	cp = COS_TABLE( ingles[ PITCH ] & 65535 );
-	sr = SIN_TABLE( ingles[ ROLL ] & 65535 );
-	cr = COS_TABLE( ingles[ ROLL ] & 65535 );
+	sy = SIN_TABLE( inIngles[ YAW ] & 65535 );
+	cy = COS_TABLE( inIngles[ YAW ] & 65535 );
+	sp = SIN_TABLE( inIngles[ PITCH ] & 65535 );
+	cp = COS_TABLE( inIngles[ PITCH ] & 65535 );
+	sr = SIN_TABLE( inIngles[ ROLL ] & 65535 );
+	cr = COS_TABLE( inIngles[ ROLL ] & 65535 );
 
 	// calculate axis vecs
 	axis[ 0 ][ 0 ] = cp * cy;
@@ -634,21 +634,21 @@ static void InglesToAxis( int ingles[ 3 ], vec3_t axis[ 3 ] ) {
 
 // TTimo: const usage would require an explicit cast, non ANSI C
 // see unix/const-arg.c
-static ID_INLINE void Matrix4MultiplyInto3x3AndTranslation( /*const*/ vec4_t a[4], /*const*/ vec4_t b[4], vec3_t dst[3], vec3_t t ) {
+static ID_INLINE void Matrix4MultiplyInto3x3AndTranslation( /*const*/ vec4_t a[4], /*const*/ vec4_t b[4], vec3_t dst[3], vec3_t trans ) {
 	dst[0][0] = a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0] + a[0][3] * b[3][0];
 	dst[0][1] = a[0][0] * b[0][1] + a[0][1] * b[1][1] + a[0][2] * b[2][1] + a[0][3] * b[3][1];
 	dst[0][2] = a[0][0] * b[0][2] + a[0][1] * b[1][2] + a[0][2] * b[2][2] + a[0][3] * b[3][2];
-	t[0]      = a[0][0] * b[0][3] + a[0][1] * b[1][3] + a[0][2] * b[2][3] + a[0][3] * b[3][3];
+	trans[0]      = a[0][0] * b[0][3] + a[0][1] * b[1][3] + a[0][2] * b[2][3] + a[0][3] * b[3][3];
 
 	dst[1][0] = a[1][0] * b[0][0] + a[1][1] * b[1][0] + a[1][2] * b[2][0] + a[1][3] * b[3][0];
 	dst[1][1] = a[1][0] * b[0][1] + a[1][1] * b[1][1] + a[1][2] * b[2][1] + a[1][3] * b[3][1];
 	dst[1][2] = a[1][0] * b[0][2] + a[1][1] * b[1][2] + a[1][2] * b[2][2] + a[1][3] * b[3][2];
-	t[1]      = a[1][0] * b[0][3] + a[1][1] * b[1][3] + a[1][2] * b[2][3] + a[1][3] * b[3][3];
+	trans[1]      = a[1][0] * b[0][3] + a[1][1] * b[1][3] + a[1][2] * b[2][3] + a[1][3] * b[3][3];
 
 	dst[2][0] = a[2][0] * b[0][0] + a[2][1] * b[1][0] + a[2][2] * b[2][0] + a[2][3] * b[3][0];
 	dst[2][1] = a[2][0] * b[0][1] + a[2][1] * b[1][1] + a[2][2] * b[2][1] + a[2][3] * b[3][1];
 	dst[2][2] = a[2][0] * b[0][2] + a[2][1] * b[1][2] + a[2][2] * b[2][2] + a[2][3] * b[3][2];
-	t[2]      = a[2][0] * b[0][3] + a[2][1] * b[1][3] + a[2][2] * b[2][3] + a[2][3] * b[3][3];
+	trans[2]      = a[2][0] * b[0][3] + a[2][1] * b[1][3] + a[2][2] * b[2][3] + a[2][3] * b[3][3];
 }
 
 /*static ID_INLINE void Matrix4Transpose( const vec4_t matrix[4], vec4_t transpose[4] ) {
@@ -708,14 +708,14 @@ static ID_INLINE void Matrix4FromTranslation( const vec3_t t, vec4_t dst[4] ) {
 // can put an axis rotation followed by a translation directly into one matrix
 // TTimo: const usage would require an explicit cast, non ANSI C
 // see unix/const-arg.c
-static ID_INLINE void Matrix4FromAxisPlusTranslation( /*const*/ vec3_t axis[3], const vec3_t t, vec4_t dst[4] ) {
+static ID_INLINE void Matrix4FromAxisPlusTranslation( /*const*/ vec3_t axis[3], const vec3_t trans, vec4_t dst[4] ) {
 	int i, j;
 	for ( i = 0; i < 3; i++ ) {
 		for ( j = 0; j < 3; j++ ) {
 			dst[i][j] = axis[i][j];
 		}
 		dst[3][i] = 0;
-		dst[i][3] = t[i];
+		dst[i][3] = trans[i];
 	}
 	dst[3][3] = 1;
 }
@@ -723,7 +723,7 @@ static ID_INLINE void Matrix4FromAxisPlusTranslation( /*const*/ vec3_t axis[3], 
 // can put a scaled axis rotation followed by a translation directly into one matrix
 // TTimo: const usage would require an explicit cast, non ANSI C
 // see unix/const-arg.c
-static ID_INLINE void Matrix4FromScaledAxisPlusTranslation( /*const*/ vec3_t axis[3], const float scale, const vec3_t t, vec4_t dst[4] ) {
+static ID_INLINE void Matrix4FromScaledAxisPlusTranslation( /*const*/ vec3_t axis[3], const float scale, const vec3_t trans, vec4_t dst[4] ) {
 	int i, j;
 
 	for ( i = 0; i < 3; i++ ) {
@@ -734,7 +734,7 @@ static ID_INLINE void Matrix4FromScaledAxisPlusTranslation( /*const*/ vec3_t axi
 			}
 		}
 		dst[3][i] = 0;
-		dst[i][3] = t[i];
+		dst[i][3] = trans[i];
 	}
 	dst[3][3] = 1;
 }
