@@ -682,7 +682,7 @@ void	Cvar_ResetGroup( cvarGroup_t group, qboolean resetModifiedFlags );
 
 void	Cvar_Restart( qboolean unsetVM );
 
-void	Cvar_CompleteCvarName( char *args, int argNum );
+void	Cvar_CompleteCvarName( const char *args, int argNum );
 
 extern	int			cvar_modifiedFlags;
 // whenever a cvar is modifed, its flags will be OR'd into this, so
@@ -855,6 +855,7 @@ void	FS_FCloseFile( fileHandle_t f );
 // note: you can't just fclose from another DLL, due to MS libc issues
 
 int		FS_ReadFile( const char *qpath, void **buffer );
+int		FS_SV_ReadFile( const char *qpath, void **buffer );
 int		FS_ReadFile_Filtered( const char *qpath, void **buffer, int filter_flag );
 // returns the length of the file
 // a null buffer will just return the file length without loading

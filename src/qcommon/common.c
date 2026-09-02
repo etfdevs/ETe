@@ -1987,7 +1987,7 @@ static void Com_Meminfo_f( void ) {
 
 	Zone_Stats( mainzone, !Q_stricmp( Cmd_Argv(1), "main" ) || !Q_stricmp( Cmd_Argv(1), "all" ), &st );
 	Com_Printf( "%9"PRIz"u bytes (%6.2f MB) total main zone\n\n", mainzone->size, mainzone->size / Square( 1024.f ) );
-	Com_Printf( "%9"PRIz"u (%6.2f MB) in %i main zone blocks%s\n", st.zoneBytes, st.zoneBytes / Square( 1024.f ), st.zoneBlocks,
+	Com_Printf( "%9"PRIz"u (%6.2f MB) in %"PRIz"u main zone blocks%s\n", st.zoneBytes, st.zoneBytes / Square( 1024.f ), st.zoneBlocks,
 		st.zoneSegments > 1 ? va( " and %"PRIz"u segments", st.zoneSegments ) : "" );
 	Com_Printf( "        %9"PRIz"u bytes (%6.2f MB) in parser/lexer\n", st.botlibBytes, st.botlibBytes / Square( 1024.f ) );
 	Com_Printf( "        %9"PRIz"u bytes (%6.2f MB) in renderer\n", st.rendererBytes, st.rendererBytes / Square( 1024.f ) );
