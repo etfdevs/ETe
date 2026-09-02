@@ -78,11 +78,11 @@ jobs:
     - uses: actions/checkout@v4
     - name: Compile
       run: |
-        if [ ${{ matrix.arch }} == "x86" ]; then
+        if ($env:arch -eq 'x86') {
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-mingw-x86-windows.cmake
-        else
+        } else {
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-        fi
+        }
         cmake --build build
     #- name: Upload
     #  uses: actions/upload-artifact@v4
