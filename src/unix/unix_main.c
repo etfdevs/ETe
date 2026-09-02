@@ -63,10 +63,6 @@ If you have questions concerning this license or the applicable additional terms
 #include <SDL3/SDL_main.h>
 #endif
 
-#if !defined(DEDICATED) && defined(USE_STEAMAPI)
-#include "../../steam/steamshim_child.h"
-#endif
-
 unsigned sys_frame_time;
 
 qboolean stdin_active = qfalse;
@@ -280,7 +276,7 @@ static char exit_cmdline[MAX_CMD] = "";
 void Sys_DoStartProcess(const char *cmdline);
 
 // single exit point (regular exit or in case of signal fault)
-void NORETURN Sys_Exit(int code)
+void Q_NO_RETURN Sys_Exit(int code)
 {
 	Sys_ConsoleInputShutdown();
 
@@ -307,7 +303,7 @@ void NORETURN Sys_Exit(int code)
 #endif
 }
 
-void NORETURN Sys_Quit(void)
+void Q_NO_RETURN Sys_Quit(void)
 {
 	Sys_Exit(0);
 }
@@ -318,7 +314,7 @@ void Sys_Init(void)
 	//IN_Init();   // rcg08312005 moved into glimp.
 }
 
-void NORETURN FORMAT_PRINTF(1, 2) Sys_Error(const char *format, ...)
+void Q_NO_RETURN Q_PRINTF_FUNC(1, 2) Sys_Error(const char *format, ...)
 {
 	va_list argptr;
 	char text[1024];
@@ -1050,7 +1046,7 @@ void Sys_Print(const char *msg)
 	}
 }
 
-void FORMAT_PRINTF(1, 2) QDECL Sys_SetStatus(const char *format, ...)
+void Q_PRINTF_FUNC(1, 2) QDECL Sys_SetStatus(const char *format, ...)
 {
 	return;
 }
@@ -1383,91 +1379,3 @@ int Sys_GetPID(void)
 {
 	return (int)getpid();
 }
-
-void *omnibotHandle = NULL;
-typedef void (*pfnOmnibotRenderOGL)();
-pfnOmnibotRenderOGL gOmnibotRenderFunc = 0;
-
-void Sys_OmnibotLoad()
-{
-	const char *omnibotPath = Cvar_VariableString("omnibot_path");
-	const char *omnibotLibrary = Cvar_VariableString("omnibot_library");
-	if (omnibotLibrary != NULL && omnibotLibrary[0] != '\0')
-	{
-		if ( omnibotPath != NULL && omnibotPath[0] != '\0' ) {
-			omnibotHandle = Sys_LoadLibrary(va("%s/%s.so", omnibotPath, omnibotLibrary));	
-		}
-		else {
-			omnibotHandle = Sys_LoadLibrary(va("%s.so", omnibotLibrary));
-		}
-		if (omnibotHandle)
-		{
-			gOmnibotRenderFunc = (pfnOmnibotRenderOGL)Sys_LoadFunction(omnibotHandle, "RenderOpenGL");
-		}
-	}
-}
-
-void Sys_OmnibotUnLoad()
-{
-	Sys_UnloadLibrary(omnibotHandle);
-	omnibotHandle = NULL;
-}
-
-const void *Sys_OmnibotRender(const void *data)
-{
-	renderOmnibot_t *cmd = (renderOmnibot_t *)data;
-	if (gOmnibotRenderFunc)
-	{
-		gOmnibotRenderFunc();
-	}
-	return (const void *)(cmd + 1);
-}
-
-
-/*
-================
-Sys_SteamInit
-================
-*/
-#ifndef DEDICATED
-
-void Sys_SteamInit()
-{
-#if defined(USE_STEAMAPI)
-#if (defined(__linux__) && (idx64 || id386)) || (defined(__APPLE__) && idx64)
-	/*if (!Cvar_VariableIntegerValue("com_steamIntegration"))
-	{
-		// Don't do anything if com_steamIntegration is disabled
-		return;
-	}*/
-
-	if (!STEAMSHIM_init())
-	{
-		Com_Printf(S_COLOR_RED "Steam integration failed: Steam init failed. Ensure steam_appid.txt exists and is valid.\n");
-		return;
-	}
-	Com_Printf(S_COLOR_CYAN "Steam integration success!\n" );
-#endif
-#endif
-}
-
-
-/*
-================
-Sys_SteamShutdown
-================
-*/
-void Sys_SteamShutdown()
-{
-#if defined(USE_STEAMAPI)
-#if (defined(__linux__) && (idx64 || id386)) || (defined(__APPLE__) && idx64)
-	if(!STEAMSHIM_alive())
-	{
-		Com_Printf("Skipping Steam integration shutdown...\n");
-		return;
-	}
-	STEAMSHIM_deinit();
-#endif
-#endif
-}
-#endif
