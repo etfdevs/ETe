@@ -21,3 +21,10 @@ elseif(ARCH MATCHES "x86")
 endif()
 
 set_property(SOURCE ${ASM_CLIENT_SOURCES} APPEND PROPERTY COMPILE_OPTIONS "-DELF")
+
+# assuming msvc won't ever reach here, unless msvc+clang?
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported)
+if(ipo_supported)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()

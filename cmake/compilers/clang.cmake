@@ -22,7 +22,7 @@ function(create_compiler_opts target)
 	set(CLANG_LINK_FLAGS
 		$<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-undefined>
 		$<$<CONFIG:Release>:
-			-flto								# link time optimizations
+			#-flto								# link time optimizations
 			-O3									# max optimization
 			$<IF:$<PLATFORM_ID:Darwin>,,-s>>)	# strip symbols
 
@@ -38,7 +38,7 @@ function(create_compiler_opts target)
 		-Wno-missing-field-initializers
 		$<$<CONFIG:Release>:
 			-O3					# max optimization
-			-flto				# link time optimizations
+			#-flto				# link time optimizations
 			-ffast-math			# fast floating point math
 			-fomit-frame-pointer
 			-finline-functions

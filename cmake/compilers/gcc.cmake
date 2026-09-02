@@ -22,7 +22,7 @@ function(create_compiler_opts target)
 	set(GCC_LINK_FLAGS
 		-Wl,--no-undefined
 		$<$<CONFIG:Release>:
-			-flto=auto			# link time optimizations
+			#-flto=auto			# link time optimizations
 			-O3					# max optimization
 			-s>)				# strip symbols
 
@@ -41,7 +41,7 @@ function(create_compiler_opts target)
 		-Wno-unused-parameter
 		-Wno-missing-field-initializers
 		$<$<CONFIG:Release>:
-			-flto=auto			# link time optimizations
+			#-flto=auto			# link time optimizations
 			-O3					# max optimization
 			-ffast-math			# fast floating point math
 			-fomit-frame-pointer
