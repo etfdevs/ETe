@@ -54,6 +54,10 @@ function(create_compiler_opts target)
 			-g3					# generate debug info
 			-ggdb3>)			# generate gdb friendly debug info
 
+	if (MINGW)
+		list(APPEND GCC_C_FLAGS __USE_MINGW_ANSI_STDIO=1)
+	endif()
+
 	add_library(${target} INTERFACE)
 
 	# we use this to print out relative path to a source code file for __FILE__ macro replacement

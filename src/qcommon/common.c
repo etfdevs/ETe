@@ -1469,7 +1469,7 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 	size_t		extra;
 
 	if ( size > INT_MAX ) {
-		Com_Error( ERR_FATAL, "Z_TagMalloc: %"PRIz" > INT_MAX", size );
+		Com_Error( ERR_FATAL, "Z_TagMalloc: %"PRIz"u > INT_MAX", size );
 	}
 
 	if ( tag == TAG_FREE ) {
@@ -1706,9 +1706,9 @@ static void Z_LogZoneHeap( memzone_t *zone, const char *name )
 #else
 	allocSize = numBlocks * sizeof(memblock_t); // + 32 bit alignment
 #endif
-	len = Com_sprintf( buf, sizeof( buf ), "%"PRIz" %s memory in %"PRIz" blocks\r\n", size, name, numBlocks );
+	len = Com_sprintf( buf, sizeof( buf ), "%"PRIz"u %s memory in %"PRIz"u blocks\r\n", size, name, numBlocks );
 	FS_Write( buf, len, logfile );
-	len = Com_sprintf( buf, sizeof( buf ), "%"PRIz" %s memory overhead\r\n", size - allocSize, name );
+	len = Com_sprintf( buf, sizeof( buf ), "%"PRIz"u %s memory overhead\r\n", size - allocSize, name );
 	FS_Write( buf, len, logfile );
 	FS_Flush( logfile );
 }
@@ -1925,7 +1925,7 @@ static void Zone_Stats( const memzone_t *z, qboolean printDetails, zone_stats_t 
 #endif
 				st.zoneSegments++;
 				if ( printDetails ) {
-					Com_Printf( "---------- %s zone segment #%"PRIz" ----------\n", zone->name, st.zoneSegments );
+					Com_Printf( "---------- %s zone segment #%"PRIz"u ----------\n", zone->name, st.zoneSegments );
 				}
 				block = next->next;
 				continue;
@@ -1986,24 +1986,24 @@ static void Com_Meminfo_f( void ) {
 	Com_Printf( "\n" );
 
 	Zone_Stats( mainzone, !Q_stricmp( Cmd_Argv(1), "main" ) || !Q_stricmp( Cmd_Argv(1), "all" ), &st );
-	Com_Printf( "%9"PRIz" bytes (%6.2f MB) total main zone\n\n", mainzone->size, mainzone->size / Square( 1024.f ) );
-	Com_Printf( "%9"PRIz" (%6.2f MB) in %"PRIz" main zone blocks%s\n", st.zoneBytes, st.zoneBytes / Square( 1024.f ), st.zoneBlocks,
-		st.zoneSegments > 1 ? va( " and %"PRIz" segments", st.zoneSegments ) : "" );
-	Com_Printf( "        %9"PRIz" bytes (%6.2f MB) in parser/lexer\n", st.botlibBytes, st.botlibBytes / Square( 1024.f ) );
-	Com_Printf( "        %9"PRIz" bytes (%6.2f MB) in renderer\n", st.rendererBytes, st.rendererBytes / Square( 1024.f ) );
-	Com_Printf( "        %9"PRIz" bytes (%6.2f MB) in other\n", st.zoneBytes - ( st.botlibBytes + st.rendererBytes ), ( st.zoneBytes - ( st.botlibBytes + st.rendererBytes ) ) / Square( 1024.f ) );
-	Com_Printf( "        %9"PRIz" bytes (%6.2f MB) in %"PRIz" free blocks\n", st.freeBytes, st.freeBytes / Square( 1024.f ), st.freeBlocks );
+	Com_Printf( "%9"PRIz"u bytes (%6.2f MB) total main zone\n\n", mainzone->size, mainzone->size / Square( 1024.f ) );
+	Com_Printf( "%9"PRIz"u (%6.2f MB) in %"PRIz"u main zone blocks%s\n", st.zoneBytes, st.zoneBytes / Square( 1024.f ), st.zoneBlocks,
+		st.zoneSegments > 1 ? va( " and %"PRIz"u segments", st.zoneSegments ) : "" );
+	Com_Printf( "        %9"PRIz"u bytes (%6.2f MB) in parser/lexer\n", st.botlibBytes, st.botlibBytes / Square( 1024.f ) );
+	Com_Printf( "        %9"PRIz"u bytes (%6.2f MB) in renderer\n", st.rendererBytes, st.rendererBytes / Square( 1024.f ) );
+	Com_Printf( "        %9"PRIz"u bytes (%6.2f MB) in other\n", st.zoneBytes - ( st.botlibBytes + st.rendererBytes ), ( st.zoneBytes - ( st.botlibBytes + st.rendererBytes ) ) / Square( 1024.f ) );
+	Com_Printf( "        %9"PRIz"u bytes (%6.2f MB) in %"PRIz"u free blocks\n", st.freeBytes, st.freeBytes / Square( 1024.f ), st.freeBlocks );
 	if ( st.freeBlocks > 1 ) {
-		Com_Printf( "        (largest: %"PRIz" bytes, smallest: %"PRIz" bytes)\n\n", st.freeLargest, st.freeSmallest );
+		Com_Printf( "        (largest: %"PRIz"u bytes, smallest: %"PRIz"u bytes)\n\n", st.freeLargest, st.freeSmallest );
 	}
 
 	Zone_Stats( smallzone, !Q_stricmp( Cmd_Argv(1), "small" ) || !Q_stricmp( Cmd_Argv(1), "all" ), &st );
-	Com_Printf( "%9"PRIz" bytes (%6.2f MB) total small zone\n\n", smallzone->size, smallzone->size / Square( 1024.f ) );
-	Com_Printf( "%9"PRIz" bytes (%6.2f MB) in %"PRIz" small zone blocks%s\n", st.zoneBytes, st.zoneBytes / Square( 1024.f ), st.zoneBlocks,
-		st.zoneSegments > 1 ? va( " and %"PRIz" segments", st.zoneSegments ) : "" );
-	Com_Printf( "        %9"PRIz" bytes in %"PRIz" free blocks\n", st.freeBytes, st.freeBlocks );
+	Com_Printf( "%9"PRIz"u bytes (%6.2f MB) total small zone\n\n", smallzone->size, smallzone->size / Square( 1024.f ) );
+	Com_Printf( "%9"PRIz"u bytes (%6.2f MB) in %"PRIz"u small zone blocks%s\n", st.zoneBytes, st.zoneBytes / Square( 1024.f ), st.zoneBlocks,
+		st.zoneSegments > 1 ? va( " and %"PRIz"u segments", st.zoneSegments ) : "" );
+	Com_Printf( "        %9"PRIz"u bytes in %"PRIz"u free blocks\n", st.freeBytes, st.freeBlocks );
 	if ( st.freeBlocks > 1 ) {
-		Com_Printf( "        (largest: %"PRIz" bytes, smallest: %"PRIz" bytes)\n", st.freeLargest, st.freeSmallest );
+		Com_Printf( "        (largest: %"PRIz"u bytes, smallest: %"PRIz"u bytes)\n", st.freeLargest, st.freeSmallest );
 	}
 }
 
@@ -2376,7 +2376,7 @@ void *Hunk_Alloc( size_t size, ha_pref preference ) {
 	}
 
 	if ( size > INT_MAX ) {
-		Com_Error( ERR_FATAL, "Hunk_Alloc: %"PRIz" > INT_MAX", size );
+		Com_Error( ERR_FATAL, "Hunk_Alloc: %"PRIz"u > INT_MAX", size );
 	}
 
 	// can't do preference if there is any temp allocated
@@ -2402,9 +2402,9 @@ void *Hunk_Alloc( size_t size, ha_pref preference ) {
 		Hunk_Log();
 		Hunk_SmallLog();
 
-		Com_Error(ERR_DROP, "Hunk_Alloc failed on %"PRIz": %s, line: %d (%s)", size, file, line, label);
+		Com_Error(ERR_DROP, "Hunk_Alloc failed on %"PRIz"u: %s, line: %d (%s)", size, file, line, label);
 #else
-		Com_Error(ERR_DROP, "Hunk_Alloc failed on %"PRIz"", size);
+		Com_Error(ERR_DROP, "Hunk_Alloc failed on %"PRIz"u", size);
 #endif
 	}
 
@@ -2467,7 +2467,7 @@ void *Hunk_AllocateTempMemory( size_t size ) {
 	}
 
 	if ( size > INT_MAX ) {
-		Com_Error( ERR_FATAL, "Hunk_AllocateTempMemory: %"PRIz" > INT_MAX", size );
+		Com_Error( ERR_FATAL, "Hunk_AllocateTempMemory: %"PRIz"u > INT_MAX", size );
 	}
 
 	Hunk_SwapBanks();
@@ -2479,7 +2479,7 @@ void *Hunk_AllocateTempMemory( size_t size ) {
 		Hunk_Log();
 		Hunk_SmallLog();
 #endif
-		Com_Error( ERR_DROP, "Hunk_AllocateTempMemory: failed on %"PRIz"", size );
+		Com_Error( ERR_DROP, "Hunk_AllocateTempMemory: failed on %"PRIz"u", size );
 	}
 
 	if ( hunk_temp == &hunk_low ) {
