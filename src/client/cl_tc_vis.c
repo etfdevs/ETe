@@ -432,7 +432,10 @@ static void add_vert_to_face(visFace_t *face, const vec3_t vert, const vec4_t co
 		return;
 
 	VectorCopy(vert, face->verts[face->numVerts].xyz);
-	Vector4Copy(color, face->verts[face->numVerts].modulate);
+	face->verts[face->numVerts].modulate.rgba[0] = color[0];
+	face->verts[face->numVerts].modulate.rgba[1] = color[1];
+	face->verts[face->numVerts].modulate.rgba[2] = color[2];
+	face->verts[face->numVerts].modulate.rgba[3] = color[3];
 	face->verts[face->numVerts].st[0] = tex_coords[0];
 	face->verts[face->numVerts].st[1] = tex_coords[1];
 	face->numVerts++;
