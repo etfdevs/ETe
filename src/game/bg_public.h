@@ -2521,3 +2521,5 @@ int BG_CvarUpdateTable( const vmCvarTableItem_t *cvars, int count );
 #define BG_CvarUpdateArray( a ) BG_CvarUpdateTable( a, ARRAY_LEN(a) )
 
 #endif
+
+#endif
