@@ -42,6 +42,24 @@ static SDL_GLContext SDL_glContext = NULL;
 #ifdef USE_VULKAN_API
 static PFN_vkGetInstanceProcAddr qvkGetInstanceProcAddr;
 #endif
+static qboolean glw_floatFramebufferActive = qfalse;
+
+// framebuffer attributes the current SDL_window was created with;
+// the window can only be reused across \vid_restart while these still match
+// because the pixel format and the OpenGL/Vulkan surface kind are fixed
+// at window creation time
+typedef struct {
+	qboolean valid;
+	qboolean vulkan;
+	int colorBits;
+	int depthBits;
+	int stencilBits;
+	qboolean stereo;
+	qboolean software;
+	qboolean floatFramebuffer;
+} windowRecipe_t;
+
+static windowRecipe_t glw_windowRecipe;
 
 cvar_t *r_stereoEnabled;
 cvar_t *in_nograb;
@@ -78,6 +96,23 @@ static SDL_Window *GLW_CreateWindow( const char *title, int x, int y, int w, int
 	return window;
 }
 
+static void GLW_DestroyWindow( void )
+{
+	if ( SDL_glContext != NULL )
+	{
+		SDL_GL_DestroyContext( SDL_glContext );
+		SDL_glContext = NULL;
+	}
+	glw_floatFramebufferActive = qfalse;
+
+	if ( SDL_window ) {
+		SDL_DestroyWindow( SDL_window );
+		SDL_window = NULL;
+	}
+
+	Com_Memset( &glw_windowRecipe, 0, sizeof( glw_windowRecipe ) );
+}
+
 /*
 ===============
 GLimp_Shutdown
@@ -97,10 +132,7 @@ void GLimp_Shutdown( qboolean unloadDLL )
 		}
 	}
 
-	if ( SDL_window ) {
-		SDL_DestroyWindow( SDL_window );
-		SDL_window = NULL;
-	}
+	GLW_DestroyWindow();
 
 	if ( unloadDLL )
 		SDL_QuitSubSystem( SDL_INIT_VIDEO );
@@ -170,6 +202,13 @@ void GLW_UpdateWindowState( void )
 		} else {
 			glw_state.window_width = w;
 			glw_state.window_height = h;
+		}
+
+		if ( !SDL_GetWindowSizeInPixels( SDL_window, &w, &h ) ) {
+			Com_DPrintf( "SDL_GetWindowSizeInPixels failed: %s\n", SDL_GetError() );
+		} else {
+			glw_state.pixel_width = w;
+			glw_state.pixel_height = h;
 		}
 
 		display = SDL_GetDisplayForWindow( SDL_window );
@@ -1047,6 +1086,38 @@ void Sys_SetClipboardText( const char *text )
 #endif
 }
 
+#ifndef DEDICATED
+// Structure to hold the copied bitmap in memory
+typedef struct {
+    void *data;
+    size_t length;
+} ClipboardData;
+
+// 1. Callback to provide data to the OS when another app pastes
+static const void * SDLCALL ProvideClipboardData(void *userdata, const char *mime_type, size_t *size) {
+    ClipboardData *ctx = (ClipboardData *)userdata;
+    
+    // Check if the requested format is our advertised BMP format
+    if (ctx && SDL_strcmp(mime_type, "image/bmp") == 0) {
+        *size = ctx->length;
+        return ctx->data;
+    }
+    
+    *size = 0;
+    return NULL;
+}
+
+// 2. Callback to free the memory when the clipboard is cleared or overwritten
+static void SDLCALL CleanupClipboardData(void *userdata) {
+    ClipboardData *ctx = (ClipboardData *)userdata;
+    if (ctx) {
+        if (ctx->data) {
+            SDL_free(ctx->data);
+        }
+        SDL_free(ctx);
+    }
+}
+#endif
 
 /*
 ===============
@@ -1057,24 +1128,32 @@ todo use SDL_SetClipboardData
 */
 void Sys_SetClipboardBitmap( const byte *bitmap, int length )
 {
-#ifdef _WIN32
-	HGLOBAL hMem;
-	byte *ptr;
+#ifndef DEDICATED
+	if (!bitmap || length <= 0) {
+        return;
+    }
 
-	if ( !OpenClipboard( NULL ) )
-		return;
+    // Allocate our tracking structure
+    ClipboardData *ctx = (ClipboardData *)SDL_malloc(sizeof(ClipboardData));
+    if (!ctx) return;
 
-	EmptyClipboard();
-	hMem = GlobalAlloc( GMEM_MOVEABLE | GMEM_DDESHARE, length );
-	if ( hMem != NULL ) {
-		ptr = ( byte* )GlobalLock( hMem );
-		if ( ptr != NULL ) {
-			memcpy( ptr, bitmap, length ); 
-		}
-		GlobalUnlock( hMem );
-		SetClipboardData( CF_DIB, hMem );
-	}
-	CloseClipboard();
+    // Allocate and copy the actual bitmap data so it lives beyond this function
+    ctx->length = (size_t)length;
+    ctx->data = SDL_malloc(ctx->length);
+    if (!ctx->data) {
+        SDL_free(ctx);
+        return;
+    }
+    SDL_memcpy(ctx->data, bitmap, ctx->length);
+
+    // SDL3 identifies clipboard types via standard MIME types
+    const char *mime_types[] = { "image/bmp" };
+
+    // Offer the data to the OS via SDL3
+    if (!SDL_SetClipboardData(ProvideClipboardData, CleanupClipboardData, ctx, mime_types, 1)) {
+        // If initialization fails, clean up the allocated memory immediately
+        CleanupClipboardData(ctx);
+    }
 #endif
 }
 
