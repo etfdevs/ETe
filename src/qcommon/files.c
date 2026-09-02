@@ -2110,7 +2110,7 @@ qboolean FS_CL_ExtractFromPakFile(const char *fullpath, const char *gamedir, con
 
 	// read in compressed file (force it to exclude files from directories)
 	fs_filter_flag = FS_EXCLUDE_DIR;
-	srcLength = FS_ReadFile(filename, search, (void **)&srcData);
+	srcLength = FS_ReadFile(filename, (void **)&srcData);
 	fs_filter_flag = 0;
 
 	// if its not in the pak, we bail
