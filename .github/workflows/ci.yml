@@ -3,7 +3,7 @@ name: build
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, cmake-upstream-modremove]
     paths-ignore:
       - '**.md'
       - '*.txt'
