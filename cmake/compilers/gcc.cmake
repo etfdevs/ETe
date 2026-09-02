@@ -54,15 +54,15 @@ function(create_compiler_opts target)
 			-g3					# generate debug info
 			-ggdb3>)			# generate gdb friendly debug info
 
-	if (MINGW)
-		list(APPEND GCC_C_FLAGS __USE_MINGW_ANSI_STDIO=1)
-	endif()
-
 	add_library(${target} INTERFACE)
 
 	# we use this to print out relative path to a source code file for __FILE__ macro replacement
 	string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 	target_compile_definitions(${target} INTERFACE "SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
+
+	if (MINGW)
+		target_compile_definitions(${target} INTERFACE __USE_MINGW_ANSI_STDIO=1)
+	endif()
 
 	target_compile_options(${target} INTERFACE $<$<COMPILE_LANGUAGE:C>:${GCC_C_FLAGS}>)
 	target_compile_definitions(${target} INTERFACE $<$<COMPILE_LANGUAGE:ASM>:ELF>)
