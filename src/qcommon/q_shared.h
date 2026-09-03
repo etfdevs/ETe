@@ -158,7 +158,9 @@ If you have questions concerning this license or the applicable additional terms
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-#ifdef __MINGW32__
+#if defined(__MINGW32__) && defined(__USE_MINGW_ANSI_STDIO) && __USE_MINGW_ANSI_STDIO > 0
+#define Q_PRINTF_FUNC(x, y) __attribute__((format (gnu_printf, x, y)))
+#elif defined(__MINGW32__)
 #define Q_PRINTF_FUNC(x, y) __attribute__((format (ms_printf, x, y))) __attribute__((format (gnu_printf, x, y)))
 #else
 #define Q_PRINTF_FUNC(x, y) __attribute__((format (printf, x, y)))

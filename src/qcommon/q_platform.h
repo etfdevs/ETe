@@ -319,7 +319,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Modifier for printing size_t values portably
 
 #if (defined _WIN64) || defined(_WIN32)
+#if defined(__MINGW32__) && defined(__USE_MINGW_ANSI_STDIO) && __USE_MINGW_ANSI_STDIO > 0
+#define PRIz "zu"
+#else
 #define PRIz "Iu"
+#endif
 #elif (defined Q3_VM)
 #define PRIz "u"
 #else
