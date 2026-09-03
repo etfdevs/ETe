@@ -1393,6 +1393,7 @@ RB_MDM_SurfaceAnim
 void RB_MDM_SurfaceAnim( mdmSurface_t *surface ) {
 #ifndef USE_VULKAN
 	int i;
+	int     *boneRefs;
 #endif
 	int j, k;
 	refEntity_t     *refent;
@@ -1611,15 +1612,15 @@ void RB_MDM_SurfaceAnim( mdmSurface_t *surface ) {
 				qglBlendFunc( GL_SRC_ALPHA, GL_ONE );
 
 				for ( i = 0; i < surface->numBoneReferences; i++, boneRefs++ ) {
-					vec3_t diff;
+					vec3_t posDiff;
 					mdxBoneInfo_t *mdxBoneInfo = ( mdxBoneInfo_t * )( (byte *)mdxHeader + mdxHeader->ofsBones + *boneRefs * sizeof( mdxBoneInfo_t ) );
 					bonePtr = &bones[*boneRefs];
 
 					VectorSet( vec, 0.f, 0.f, 32.f );
-					VectorSubtract( bonePtr->translation, vec, diff );
-					vec[0] = vec[0] + diff[0] * 6;
-					vec[1] = vec[1] + diff[1] * 6;
-					vec[2] = vec[2] + diff[2] * 3;
+					VectorSubtract( bonePtr->translation, vec, posDiff );
+					vec[0] = vec[0] + posDiff[0] * 6;
+					vec[1] = vec[1] + posDiff[1] * 6;
+					vec[2] = vec[2] + posDiff[2] * 3;
 
 					qglEnable( GL_BLEND );
 					qglBegin( GL_LINES );
@@ -1644,7 +1645,7 @@ void RB_MDM_SurfaceAnim( mdmSurface_t *surface ) {
 					for ( i = 0; i < header->numTags; i++ ) {
 						mdxBoneFrame_t  *tagBone;
 						orientation_t outTag;
-						vec3_t diff;
+						vec3_t posDiff;
 
 						// now extract the orientation for the bone that represents our tag
 						tagBone = &bones[pTag->boneIndex];
@@ -1666,10 +1667,10 @@ void RB_MDM_SurfaceAnim( mdmSurface_t *surface ) {
 						qglEnd();
 
 						VectorSet( vec, 0.f, 0.f, 32.f );
-						VectorSubtract( outTag.origin, vec, diff );
-						vec[0] = vec[0] + diff[0] * 2;
-						vec[1] = vec[1] + diff[1] * 2;
-						vec[2] = vec[2] + diff[2] * 1.5f;
+						VectorSubtract( outTag.origin, vec, posDiff );
+						vec[0] = vec[0] + posDiff[0] * 2;
+						vec[1] = vec[1] + posDiff[1] * 2;
+						vec[2] = vec[2] + posDiff[2] * 1.5f;
 
 						qglLineWidth( 1 );
 						qglEnable( GL_BLEND );

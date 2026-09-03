@@ -1208,6 +1208,7 @@ RB_SurfaceAnim
 void RB_SurfaceAnim( mdsSurface_t *surface ) {
 #ifndef USE_VULKAN
 	int i;
+	int     *boneRefs;
 #endif
 	int j, k;
 	refEntity_t *refent;

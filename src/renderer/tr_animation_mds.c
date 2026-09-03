@@ -54,7 +54,7 @@ frame.
 
 static float frontlerp, backlerp;
 static float torsoFrontlerp, torsoBacklerp;
-static int             *triangles, *boneRefs;
+static int             *triangles;//, *boneRefs;
 static int indexes;
 static glIndex_t       *pIndexes;
 static int baseIndex, baseVertex, oldIndexes;
@@ -1230,6 +1230,7 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 	refEntity_t *refent;
 	int             *boneList;
 	const mdsHeader_t     *header;
+	int     *boneRefs;
 
 #ifdef DBG_PROFILE_BONES
 	int di = 0, dt, ldt;
