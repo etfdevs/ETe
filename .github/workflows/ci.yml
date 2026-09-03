@@ -28,7 +28,7 @@ jobs:
       matrix:
         arch: [x86, x86_64]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Install Dependencies
       run: |
         if [ ${{ matrix.arch }} == "x86" ]; then
@@ -51,7 +51,7 @@ jobs:
         fi
         cmake --build build --parallel
     #- name: Upload
-    #  uses: actions/upload-artifact@v4
+    #  uses: actions/upload-artifact@v7
     #  with:
     #    name: ${{ github.event.repository.name }}-linux-${{ needs.versions.outputs.base }}
     #    path: |
@@ -64,13 +64,13 @@ jobs:
       matrix:
         arch: [Win32, x64]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Compile
       run: |
         cmake -S . -B build -G "Visual Studio 17 2022" -A "${{ matrix.arch }}"
         cmake --build build --config Release --parallel
     #- name: Upload
-    #  uses: actions/upload-artifact@v4
+    #  uses: actions/upload-artifact@v7
     #  with:
     #    name: ${{ github.event.repository.name }}-windows-msvc-${{ needs.versions.outputs.base }}
     #    path: |
@@ -82,9 +82,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86, x86_64]
+        #arch: [x86, x86_64]
+        arch: [x86_64]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Compile
       run: |
         if ('${{ matrix.arch }}' -eq 'x86') {
@@ -94,7 +95,7 @@ jobs:
         }
         cmake --build build --parallel
     #- name: Upload
-    #  uses: actions/upload-artifact@v4
+    #  uses: actions/upload-artifact@v7
     #  with:
     #    name: ${{ github.event.repository.name }}-windows-mingw-${{ needs.versions.outputs.base }}
     #    path: |
