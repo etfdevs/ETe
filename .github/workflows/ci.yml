@@ -82,13 +82,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64]
-        #arch: [x86, x86_64]
+        arch: [x86, x86_64]
     steps:
     - uses: actions/checkout@v4
+    - name: Setup MinGW
+      uses: egor-tensin/setup-mingw@v2
+      with:
+        platform: ${{ matrix.arch == 'x86' && 'x86' || 'x64' }}
     - name: Compile
       run: |
-        if ($env:arch -eq 'x86') {
+        if ('${{ matrix.arch }}' -eq 'x86') {
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-mingw-x86-windows.cmake
         } else {
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
