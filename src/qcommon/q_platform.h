@@ -323,7 +323,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #elif (defined Q3_VM)
 #define PRIz "u"
 #else
-#define PRIz "z"
+#define PRIz "zu"
 #endif
 
 #endif
