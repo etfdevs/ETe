@@ -50,12 +50,12 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL2=TRUE -DUSE_SDL3=OFF
         fi
         cmake --build build --parallel
-    #- name: Upload
-    #  uses: actions/upload-artifact@v7
-    #  with:
-    #    name: ${{ github.event.repository.name }}-linux-${{ needs.versions.outputs.base }}
-    #    path: |
-    #      build/Release/**/*
+    - name: Upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ github.event.repository.name }}-linux-${{ matrix.arch }}
+        path: |
+          build/Release/**/*
   windows-msvc:
     name: Windows MSVC
     runs-on: windows-2022
@@ -69,13 +69,13 @@ jobs:
       run: |
         cmake -S . -B build -G "Visual Studio 17 2022" -A "${{ matrix.arch }}"
         cmake --build build --config Release --parallel
-    #- name: Upload
-    #  uses: actions/upload-artifact@v7
-    #  with:
-    #    name: ${{ github.event.repository.name }}-windows-msvc-${{ needs.versions.outputs.base }}
-    #    path: |
-    #      build/Release/**/*.dll
-    #      build/Release/**/*.exe
+    - name: Upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ github.event.repository.name }}-windows-msvc-${{ matrix.arch }}
+        path: |
+          build/Release/**/*.dll
+          build/Release/**/*.exe
   windows-mingw:
     name: Windows MinGW
     runs-on: windows-2022
@@ -94,13 +94,13 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         }
         cmake --build build --parallel
-    #- name: Upload
-    #  uses: actions/upload-artifact@v7
-    #  with:
-    #    name: ${{ github.event.repository.name }}-windows-mingw-${{ needs.versions.outputs.base }}
-    #    path: |
-    #      build/Release/**/*.dll
-    #      build/Release/**/*.exe
+    - name: Upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ github.event.repository.name }}-windows-mingw-${{ matrix.arch }}
+        path: |
+          build/Release/**/*.dll
+          build/Release/**/*.exe
 
 #  create-testing:
 #    if: github.ref == 'refs/heads/master' && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
