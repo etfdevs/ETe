@@ -713,7 +713,7 @@ static qboolean GLW_ReuseExistingWindow( glconfig_t *config, SDL_DisplayID displ
 	else
 	{
 		int x, y;
-		const qboolean retainOsGeometry = CL_IsWindowResizeRestart();
+		//const qboolean retainOsGeometry = CL_IsWindowResizeRestart();
 
 		if ( !SDL_SetWindowFullscreen( SDL_window, false ) ) {
 			Com_DPrintf( "SDL_SetWindowFullscreen failed: %s\n", SDL_GetError() );
@@ -727,7 +727,7 @@ static qboolean GLW_ReuseExistingWindow( glconfig_t *config, SDL_DisplayID displ
 			Com_DPrintf( "SDL_SetWindowResizable failed: %s\n", SDL_GetError() );
 		}
 
-		if ( !retainOsGeometry ) {
+		//if ( !retainOsGeometry ) {
 			if ( !SDL_SetWindowSize( SDL_window, config->vidWidth, config->vidHeight ) ) {
 				Com_DPrintf( "SDL_SetWindowSize failed: %s\n", SDL_GetError() );
 			}
@@ -739,7 +739,7 @@ static qboolean GLW_ReuseExistingWindow( glconfig_t *config, SDL_DisplayID displ
 			if ( !SDL_SetWindowPosition( SDL_window, x, y ) ) {
 				Com_DPrintf( "SDL_SetWindowPosition failed: %s\n", SDL_GetError() );
 			}
-		}
+		//}
 
 		GLW_SyncWindow( "windowed transition" );
 		GLW_UpdateWindowState();
