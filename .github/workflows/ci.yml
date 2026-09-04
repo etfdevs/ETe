@@ -55,7 +55,7 @@ jobs:
       with:
         name: ${{ github.event.repository.name }}-linux-${{ matrix.arch }}
         path: |
-          build/Release/**/*
+          build/ETe/*
   windows-msvc:
     name: Windows MSVC
     runs-on: windows-2022
@@ -74,8 +74,8 @@ jobs:
       with:
         name: ${{ github.event.repository.name }}-windows-msvc-${{ matrix.arch }}
         path: |
-          build/Release/**/*.dll
-          build/Release/**/*.exe
+          build/ETe/*.dll
+          build/ETe/*.exe
   windows-mingw:
     name: Windows MinGW
     runs-on: windows-2022
@@ -99,8 +99,8 @@ jobs:
       with:
         name: ${{ github.event.repository.name }}-windows-mingw-${{ matrix.arch }}
         path: |
-          build/Release/**/*.dll
-          build/Release/**/*.exe
+          build/ETe/*.dll
+          build/ETe/*.exe
 
 #  create-testing:
 #    if: github.ref == 'refs/heads/master' && github.event_name == 'push' || github.event_name == 'workflow_dispatch'
