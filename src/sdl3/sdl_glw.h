@@ -38,8 +38,11 @@ typedef struct
 	int desktop_width;
 	int desktop_height;
 
+	// Window coordinates, used for mouse centering and drag/grab behavior.
 	int window_width;
 	int window_height;
+	int pixel_width;
+	int pixel_height;
 
 	int monitorCount;
 
