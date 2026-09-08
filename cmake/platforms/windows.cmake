@@ -9,7 +9,7 @@ set(USE_SDL2 OFF CACHE BOOL "SDL2 for client binary" FORCE)
 set(USE_SDL3 OFF CACHE BOOL "SDL3 for client binary" FORCE)
 
 list(APPEND SYSTEM_PLATFORM_SOURCES
-    "${SOURCE_DIR}/win32/win_dpi.c"
+    #"${SOURCE_DIR}/win32/win_dpi.c"
     "${SOURCE_DIR}/win32/win_local.h"
     "${SOURCE_DIR}/win32/win_main.c"
     "${SOURCE_DIR}/win32/win_shared.c"
@@ -83,11 +83,11 @@ endif()
 
 list(APPEND CLIENT_DEFINITIONS USE_WIN32_ASM) # for snd_mix
 
-#if(MSVC)
-#    # We have our own manifest, disable auto creation
-#    list(APPEND SERVER_LINK_OPTIONS "/MANIFEST:NO")
-#    list(APPEND CLIENT_LINK_OPTIONS "/MANIFEST:NO")
-#endif()
+if(MSVC)
+    # We have our own manifest, disable auto creation
+    list(APPEND SERVER_LINK_OPTIONS "/MANIFEST:NO")
+    list(APPEND CLIENT_LINK_OPTIONS "/MANIFEST:NO")
+endif()
 
 set(CLIENT_EXECUTABLE_OPTIONS WIN32)
 set(SERVER_EXECUTABLE_OPTIONS WIN32) # because we support the viewlog dedicated server we also still need to be a Win32 gui application

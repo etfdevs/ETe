@@ -1103,7 +1103,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		SetPriorityClass( hProcess, HIGH_PRIORITY_CLASS );
 	}
 
-	SetupDPIAwareness();
+	//SetupDPIAwareness();
 
 #if defined(USE_SDL3)
 	g_wv.hInstance = (HINSTANCE)GetModuleHandle(NULL);

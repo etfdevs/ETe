@@ -69,9 +69,10 @@ BEGIN
     IDS_STRING1             "Enemy Territory"
 END
 
-#endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////
 //
 // Applicatioin manifest
 //
-2 RT_MANIFEST "wolfet.manifest"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "wolfet.manifest"
+
+#endif    // English (U.S.) resources
