@@ -813,7 +813,8 @@ typedef enum aviRecordingState_e {
 	AVIDEMO_MAX
 } aviRecordingState_t;
 
-qboolean CL_OpenAVIForWriting( const char *filename, qboolean pipe, qboolean reopen );
+qboolean CL_OpenAVIForWriting( const char *filename, const char *pipeFormat, qboolean reopen );
+qboolean CL_ValidatePipeFormat( const char *s );
 void CL_TakeVideoFrame( void );
 void CL_WriteAVIVideoFrame( const byte *imageBuffer, int size );
 void CL_WriteAVIAudioFrame( const byte *pcmBuffer, int size );

@@ -557,6 +557,10 @@ void SV_SpawnServer( const char *mapname ) {
 	const char	*p, *pnames;
 	char		bspname[MAX_QPATH];
 	int			pakChecksum = 0; // checksum of pk3 map is in
+#ifndef DEDICATED
+	qboolean	clientLoading;
+#endif
+	void		*buf;
 
 	// ydnar: broadcast a level change to all connected clients
 	if ( svs.clients && !com_errorEntered ) {
@@ -576,7 +580,7 @@ void SV_SpawnServer( const char *mapname ) {
 #ifndef DEDICATED
 	// if not running a dedicated server CL_MapLoading will connect the client to the server
 	// also print some status stuff
-	CL_MapLoading();
+	clientLoading = CL_MapLoading();
 
 	// make sure all the client stuff is unloaded
 	CL_ShutdownAll();
@@ -590,6 +594,8 @@ void SV_SpawnServer( const char *mapname ) {
 
 	// timescale can be updated before SV_Frame() and cause division-by-zero in SV_RateMsec()
 	Cvar_CheckRange( com_timescale, "0.001", "100", CV_FLOAT );
+
+	Hunk_AllocPreference( h_high );
 
 	// Restart renderer?
 	// CL_StartHunkUsers( );
@@ -686,7 +692,16 @@ void SV_SpawnServer( const char *mapname ) {
 	FS_Restart( sv.checksumFeed );
 
 	Sys_SetStatus( "Loading map %s", mapname );
-	CM_LoadMap( bspname, qfalse, &checksum );
+
+	buf = CM_LoadMap( bspname, qfalse, &checksum );
+#ifndef DEDICATED
+	if ( !clientLoading )
+#endif
+	{
+		// release BSP data immediately on dedicated runs
+		Hunk_FreeTempMemory( buf );
+		buf = NULL;
+	}
 
 	// set serverinfo visible name
 	Cvar_Set( "mapname", mapname );
@@ -884,7 +899,18 @@ void SV_SpawnServer( const char *mapname ) {
 	// send a heartbeat now so the master will get up to date info
 	SV_Heartbeat_f();
 
-	Hunk_SetMark();
+#ifndef DEDICATED
+	if ( clientLoading && FS_LoadStack() == 1 ) {
+		// move temp cached BSP data to the current permanent (high) side
+		// because all further client allocations will go on a low side
+		Hunk_MoveTempMemory( h_high );
+	} else {
+		// some erroneous case
+		if ( buf != NULL ) {
+			Hunk_FreeTempMemory( buf );
+		}
+	}
+#endif
 
 	Cvar_Set( "sv_serverRestarting", "0" );
 

@@ -77,6 +77,6 @@ END
 //
 // Applicatioin manifest
 //
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "wolfet.manifest"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "win_manifest.xml"
 
 #endif    // English (U.S.) resources

@@ -548,6 +548,7 @@ Just adds default parameters that cgame doesn't need to know about
 */
 static void CL_CM_LoadMap( const char *mapname ) {
 	int		checksum;
+	void	*buf;
 
 	// DHM - Nerve :: If we are not running the server, then set expected usage here
 	if ( !com_sv_running->integer )
@@ -559,7 +560,11 @@ static void CL_CM_LoadMap( const char *mapname ) {
 		Cvar_Set( "com_errorDiagnoseIP", "" );
 	}
 
-	CM_LoadMap( mapname, qtrue, &checksum );
+	buf = CM_LoadMap( mapname, qtrue, &checksum );
+	if ( buf ) {
+		// we need this memory for a renderer module later
+		// Hunk_FreeTempMemory( buf );
+	}
 	tc_vis_init();
 }
 

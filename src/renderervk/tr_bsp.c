@@ -2570,8 +2570,12 @@ void RE_LoadWorldMap( const char *name ) {
 	tr.worldMapLoaded = qtrue;
 	tr.worldRawName[0] = '\0';
 
-	// load it
-	size = ri.FS_ReadFile( name, &buffer.v );
+ 	// try to get from cache first
+	size = ri.Hunk_GetTempMemory( &buffer.v );
+	if ( size == 0 ) {
+		// load it
+		size = ri.FS_ReadFile( name, &buffer.v );
+	}
 	if ( !buffer.b ) {
 		ri.Error( ERR_DROP, "%s: couldn't load %s", __func__, name );
 	}

@@ -662,7 +662,8 @@ static void Done_WASAPI( void )
 
 	if ( hThread )
 	{
-		WaitForSingleObject( hThread, INFINITE ); CloseHandle( hThread ); hThread = NULL;
+		WaitForSingleObject( hThread, 10 * 1000 );
+		CloseHandle( hThread ); hThread = NULL;
 	}
 
 //error6:

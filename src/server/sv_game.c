@@ -847,6 +847,8 @@ void SV_RestartGameProgs( void ) {
 
 	VM_Call( gvm, GAME_SHUTDOWN, qtrue );
 
+	Hunk_AllocPreference( h_high );
+
 	// do a restart instead of a free
 	gvm = VM_Restart( gvm );
 	if ( !gvm ) {

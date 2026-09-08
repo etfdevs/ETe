@@ -426,8 +426,20 @@ FS_LoadStack
 return load stack
 =================
 */
-int FS_LoadStack( void ) {
+int FS_LoadStack( void )
+{
 	return fs_loadStack;
+}
+
+
+/*
+=================
+FS_ResetLoadStack
+=================
+*/
+void FS_ResetLoadStack( void )
+{
+	fs_loadStack = 0;
 }
 
 

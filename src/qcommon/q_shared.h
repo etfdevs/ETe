@@ -487,9 +487,9 @@ typedef enum {
 #endif
 
 typedef enum {
-	h_high,
-	h_low,
-	h_dontcare
+	h_high,		// high side / server data
+	h_low,		// low side / client data
+	h_current	// follow current permanent allocation preference
 } ha_pref;
 
 #ifdef HUNK_DEBUG
