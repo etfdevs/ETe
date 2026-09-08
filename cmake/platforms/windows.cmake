@@ -14,7 +14,8 @@ list(APPEND SYSTEM_PLATFORM_SOURCES
     "${SOURCE_DIR}/win32/win_main.c"
     "${SOURCE_DIR}/win32/win_shared.c"
     "${SOURCE_DIR}/win32/win_syscon.c"
-    "${SOURCE_DIR}/win32/winquake.rc"
+    "${SOURCE_DIR}/win32/win_resource.rc"
+    "${SOURCE_DIR}/win32/win_resource.h"
 )
 if(USE_SDL2)
     list(APPEND CLIENT_PLATFORM_SOURCES 
@@ -82,6 +83,9 @@ if(USE_SDL2 OR USE_SDL3)
 endif()
 
 list(APPEND CLIENT_DEFINITIONS USE_WIN32_ASM) # for snd_mix
+
+set_source_files_properties(${SOURCE_DIR}/win32/win_resource.rc
+    PROPERTIES COMPILE_DEFINITIONS WINDOWS_ICON_PATH="${WINDOWS_ICON_PATH}")
 
 if(MSVC)
     # We have our own manifest, disable auto creation

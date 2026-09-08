@@ -1,6 +1,6 @@
 //Microsoft Developer Studio generated resource script.
 //
-#include "resource.h"
+#include "win_resource.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -33,7 +33,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 1 TEXTINCLUDE DISCARDABLE 
 BEGIN
-    "resource.h\0"
+    "win_resource.h\0"
 END
 
 2 TEXTINCLUDE DISCARDABLE 
@@ -57,7 +57,11 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#ifdef WINDOWS_ICON_PATH
+IDI_ICON1               ICON    DISCARDABLE     WINDOWS_ICON_PATH
+#else
 IDI_ICON1               ICON    DISCARDABLE     "wolfet.ico"
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //

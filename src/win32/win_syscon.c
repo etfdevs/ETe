@@ -33,7 +33,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../client/client.h"
 #endif
 #include "win_local.h"
-#include "resource.h"
+#include "win_resource.h"
 
 #define COPY_ID			1
 #define QUIT_ID			2

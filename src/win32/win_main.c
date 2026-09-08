@@ -33,7 +33,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../client/client.h"
 #endif
 #include "win_local.h"
-#include "resource.h"
+#include "win_resource.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>

@@ -23,9 +23,9 @@ file(MAKE_DIRECTORY "${BASE_DIR_PATH}")
 set(BUNDLED_TARGETS_FOLDER Bundled)
 set(PACKING_TARGETS_FOLDER Package)
 
-set(WINDOWS_ICON_PATH ${CMAKE_SOURCE_DIR}/src/win32/wolfet.ico)
+set(WINDOWS_ICON_PATH ${CMAKE_SOURCE_DIR}/misc/windows/wolfet.ico)
 
-set(MACOS_ICON_PATH ${CMAKE_SOURCE_DIR}/src/mac/Icon.icns)
+set(MACOS_ICON_PATH ${CMAKE_SOURCE_DIR}/misc/macos/Icon.icns)
 set(MACOS_BUNDLE_ID org.etfdevs.${CLIENT_NAME})
 
 #set(COPYRIGHT "Wolfenstein: Enemy Territory Copyright © 1999-2000 id Software, Inc. All rights reserved.")

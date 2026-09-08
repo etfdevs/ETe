@@ -31,6 +31,7 @@ static cvar_t *in_forceCharset;
 #ifdef USE_JOYSTICK
 static SDL_Gamepad *gamepad;
 static SDL_Joystick *stick = NULL;
+static SDL_JoystickID stickInstance;
 #endif
 
 static qboolean mouseAvailable = qfalse;
@@ -589,7 +590,8 @@ static void IN_InitJoystick( void )
 
 	stick = NULL;
 	gamepad = NULL;
-	memset(&stick_state, '\0', sizeof(stick_state));
+	stickInstance = 0;
+	memset(&stick_state, 0, sizeof(stick_state));
 
 	// SDL 2.0.4 requires SDL_INIT_JOYSTICK to be initialized separately from
 	// SDL_INIT_GAMEPAD for SDL_JoystickOpen() to work correctly,
