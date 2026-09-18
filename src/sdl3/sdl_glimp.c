@@ -723,7 +723,7 @@ static qboolean GLW_ReuseExistingWindow( glconfig_t *config, SDL_DisplayID displ
 		if ( !SDL_SetWindowBordered( SDL_window, r_noborder->integer ? false : true ) ) {
 			Com_DPrintf( "SDL_SetWindowBordered failed: %s\n", SDL_GetError() );
 		}
-		if ( !SDL_SetWindowResizable( SDL_window, true ) ) {
+		if ( !SDL_SetWindowResizable( SDL_window, false ) ) {
 			Com_DPrintf( "SDL_SetWindowResizable failed: %s\n", SDL_GetError() );
 		}
 
@@ -1029,7 +1029,7 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 			continue;
 		}
 
-		if ( !SDL_SetWindowResizable( SDL_window, true ) ) {
+		if ( !SDL_SetWindowResizable( SDL_window, false ) ) {
 			Com_DPrintf( "SDL_SetWindowResizable failed: %s\n", SDL_GetError() );
 		}
 		if ( !SDL_SetWindowMinimumSize( SDL_window, 320, 240 ) ) {
