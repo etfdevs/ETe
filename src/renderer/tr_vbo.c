@@ -1394,6 +1394,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	int i;
 	GLbitfield stateBits, normalMask;
 	qboolean fogPass;
+	qboolean lightmapStage;
 	GLuint vp, fp;
 
 	fogPass = ( tess.fogNum && tess.shader->fogPass );
@@ -1434,9 +1435,15 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 
 		stateBits = pStage->stateBits;
 
-		if ( fparm == NULL ) {
-			vp = vbo_vp[ pStage->vboVPindex[0] ];
-			fp = vbo_fp[ pStage->vboFPindex[0] ];
+		// r_lightmap draws only the lightmap texture of a stage, but fragment
+		// programs always modulate it with the base texture, so use the
+		// fixed-function path (and GL_TexEnv( GL_REPLACE ) below) for lightmap
+		// stages, matching RB_IterateStagesGeneric().
+		lightmapStage = ( r_lightmap->integer && ( pStage->bundle[0].isLightmap || pStage->bundle[1].isLightmap ) );
+
+		if ( fparm == NULL || lightmapStage ) {
+			vp = lightmapStage ? 0 : vbo_vp[ pStage->vboVPindex[0] ];
+			fp = lightmapStage ? 0 : vbo_fp[ pStage->vboFPindex[0] ];
 			ARB_ProgramEnableExt( vp, fp );
 		}
 
@@ -1444,7 +1451,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 			stateBits &= ~GLS_ATEST_BITS; // done in shaders
 		}
 
-		if ( r_lightmap->integer && ( pStage->bundle[0].isLightmap || pStage->bundle[1].isLightmap ) ) {
+		if ( lightmapStage ) {
 			stateBits &= ~(GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS);
 			stateBits |= (GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO);
 		}
@@ -1499,7 +1506,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 				GL_SelectTexture( 1 );
 				qglEnable( GL_TEXTURE_2D );
 				R_BindAnimatedImage( &pStage->bundle[1] );
-				if ( fparm == NULL ) {
+				if ( fparm == NULL || lightmapStage ) {
 					if ( r_lightmap->integer )
 						GL_TexEnv( GL_REPLACE );
 					else
@@ -1526,6 +1533,11 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 			GL_ClientState( 1, CLS_NONE );
 			VBO_RenderIndexes();
 		}
+
+		// allow skipping out to show just lightmaps during development,
+		// matching RB_IterateStagesGeneric()
+		if ( lightmapStage )
+			break;
 	}
 
 	GL_ClientState( 1, CLS_NONE );
