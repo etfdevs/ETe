@@ -1692,6 +1692,13 @@ RB_DrawBuffer
 */
 static const void *RB_DrawBuffer( const void *data ) {
 	const drawBufferCommand_t	*cmd;
+	// whether the frame being drawn contains a view scene. The frontend has
+	// already built this frame's commands, so the view state is known here
+	// (tr.frameSceneNum), and the clears can key off the frame they actually
+	// run in: 2D-only frames (loading screen, menu) must be left alone so
+	// their contents persist, but a view frame drawn right after one must
+	// still be cleared
+	const qboolean frameHasView = ( tr.frameSceneNum != 0 );
 
 	cmd = (const drawBufferCommand_t *)data;
 
@@ -1703,9 +1710,18 @@ static const void *RB_DrawBuffer( const void *data ) {
 	// force depth range and viewport/scissor updates
 	vk.cmd->depth_range = DEPTH_RANGE_COUNT;
 
-	if ( r_clear->integer && vk.clearAttachment ) {
+	if ( r_clear->integer && vk.clearAttachment && frameHasView ) {
 		const vec4_t color = {1, 0, 0.5, 1};
 		backEnd.projection2D = qtrue; // to ensure we have viewport that occupies entire window
+		vk_clear_color( color );
+		backEnd.projection2D = qfalse;
+	}
+
+	// match the OpenGL back end: the fastsky fullscreen clear runs after the
+	// r_clear debug clear, so it wins
+	if ( r_fastsky->integer && vk.clearAttachment && frameHasView ) {
+		const vec4_t color = {0, 0, 0, 1};
+		backEnd.projection2D = qtrue;
 		vk_clear_color( color );
 		backEnd.projection2D = qfalse;
 	}
@@ -1713,7 +1729,7 @@ static const void *RB_DrawBuffer( const void *data ) {
 	qglDrawBuffer( cmd->buffer );
 
 	// clear screen for debugging
-	if ( r_clear->integer ) {
+	if ( r_clear->integer && frameHasView ) {
 		qglClearColor( 1, 0, 0.5, 1 );
 		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	}
