@@ -777,11 +777,10 @@ static void vk_create_render_passes( void )
 #else
 		attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 #endif
-		if ( r_bloom->integer ) {
-			attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // keep it for post-bloom pass
-		} else {
-			attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; // Intermediate storage (not written)
-		}
+		// store the multisampled color unconditionally: 2D-only frames
+		// (loading screen, menu) preserve it between redraws, so the next
+		// render pass must find defined contents in it
+		attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		attachments[2].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -818,6 +817,13 @@ static void vk_create_render_passes( void )
 		VK_CHECK( qvkCreateRenderPass( device, &desc, NULL, &vk.render_pass.main ) );
 		SET_OBJECT_NAME( vk.render_pass.main, "render pass - main", VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT );
 
+		// same pass, but preserve the color attachment instead of clearing it,
+		// used for 2D-only frames (loading screen, menu) that rely on the
+		// previous contents
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		VK_CHECK( qvkCreateRenderPass( device, &desc, NULL, &vk.render_pass.main_load ) );
+		SET_OBJECT_NAME( vk.render_pass.main_load, "render pass - main (load)", VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT );
+
 		return;
 	}
 
@@ -842,6 +848,22 @@ static void vk_create_render_passes( void )
 
 	VK_CHECK( qvkCreateRenderPass( device, &desc, NULL, &vk.render_pass.main ) );
 	SET_OBJECT_NAME( vk.render_pass.main, "render pass - main", VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT );
+
+	// same pass, but preserve the frame buffer contents instead of clearing
+	// them, used for 2D-only frames (loading screen, menu) that composite
+	// over the previous frame: with MSAA the multisampled color attachment
+	// is preserved (the resolve at pass end rewrites the color buffer),
+	// otherwise the color buffer itself
+	if ( vk.msaaActive )
+		attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+	else
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+	VK_CHECK( qvkCreateRenderPass( device, &desc, NULL, &vk.render_pass.main_load ) );
+	SET_OBJECT_NAME( vk.render_pass.main_load, "render pass - main (load)", VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT );
+	if ( vk.msaaActive )
+		attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	else
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 
 	if ( r_bloom->integer ) {
 
@@ -3557,6 +3579,10 @@ static void vk_create_attachments( void )
 
 	vk_clear_attachment_pool();
 
+	// freshly (re)created attachments have undefined contents: the next main
+	// render pass must clear them before anything may be preserved over them
+	vk.attachments_valid = qfalse;
+
 	// It looks like resulting performance depends from order you're creating/allocating
 	// memory for attachments in vulkan i.e. similar images grouped together will provide best results
 	// so [resolve0][resolve1][msaa0][msaa1][depth0][depth1] is most optimal
@@ -4526,6 +4552,11 @@ static void vk_destroy_render_passes( void )
 	if ( vk.render_pass.main != VK_NULL_HANDLE ) {
 		qvkDestroyRenderPass( vk.device, vk.render_pass.main, NULL );
 		vk.render_pass.main = VK_NULL_HANDLE;
+	}
+
+	if ( vk.render_pass.main_load != VK_NULL_HANDLE ) {
+		qvkDestroyRenderPass( vk.device, vk.render_pass.main_load, NULL );
+		vk.render_pass.main_load = VK_NULL_HANDLE;
 	}
 
 	if ( vk.render_pass.bloom_extract != VK_NULL_HANDLE ) {
@@ -7305,7 +7336,21 @@ void vk_begin_main_render_pass( void )
 	//vk.renderScaleY = (float)vk.renderHeight / (float)glConfig.vidHeight;
 	vk.renderScaleX = vk.renderScaleY = 1.0f;
 
-	vk_begin_render_pass( vk.render_pass.main, frameBuffer, qtrue, vk.renderWidth, vk.renderHeight );
+	// 2D-only frames (loading screen, menu) composite over the previous
+	// frame's contents: use the LOAD variant of the render pass so the
+	// frame buffer persists between their (throttled) redraws. A frame that
+	// renders a view scene starts fresh instead, as the scene render covers
+	// the whole buffer. The frontend has already built this frame's
+	// commands, so tr.frameSceneNum tells which case this is. After
+	// (re)creating the attachments (initialization, swapchain restart) their
+	// contents are undefined, so they must be cleared before anything may be
+	// preserved over them.
+	if ( tr.frameSceneNum == 0 && vk.attachments_valid ) {
+		vk_begin_render_pass( vk.render_pass.main_load, frameBuffer, qtrue, vk.renderWidth, vk.renderHeight );
+	} else {
+		vk_begin_render_pass( vk.render_pass.main, frameBuffer, qtrue, vk.renderWidth, vk.renderHeight );
+		vk.attachments_valid = qtrue;
+	}
 }
 
 
@@ -7535,6 +7580,10 @@ static void vk_resize_geometry_buffer( void )
 	VK_CHECK( qvkEndCommandBuffer( vk.cmd->command_buffer ) );
 
 	qvkResetCommandBuffer( vk.cmd->command_buffer, 0 );
+
+	// the discarded frame never executed its render pass: if it was the one
+	// meant to clear the attachments, they must be cleared again
+	vk.attachments_valid = qfalse;
 
 	vk_wait_idle();
 

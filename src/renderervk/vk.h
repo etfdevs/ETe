@@ -379,6 +379,7 @@ typedef struct {
 
 	struct {
 		VkRenderPass main;
+		VkRenderPass main_load;	// same as main but preserves the color attachment (2D-only frames)
 		VkRenderPass screenmap;
 		VkRenderPass gamma;
 		VkRenderPass capture;
@@ -603,6 +604,10 @@ typedef struct {
 	qboolean fboActive;
 	qboolean blitEnabled;
 	qboolean msaaActive;
+	// whether the persistent frame buffer attachments (color/msaa) hold
+	// defined contents; false after (re)creating them, set once a render
+	// pass has cleared them - 2D-only frames may only preserve valid contents
+	qboolean attachments_valid;
 
 	qboolean offscreenRender;
 
