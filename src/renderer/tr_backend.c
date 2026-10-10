@@ -1660,6 +1660,13 @@ RB_DrawBuffer
 */
 static const void *RB_DrawBuffer( const void *data ) {
 	const drawBufferCommand_t	*cmd;
+	// whether the frame being drawn contains a view scene. The frontend has
+	// already built this frame's commands, so the view state is known here
+	// (tr.frameSceneNum), and the clears can key off the frame they actually
+	// run in: 2D-only frames (loading screen, menu) must be left alone so
+	// their contents persist, but a view frame drawn right after one must
+	// still be cleared
+	const qboolean frameHasView = ( tr.frameSceneNum != 0 );
 
 	cmd = (const drawBufferCommand_t *)data;
 
@@ -1675,7 +1682,7 @@ static const void *RB_DrawBuffer( const void *data ) {
 #endif
 
 	// clear screen for debugging
-	if ( r_clear->integer ) {
+	if ( r_clear->integer && frameHasView ) {
 		qglClearColor( 1, 0, 0.5, 1 );
 		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	}
@@ -1786,6 +1793,12 @@ RB_ClearColor
 static const void *RB_ClearColor( const void *data )
 {
 	const clearColorCommand_t *cmd = data;
+
+	// the fastsky fullscreen clear must not run on a 2D-only frame (loading
+	// screen, menu), which relies on the color buffer persisting
+	if ( cmd->fullscreen && tr.frameSceneNum == 0 ) {
+		return (const void *)(cmd + 1);
+	}
 
 	if ( cmd->fullscreen )
 	{
