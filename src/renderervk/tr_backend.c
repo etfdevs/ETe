@@ -1132,9 +1132,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 
 	image = tr.scratchImage[ client ];
 
-#ifndef USE_VULKAN
 	GL_Bind( image );
-#endif
 
 	// if the scratchImage isn't in the format we want, specify it as a new texture
 	if ( cols != image->width || rows != image->height ) {
