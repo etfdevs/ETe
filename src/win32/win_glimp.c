@@ -42,7 +42,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "../client/client.h"
-#include "resource.h"
+#include "win_resource.h"
 #include "win_local.h"
 #include "glw_win.h"
 
