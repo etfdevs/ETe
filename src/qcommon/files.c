@@ -882,7 +882,7 @@ FS_FileInPathExists
 Tests if the file exists, given an absolute path
 ================
 */
-static qboolean FS_FileInPathExists(const char *testpath)
+/*static qboolean FS_FileInPathExists(const char *testpath)
 {
 	FILE *filep = Sys_FOpen(testpath, "rb");	
 
@@ -893,7 +893,7 @@ static qboolean FS_FileInPathExists(const char *testpath)
 	}
 	
 	return qfalse;
-}
+}*/
 
 
 /*

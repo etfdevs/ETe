@@ -57,7 +57,7 @@ jobs:
         path: |
           build/ETe/*
   windows-msvc:
-    name: Windows MSVC${{ matrix.sdl == true && ' SDL' || '' }}
+    name: Windows MSVC (${{ matrix.arch }})${{ matrix.sdl == true && ' SDL' || '' }}
     runs-on: windows-2022
     strategy:
       fail-fast: false
@@ -99,7 +99,7 @@ jobs:
         if ('${{ matrix.arch }}' -eq 'x86') {
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-mingw-x86-windows.cmake -DUSE_SDL3=OFF -DUSE_SDL2=OFF
         } else {
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SDL3=OFF -DUSE_SDL2=OFF
         }
         cmake --build build --parallel
     - name: Upload
