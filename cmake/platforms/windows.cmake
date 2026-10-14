@@ -5,8 +5,8 @@ if(NOT WIN32)
 endif()
 
 # Disable SDL support for now
-set(USE_SDL2 OFF CACHE BOOL "SDL2 for client binary" FORCE)
-set(USE_SDL3 OFF CACHE BOOL "SDL3 for client binary" FORCE)
+#set(USE_SDL2 OFF CACHE BOOL "SDL2 for client binary" FORCE)
+#set(USE_SDL3 OFF CACHE BOOL "SDL3 for client binary" FORCE)
 
 list(APPEND SYSTEM_PLATFORM_SOURCES
     #"${SOURCE_DIR}/win32/win_dpi.c"
