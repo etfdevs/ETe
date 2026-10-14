@@ -57,22 +57,30 @@ jobs:
         path: |
           build/ETe/*
   windows-msvc:
-    name: Windows MSVC
+    name: Windows MSVC${{ matrix.sdl == true && ' SDL' || '' }}
     runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
         arch: [Win32, x64]
+        sdl: [true, false]
     steps:
     - uses: actions/checkout@v7
+    #- name: External Step
+    #  if: ${{ matrix.sdl }}
+    #  uses: libsdl-org/setup-sdl@main
+    #  id: sdl
+    #  with:
+    #    #install-linux-dependencies: true
+    #    version: 3-latest
     - name: Compile
       run: |
-        cmake -S . -B build -G "Visual Studio 17 2022" -A "${{ matrix.arch }}"
+        cmake -S . -B build -G "Visual Studio 17 2022" -A "${{ matrix.arch }}" -DUSE_SDL3=${{ matrix.sdl }}
         cmake --build build --config Release --parallel
     - name: Upload
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ github.event.repository.name }}-windows-msvc-${{ matrix.arch }}
+        name: ${{ github.event.repository.name }}-windows-msvc-${{ matrix.arch }}${{ matrix.sdl == true && '-sdl' || '' }}
         path: |
           build/ETe/*.dll
           build/ETe/*.exe
