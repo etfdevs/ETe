@@ -291,7 +291,7 @@ typedef struct searchpath_s {
 	dirPolicy_t	policy;
 } searchpath_t;
 
-#define MAX_BASEGAMES 4
+#define MAX_BASEGAMES 8
 static  char		basegame_str[MAX_OSPATH], *basegames[MAX_BASEGAMES];
 static  int			basegame_cnt;
 static  const char  *basegame = ""; /* last value in array */
@@ -722,28 +722,30 @@ static const char *FS_HasExt( const char *fileName, const char **extList, int ex
 FS_AllowedExtension
 =================
 */
-qboolean FS_AllowedExtension( const char *fileName, qboolean allowPk3s, const char **ext ) 
+qboolean FS_AllowedExtension( const char *fileName, qboolean allowPk3s, const char **ext )
 {
-	static const char *extlist[] =	{ "dll", "exe", "so", "dylib", "qvm", "pk3" };
+	static const char *extlist[] = { "dll", "exe", "so", "dylib", "qvm", "pk3" };
 	const char *e;
 	int i, n;
 
 	e = strrchr( fileName, '.' );
 
+	if ( ext )
+		*ext = e ? e + 1 : "";
+
+	if ( !e )
+		return qtrue;
+
 	// check for unix '.so.[0-9]' pattern
-	if ( e >= (fileName + 3) && *(e+1) >= '0' && *(e+1) <= '9' && *(e+2) == '\0' ) 
+	if ( (e - fileName) >= 3 && *(e+1) >= '0' && *(e+1) <= '9' && *(e+2) == '\0' )
 	{
 		if ( *(e-3) == '.' && (*(e-2) == 's' || *(e-2) == 'S') && (*(e-1) == 'o' || *(e-1) == 'O') )
 		{
 			if ( ext )
-			{
 				*ext = (e-2);
-			}
 			return qfalse;
 		}
 	}
-	if ( !e )
-		return qtrue;
 
 	e++; // skip '.'
 
@@ -756,8 +758,8 @@ qboolean FS_AllowedExtension( const char *fileName, qboolean allowPk3s, const ch
 	{
 		if ( Q_stricmp( e, extlist[i] ) == 0 ) 
 		{
-			if ( ext )
-				*ext = e;
+			// if ( ext )
+			//	*ext = e;
 			return qfalse;
 		}
 	}
@@ -880,7 +882,7 @@ FS_FileInPathExists
 Tests if the file exists, given an absolute path
 ================
 */
-/*static qboolean FS_FileInPathExists(const char *testpath)
+static qboolean FS_FileInPathExists(const char *testpath)
 {
 	FILE *filep = Sys_FOpen(testpath, "rb");	
 
@@ -891,7 +893,7 @@ Tests if the file exists, given an absolute path
 	}
 	
 	return qfalse;
-}*/
+}
 
 
 /*

@@ -3977,6 +3977,7 @@ static int hex_code( const int code ) {
 
 static const char *parseAffinityMask( const char *str, uint64_t *outv, int level ) {
 	uint64_t v, mask = 0;
+	int hex;
 
 	while ( *str != '\0' ) {
 		if ( *str == 'A' || *str == 'a' ) {
@@ -3994,8 +3995,8 @@ static const char *parseAffinityMask( const char *str, uint64_t *outv, int level
 			++str;
 			continue;
 		}
-		else if ( *str == '0' && (str[1] == 'x' || str[1] == 'X') && (v = hex_code( str[2] )) >= 0 ) {
-			int hex;
+		else if ( *str == '0' && (str[1] == 'x' || str[1] == 'X') && (hex = hex_code( str[2] )) >= 0 ) {
+			v = hex;
 			str += 3; // 0xH
 			while ( (hex = hex_code( *str )) >= 0 ) {
 				v = v * 16 + hex;
@@ -4015,8 +4016,9 @@ static const char *parseAffinityMask( const char *str, uint64_t *outv, int level
 
 		if ( level == 0 ) {
 			while ( *str == '+' || *str == '-' ) {
+				const char op = *str;
 				str = parseAffinityMask( str + 1, &v, level + 1 );
-				switch ( *str ) {
+				switch ( op ) {
 					case '+': mask |= v; break;
 					case '-': mask &= ~v; break;
 					default: str = ""; break;

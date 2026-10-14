@@ -25,6 +25,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 #include "sdl_local.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "../client/client.h"
 #include "../renderercommon/tr_public.h"
 #include "sdl_glw.h"

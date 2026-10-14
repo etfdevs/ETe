@@ -262,7 +262,7 @@ static qboolean GLW_EnterFullscreen( SDL_Window *window, const SDL_DisplayMode *
 	return qtrue;
 }
 
-
+#if 0
 static SDL_DisplayID FindNearestDisplay( int *x, int *y, int w, int h )
 {
 	const int cx = *x + w / 2;
@@ -345,6 +345,7 @@ static SDL_DisplayID FindNearestDisplay( int *x, int *y, int w, int h )
 
 	return display;
 }
+#endif
 
 typedef struct window_Position_s {
 	int x;
@@ -1536,12 +1537,15 @@ todo use SDL_SetClipboardData
 void Sys_SetClipboardBitmap( const byte *bitmap, int length )
 {
 #ifndef DEDICATED
+	// SDL3 identifies clipboard types via standard MIME types
+	ClipboardData *ctx = NULL;
+	const char *mime_types[] = { "image/bmp" };
 	if (!bitmap || length <= 0) {
         return;
     }
 
     // Allocate our tracking structure
-    ClipboardData *ctx = (ClipboardData *)SDL_malloc(sizeof(ClipboardData));
+    ctx = (ClipboardData *)SDL_malloc(sizeof(ClipboardData));
     if (!ctx) return;
 
     // Allocate and copy the actual bitmap data so it lives beyond this function
@@ -1552,9 +1556,6 @@ void Sys_SetClipboardBitmap( const byte *bitmap, int length )
         return;
     }
     SDL_memcpy(ctx->data, bitmap, ctx->length);
-
-    // SDL3 identifies clipboard types via standard MIME types
-    const char *mime_types[] = { "image/bmp" };
 
     // Offer the data to the OS via SDL3
     if (!SDL_SetClipboardData(ProvideClipboardData, CleanupClipboardData, ctx, mime_types, 1)) {

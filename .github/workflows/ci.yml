@@ -97,7 +97,7 @@ jobs:
     - name: Compile
       run: |
         if ('${{ matrix.arch }}' -eq 'x86') {
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-mingw-x86-windows.cmake
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/cross-mingw-x86-windows.cmake -DUSE_SDL3=OFF -DUSE_SDL2=OFF
         } else {
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         }
