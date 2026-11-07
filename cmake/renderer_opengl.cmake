@@ -16,6 +16,7 @@ set(RENDERER_OPENGL_SOURCES
 	"${SOURCE_DIR}/renderer/tr_cmesh.c"
 	"${SOURCE_DIR}/renderer/tr_common.h"
 	"${SOURCE_DIR}/renderer/tr_curve.c"
+	"${SOURCE_DIR}/renderer/tr_debug.c"
 	"${SOURCE_DIR}/renderer/tr_decals.c"
 	"${SOURCE_DIR}/renderer/tr_flares.c"
 	"${SOURCE_DIR}/renderer/tr_image.c"
