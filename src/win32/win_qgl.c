@@ -47,7 +47,6 @@ If you have questions concerning this license or the applicable additional terms
 
 #define GLE( ret, name, ... ) ret ( APIENTRY * q##name )( __VA_ARGS__ );
 QGL_Win32_PROCS;
-QGL_Win32_ANSI_PROCS;
 QGL_Swp_PROCS;
 #undef GLE
 
@@ -70,7 +69,6 @@ void QGL_Shutdown( qboolean unloadDLL )
 	
 #define GLE( ret, name, ... ) q##name = NULL;
 	QGL_Win32_PROCS;
-	QGL_Win32_ANSI_PROCS;
 	QGL_Swp_PROCS;
 #undef GLE
 }
@@ -155,10 +153,6 @@ qboolean QGL_Init( const char *dllname )
 
 #define GLE( ret, name, ... ) q##name = GL_GetProcAddress( XSTRING( name ) ); if ( !q##name ) { Com_Printf( "Error resolving core Win32 functions\n" ); return qfalse; }
 	QGL_Win32_PROCS;
-#undef GLE
-
-#define GLE( ret, name, ... ) q##name = GL_GetProcAddress( #name "A" ); if ( !q##name ) { Com_Printf( "Error resolving core Win32 functions\n" ); return qfalse; }
-	QGL_Win32_ANSI_PROCS;
 #undef GLE
 	return qtrue;
 }
