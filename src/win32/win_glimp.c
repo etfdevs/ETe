@@ -102,11 +102,6 @@ static cvar_t *r_stereoEnabled;
 static cvar_t *r_verbose;				// used for verbose debug spew
 #endif
 
-#ifdef USE_OPENGL_API
-int gl_NormalFontBase = 0;
-static qboolean fontbase_init = qfalse;
-#endif
-
 /*
 ** GLW_StartDriverAndSetMode
 */
@@ -1280,77 +1275,6 @@ static void GLimp_DetectSteamOverlay( void ) {
 
 
 #ifdef USE_OPENGL_API
-#define QGL_List_PROCS \
-	GLE( GLuint, glGenLists, GLsizei range ) \
-	GLE( void, glDeleteLists, GLuint list, GLsizei range )
-
-#define GLE( ret, name, ... ) ret ( APIENTRY * q##name )( __VA_ARGS__ );
-	QGL_List_PROCS;
-#undef GLE
-
-
-/*
-** GLW_GenDefaultLists
-*/
-static void GLW_GenDefaultLists( void ) {
-	HFONT hfont, oldhfont;
-
-	// keep going, we'll probably just leak some stuff
-	if ( fontbase_init ) {
-		Com_DPrintf( "ERROR: GLW_GenDefaultLists: font base is already marked initialized\n" );
-	}
-
-	// create font display lists
-	gl_NormalFontBase = qglGenLists( 256 );
-
-	if ( gl_NormalFontBase == 0 ) {
-		Com_Printf( "ERROR: couldn't create font (glGenLists)\n" );
-		return;
-	}
-
-	hfont = CreateFont(
-		12, // logical height of font
-		6,  // logical average character width
-		0,  // angle of escapement
-		0,  // base-line orientation angle
-		0,  // font weight
-		0,  // italic attribute flag
-		0,  // underline attribute flag
-		0,  // strikeout attribute flag
-		0,  // character set identifier
-		0,  // output precision
-		0,  // clipping precision
-		0,  // output quality
-		0,  // pitch and family
-		"" ); // pointer to typeface name string
-
-	if ( !hfont ) {
-		Com_Printf( "ERROR: couldn't create font (CreateFont)\n" );
-		return;
-	}
-
-	oldhfont = SelectObject( glw_state.hDC, hfont );
-	qwglUseFontBitmaps( glw_state.hDC, 0, 255, gl_NormalFontBase );
-
-	SelectObject( glw_state.hDC, oldhfont );
-	DeleteObject( hfont );
-
-	fontbase_init = qtrue;
-}
-
-/*
-** GLW_DeleteDefaultLists
-*/
-static void GLW_DeleteDefaultLists( void ) {
-	if ( !fontbase_init ) {
-		Com_DPrintf( "ERROR: GLW_DeleteDefaultLists: no font list initialized\n" );
-		return;
-	}
-
-	qglDeleteLists( gl_NormalFontBase, 256 );
-	fontbase_init = qfalse;
-}
-
 
 /*
 ** GLW_LoadOpenGL
@@ -1441,11 +1365,6 @@ void GLimp_EndFrame( void )
 }
 
 
-int GLimp_NormalFontBase( void ) {
-	return gl_NormalFontBase;
-}
-
-
 static qboolean GLW_StartOpenGL( void )
 {
 	//
@@ -1519,13 +1438,6 @@ void GLimp_Init( glconfig_t *config )
 		Com_Printf( "...WGL_EXT_swap_control not found\n" );
 	}
 
-#define GLE( ret, name, ... ) q##name = GL_GetProcAddress( XSTRING( name ) ); if ( !q##name ) Com_Error( ERR_VID_FATAL, "Error resolving core OpenGL functions" );
-	QGL_List_PROCS;
-#undef GLE
-
-	// initialise default lists
-	GLW_GenDefaultLists();
-
 	// show main window after all initializations
 	ShowWindow( g_wv.hWnd, SW_SHOW );
 
@@ -1559,13 +1471,6 @@ void GLimp_Shutdown( qboolean unloadDLL )
 
 	// restore gamma.  We do this first because 3Dfx's extension needs a valid OGL subsystem
 	GLW_RestoreGamma();
-
-	// delete display lists
-	GLW_DeleteDefaultLists();
-
-#define GLE( ret, name, ... ) q##name = NULL;
-	QGL_List_PROCS;
-#undef GLE
 
 	// set current context to NULL
 	if ( qwglMakeCurrent )

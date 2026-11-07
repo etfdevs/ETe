@@ -119,6 +119,11 @@ void R_Fog( glfog_t *curfog ) {
 //		}
 	}
 
+	// NV fog mode
+	if ( glConfig.NVFogAvailable ) {
+		qglFogi( GL_FOG_DISTANCE_MODE_NV, glConfig.NVFogMode );
+	}
+
 	qglClearColor( curfog->color[0], curfog->color[1], curfog->color[2], curfog->color[3] );
 }
 

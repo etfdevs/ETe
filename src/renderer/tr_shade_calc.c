@@ -1157,7 +1157,12 @@ const fogProgramParms_t *RB_CalcFogProgramParms( void )
 	VectorCopy( fog->surface, fogSurface );
 	fogSurface[3] = fog->surface[3] + DotProduct( fogSurface, bmodel->orientation.origin );
 
-	parm.fogColor = fog->parms.color;
+	// use the same live byte color as RB_FogPass() so runtime global fog
+	// transitions, r_mapGreyScale and overbright scaling stay in sync
+	parm.fogColor[0] = fog->shader->fogParms.colorInt.rgba[0] * ( 1.0f / 255.0f );
+	parm.fogColor[1] = fog->shader->fogParms.colorInt.rgba[1] * ( 1.0f / 255.0f );
+	parm.fogColor[2] = fog->shader->fogParms.colorInt.rgba[2] * ( 1.0f / 255.0f );
+	parm.fogColor[3] = fog->shader->fogParms.colorInt.rgba[3] * ( 1.0f / 255.0f );
 
 	// ydnar: general fog case
 	if ( fog->originalBrushNumber >= 0 ) {

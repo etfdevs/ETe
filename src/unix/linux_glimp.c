@@ -85,9 +85,6 @@ If you have questions concerning this license or the applicable additional terms
 
 #define WINDOW_CLASS_NAME   "Enemy Territory"
 
-//int gl_NormalFontBase = 0;
-//static qboolean fontbase_init = qfalse;
-
 typedef enum
 {
   RSERR_OK,
@@ -1985,9 +1982,6 @@ void GLimp_EndFrame( void )
 }
 
 
-int GLimp_NormalFontBase( void ) {
-    return 0; //gl_NormalFontBase;
-}
 #endif // USE_OPENGL_API
 
 

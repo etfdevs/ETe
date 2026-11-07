@@ -138,15 +138,71 @@ enum {
 	FP_FOG_ONLY
 };
 
-static const char *BuildVP( int multitexture, int fogmode, int texgen )
+static void BuildGLFogVP( char *buf )
 {
-	static char buf[2048], b[256];
+	strcat( buf,
+	"PARAM mvpX = state.matrix.modelview[0].row[0]; \n"
+	"PARAM mvpY = state.matrix.modelview[0].row[1]; \n"
+	"PARAM mvpZ = state.matrix.modelview[0].row[2]; \n"
+	"PARAM fogControl = program.local[1]; \n"
+	"TEMP fogEye, fogDist; \n"
+
+	// eye-space position
+	"DP4 fogEye.x, mvpX, vertex.position; \n"
+	"DP4 fogEye.y, mvpY, vertex.position; \n"
+	"DP4 fogEye.z, mvpZ, vertex.position; \n"
+
+	// eye-plane absolute, eye-plane signed and eye-radial distances
+	"ABS fogDist.x, fogEye.z; \n"
+	"SUB fogDist.y, fogDist.x, fogEye.z; \n"
+	"MAD fogDist.x, fogControl.y, fogDist.y, fogEye.z; \n"
+	"DP3 fogDist.z, fogEye, fogEye; \n"
+	"MAX fogDist.z, fogDist.z, {0.000001}; \n"
+	"RSQ fogDist.w, fogDist.z; \n"
+	"MUL fogDist.z, fogDist.z, fogDist.w; \n"
+	"SUB fogDist.y, fogDist.z, fogDist.x; \n"
+	"MAD fogDist.x, fogControl.x, fogDist.y, fogDist.x; \n"
+	"MOV result.fogcoord.x, fogDist.x; \n" );
+}
+
+
+// glFog is applied to the stage color before the brush-fog pass, matching
+// the vanilla ordering: fixed-function fog at stage time, then RB_FogPass()
+static void BuildGLFogFP( char *buf )
+{
+	strcat( buf,
+	"PARAM gfColor = state.fog.color; \n"
+	"PARAM gfParams = state.fog.params; \n"
+	"PARAM gfControl = program.local[1]; \n"
+	"ATTRIB gfCoord = fragment.fogcoord; \n"
+	"TEMP gf; \n"
+
+	// linear: f = ( end - z ) / ( end - start )
+	"MUL gf.y, gfParams.z, gfParams.w; \n"
+	"MAD_SAT gf.x, gfCoord.x, -gfParams.w, gf.y; \n"
+
+	// exponential: f = exp( -density * z )
+	"MUL gf.y, gfCoord.x, gfParams.x; \n"
+	"MUL gf.y, gf.y, 1.442695; \n"
+	"EX2_SAT gf.y, -gf.y; \n"
+
+	"CMP gf.x, gfControl.x, gf.y, gf.x; \n"
+	"LRP base.rgb, gf.x, base, gfColor; \n" );
+}
+
+
+static const char *BuildVP( int multitexture, int fogmode, int texgen, int glfog )
+{
+	static char buf[4096], b[256];
 	const char *tex0;
 	const char *tex1;
 
 	strcpy( buf,
 	"!!ARBvp1.0 \n"
 	"OPTION ARB_position_invariant; \n" );
+
+	if ( glfog )
+		BuildGLFogVP( buf );
 
 	switch ( fogmode ) {
 		default:
@@ -225,9 +281,9 @@ static const char *BuildVP( int multitexture, int fogmode, int texgen )
 }
 
 
-const char *BuildFP( int multitexture, int alphatest, int fogMode )
+const char *BuildFP( int multitexture, int alphatest, int fogMode, int glfog )
 {
-	static char buf[1024];
+	static char buf[2048];
 
 	strcpy( buf, "!!ARBfp1.0 \n"
 	"OPTION ARB_precision_hint_fastest; \n"
@@ -268,6 +324,8 @@ const char *BuildFP( int multitexture, int alphatest, int fogMode )
 
 	if ( fogMode == FP_FOG_BLEND ) {
 		strcat( buf, "MUL base, base, fragment.color; \n" );
+		if ( glfog )
+			BuildGLFogFP( buf );
 		strcat( buf, genATestFP( alphatest ) );
 		strcat( buf, "TEMP fog; \n"
 		"TEX fog, fragment.texcoord[4], texture[2], 2D; \n"
@@ -275,9 +333,12 @@ const char *BuildFP( int multitexture, int alphatest, int fogMode )
 		"LRP_SAT result.color, fog.a, fog, base; \n"
 		"END \n" );
 	} else {
-		if ( alphatest ) {
+		if ( alphatest || glfog ) {
 			strcat( buf, "MUL base, base, fragment.color; \n" );
-			strcat( buf, genATestFP( alphatest ) );
+			if ( glfog )
+				BuildGLFogFP( buf );
+			if ( alphatest )
+				strcat( buf, genATestFP( alphatest ) );
 			strcat( buf,
 			"MOV result.color, base; \n"
 			"END \n" );
@@ -294,15 +355,17 @@ const char *BuildFP( int multitexture, int alphatest, int fogMode )
 
 // multitexture modes: single, mt-add, mt-modulate, mt-replace
 // environment mapping: none, tx0, tx1, tx0 + tx1
-// fog modes: disabled, eye-in, eye-out, fog-only
-static GLuint vbo_vp[4*4*4+1];
+// glFog: disabled, enabled
+// fog modes: disabled, eye-in, eye-out
+static GLuint vbo_vp[4*4*2*4+1];
 
 // multitexture modes: single, mt-add, mt-modulate, mt-replace
 // alpha test modes: disabled, GT0, LT80, GE80
-// fog modes: disabled, enabled, fog-only, unused
-static GLuint vbo_fp[4*4*4+1];
+// glFog: disabled, enabled
+// fog modes: disabled, blend, fog-only, unused
+static GLuint vbo_fp[4*4*2*4+1];
 
-static int getVPindex( int multitexture, int fogmode, int texgen )
+static int getVPindex( int multitexture, int fogmode, int texgen, int glfog )
 {
 	int index;
 
@@ -317,14 +380,17 @@ static int getVPindex( int multitexture, int fogmode, int texgen )
 	index <<= 2;  // reserve bits for texgen
 	index |= texgen & 3; // environment mapping: none, tx0, tx1, tx0 + tx1
 
+	index <<= 1;  // reserve bit for glFog
+	index |= glfog & 1;
+
 	index <<= 2;  // reserve bits for fogmode
-	index |= fogmode & 3; // disabled, eye-in, eye-out, fog-only
+	index |= fogmode & 3; // disabled, eye-in, eye-out
 
 	return index + 1;
 }
 
 
-static int getFPindex( int multitexture, int atest, int fogmode )
+static int getFPindex( int multitexture, int atest, int fogmode, int glfog )
 {
 	int index;
 
@@ -344,6 +410,9 @@ static int getFPindex( int multitexture, int atest, int fogmode )
 		case GLS_ATEST_GE_80: index |= 3; break;
 		default: break;
 	}
+
+	index <<= 1; // reserve bit for glFog
+	index |= glfog & 1;
 
 	index <<= 2; // reserve bits for fog mode
 	index |= fogmode & 3; // disabled, blend, fog-only
@@ -450,24 +519,24 @@ static qboolean isStaticAgen( alphaGen_t agen )
 }
 
 
-static void CompileVertexProgram( int VPindex, int mtx, int fogMode, int texgen )
+static void CompileVertexProgram( int VPindex, int mtx, int fogMode, int texgen, int glfog )
 {
 	if ( vbo_vp[ VPindex ] == 0 )
 	{
 		// generate vertex program
 		qglGenProgramsARB( 1, &vbo_vp[ VPindex ] );
-		ARB_CompileProgram( Vertex, BuildVP( mtx, fogMode, texgen ), vbo_vp[ VPindex ] );
+		ARB_CompileProgram( Vertex, BuildVP( mtx, fogMode, texgen, glfog ), vbo_vp[ VPindex ] );
 	}
 }
 
 
-static void CompileFragmentProgram( int FPindex, int mtx, int atestBits, int fogMode )
+static void CompileFragmentProgram( int FPindex, int mtx, int atestBits, int fogMode, int glfog )
 {
 	if ( vbo_fp[ FPindex ] == 0 )
 	{
 		// generate fragment program
 		qglGenProgramsARB( 1, &vbo_fp[ FPindex ] );
-		ARB_CompileProgram( Fragment, BuildFP( mtx, atestBits, fogMode ), vbo_fp[ FPindex ] );
+		ARB_CompileProgram( Fragment, BuildFP( mtx, atestBits, fogMode, glfog ), vbo_fp[ FPindex ] );
 	}
 }
 
@@ -554,30 +623,40 @@ static qboolean isStaticShader( shader_t *shader )
 		}
 
 		if ( texgen || shader->numUnfoggedPasses == 1 ) {
-			stage->vboVPindex[1] = getVPindex( mtx, VP_FOG_EYE_IN, texgen );
-			stage->vboVPindex[2] = getVPindex( mtx, VP_FOG_EYE_OUT, texgen );
-			stage->vboFPindex[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND );
-			CompileVertexProgram( stage->vboVPindex[1], mtx, VP_FOG_EYE_IN, texgen );
-			CompileVertexProgram( stage->vboVPindex[2], mtx, VP_FOG_EYE_OUT, texgen );
-			CompileFragmentProgram( stage->vboFPindex[1], mtx, atestBits, FP_FOG_BLEND );
+			stage->vboVPindex[1] = getVPindex( mtx, VP_FOG_EYE_IN, texgen, 0 );
+			stage->vboVPindex[2] = getVPindex( mtx, VP_FOG_EYE_OUT, texgen, 0 );
+			stage->vboFPindex[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 0 );
+			stage->vboVPindexGLFog[1] = getVPindex( mtx, VP_FOG_EYE_IN, texgen, 1 );
+			stage->vboVPindexGLFog[2] = getVPindex( mtx, VP_FOG_EYE_OUT, texgen, 1 );
+			stage->vboFPindexGLFog[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 1 );
+			CompileVertexProgram( stage->vboVPindex[1], mtx, VP_FOG_EYE_IN, texgen, 0 );
+			CompileVertexProgram( stage->vboVPindex[2], mtx, VP_FOG_EYE_OUT, texgen, 0 );
+			CompileFragmentProgram( stage->vboFPindex[1], mtx, atestBits, FP_FOG_BLEND, 0 );
+			CompileVertexProgram( stage->vboVPindexGLFog[1], mtx, VP_FOG_EYE_IN, texgen, 1 );
+			CompileVertexProgram( stage->vboVPindexGLFog[2], mtx, VP_FOG_EYE_OUT, texgen, 1 );
+			CompileFragmentProgram( stage->vboFPindexGLFog[1], mtx, atestBits, FP_FOG_BLEND, 1 );
 			if ( texgen ) {
-				stage->vboVPindex[0] = getVPindex( mtx, VP_FOG_NONE, texgen );
-				stage->vboFPindex[0] = getFPindex( mtx, atestBits, FP_FOG_NONE );
-				CompileVertexProgram( stage->vboVPindex[0], mtx, VP_FOG_NONE, texgen );
-				CompileFragmentProgram( stage->vboFPindex[0], mtx, atestBits, FP_FOG_NONE );
+				stage->vboVPindex[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 0 );
+				stage->vboFPindex[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 0 );
+				stage->vboVPindexGLFog[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 1 );
+				stage->vboFPindexGLFog[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 1 );
+				CompileVertexProgram( stage->vboVPindex[0], mtx, VP_FOG_NONE, texgen, 0 );
+				CompileFragmentProgram( stage->vboFPindex[0], mtx, atestBits, FP_FOG_NONE, 0 );
+				CompileVertexProgram( stage->vboVPindexGLFog[0], mtx, VP_FOG_NONE, texgen, 1 );
+				CompileFragmentProgram( stage->vboFPindexGLFog[0], mtx, atestBits, FP_FOG_NONE, 1 );
 			}
 		}
 	}
 
-	world_vbo.fogVPindex[0] = getVPindex( 0, VP_FOG_EYE_IN, 0 );
-	world_vbo.fogVPindex[1] = getVPindex( 0, VP_FOG_EYE_OUT, 0 );
+	world_vbo.fogVPindex[0] = getVPindex( 0, VP_FOG_EYE_IN, 0, 0 );
+	world_vbo.fogVPindex[1] = getVPindex( 0, VP_FOG_EYE_OUT, 0, 0 );
 
-	world_vbo.fogFPindex = getFPindex( 0, 0, FP_FOG_ONLY );
+	world_vbo.fogFPindex = getFPindex( 0, 0, FP_FOG_ONLY, 0 );
 
-	CompileVertexProgram( world_vbo.fogVPindex[0], 0, VP_FOG_EYE_IN, 0 );
-	CompileVertexProgram( world_vbo.fogVPindex[0], 0, VP_FOG_EYE_OUT, 0 );
+	CompileVertexProgram( world_vbo.fogVPindex[0], 0, VP_FOG_EYE_IN, 0, 0 );
+	CompileVertexProgram( world_vbo.fogVPindex[1], 0, VP_FOG_EYE_OUT, 0, 0 );
 
-	CompileFragmentProgram( world_vbo.fogFPindex, 0 /*mtx*/, 0 /*atest*/, FP_FOG_ONLY );
+	CompileFragmentProgram( world_vbo.fogFPindex, 0 /*mtx*/, 0 /*atest*/, FP_FOG_ONLY, 0 );
 
 	return qtrue;
 }
@@ -1351,6 +1430,35 @@ static void VBO_PrepareQueues( void )
 }
 
 
+static void VBO_SetupGLFog( void )
+{
+	const glfog_t *curfog;
+	float radial, absolute, expMode;
+
+	if ( glConfig.NVFogAvailable ) {
+		radial = ( glConfig.NVFogMode == GL_EYE_RADIAL_NV ) ? 1.0f : 0.0f;
+		absolute = ( glConfig.NVFogMode == GL_EYE_PLANE_ABSOLUTE_NV ) ? 1.0f : 0.0f;
+	} else {
+		// default fixed-function behaviour: distance is abs( eye z )
+		radial = 0.0f;
+		absolute = 1.0f;
+	}
+
+	// use the same fog slot as SetIteratorFog()
+	if ( backEnd.refdef.rdflags & RDF_DRAWINGSKY )
+		curfog = &glfogsettings[FOG_SKY];
+	else if ( skyboxportal && ( backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ) )
+		curfog = &glfogsettings[FOG_PORTALVIEW];
+	else
+		curfog = &glfogsettings[FOG_CURRENT];
+
+	expMode = ( curfog->mode == GL_LINEAR ) ? 0.0f : 1.0f;
+
+	qglProgramLocalParameter4fARB( GL_VERTEX_PROGRAM_ARB, 1, radial, absolute, 0.0f, 0.0f );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, expMode, 0.0f, 0.0f, 0.0f );
+}
+
+
 static const fogProgramParms_t *VBO_SetupFog( int VPindex, int FPindex, GLuint *pvp, GLuint *pfp )
 {
 	const fogProgramParms_t *fparm;
@@ -1395,6 +1503,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	GLbitfield stateBits, normalMask;
 	qboolean fogPass;
 	qboolean lightmapStage;
+	qboolean glFogStage;
 	GLuint vp, fp;
 
 	fogPass = ( tess.fogNum && tess.shader->fogPass );
@@ -1405,9 +1514,14 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	if ( fogPass && tess.shader->numUnfoggedPasses == 1 ) {
 		// combined fog + single stage program
 		pStage = input->xstages[ 0 ];
-		if ( !tess.shader->noFog || pStage->isFogged )
-			fparm = VBO_SetupFog( pStage->vboVPindex[1], pStage->vboFPindex[1], &vp, &fp );
-		else {
+		if ( !tess.shader->noFog || pStage->isFogged ) {
+			if ( fogIsOn ) {
+				fparm = VBO_SetupFog( pStage->vboVPindexGLFog[1], pStage->vboFPindexGLFog[1], &vp, &fp );
+				VBO_SetupGLFog();
+			} else {
+				fparm = VBO_SetupFog( pStage->vboVPindex[1], pStage->vboFPindex[1], &vp, &fp );
+			}
+		} else {
 			fparm = NULL;
 			vp = fp = 0;
 		}
@@ -1441,10 +1555,30 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 		// stages, matching RB_IterateStagesGeneric().
 		lightmapStage = ( r_lightmap->integer && ( pStage->bundle[0].isLightmap || pStage->bundle[1].isLightmap ) );
 
+		// Ridah, per stage fogging (detail textures)
+		if ( tess.shader->noFog && pStage->isFogged ) {
+			R_FogOn();
+		} else if ( tess.shader->noFog && !pStage->isFogged ) {
+			R_FogOff(); // turn it back off
+		} else {    // make sure it's on
+			R_FogOn();
+		}
+		glFogStage = fogIsOn;
+		// done.
+
 		if ( fparm == NULL || lightmapStage ) {
-			vp = lightmapStage ? 0 : vbo_vp[ pStage->vboVPindex[0] ];
-			fp = lightmapStage ? 0 : vbo_fp[ pStage->vboFPindex[0] ];
+			if ( lightmapStage ) {
+				vp = fp = 0;
+			} else if ( glFogStage ) {
+				vp = vbo_vp[ pStage->vboVPindexGLFog[0] ];
+				fp = vbo_fp[ pStage->vboFPindexGLFog[0] ];
+			} else {
+				vp = vbo_vp[ pStage->vboVPindex[0] ];
+				fp = vbo_fp[ pStage->vboFPindex[0] ];
+			}
 			ARB_ProgramEnableExt( vp, fp );
+			if ( fp && glFogStage )
+				VBO_SetupGLFog();
 		}
 
 		if ( fp ) {
@@ -1487,16 +1621,6 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 
 		GL_SelectTexture( 0 );
 		R_BindAnimatedImage( &pStage->bundle[0] );
-
-		// Ridah, per stage fogging (detail textures)
-		if ( tess.shader->noFog && pStage->isFogged ) {
-			R_FogOn();
-		} else if ( tess.shader->noFog && !pStage->isFogged ) {
-			R_FogOff(); // turn it back off
-		} else {    // make sure it's on
-			R_FogOn();
-		}
-		// done.
 
 		if ( pStage->mtEnv ) { // multitexture
 			if ( fp == 0 ) {

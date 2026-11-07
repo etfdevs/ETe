@@ -74,6 +74,7 @@ cvar_t	*r_dlightSpecPower;
 cvar_t	*r_dlightSpecColor;
 cvar_t	*r_dlightScale;
 cvar_t	*r_dlightIntensity;
+cvar_t	*r_dlightMaxIntensity;
 #endif // USE_PMLIGHT
 
 cvar_t	*r_dlightSaturation;
@@ -130,6 +131,14 @@ cvar_t	*r_clampToEdge; // ydnar: opengl 1.2 GL_CLAMP_TO_EDGE SUPPORT
 cvar_t	*r_ext_texture_filter_anisotropic;
 
 cvar_t	*r_ext_max_anisotropy;
+
+cvar_t	*r_ext_NV_fog_dist;
+cvar_t	*r_nv_fogdist_mode;
+
+static cvar_t	*r_ext_ATI_pntriangles;
+static cvar_t	*r_ati_truform_tess;        //
+//static cvar_t	*r_ati_truform_normalmode;  // linear/quadratic
+//static cvar_t	*r_ati_truform_pointmode;   // linear/cubic
 //----(SA)	end
 
 cvar_t	*r_ignoreGLErrors;
@@ -392,8 +401,13 @@ static void R_InitExtensions( void )
 	glConfig.anisotropicAvailable = qfalse;
 	glConfig.maxAnisotropy = 0;
 
+	glConfig.NVFogAvailable = qfalse;
+
 	qglLockArraysEXT = NULL;
 	qglUnlockArraysEXT = NULL;
+	qglPNTrianglesiATI = NULL;
+
+	glConfig.ATIMaxTruformTess = 0;
 
 	glConfig.numTextureUnits = 1;
 	qglMultiTexCoord2fARB = NULL;
@@ -615,6 +629,78 @@ static void R_InitExtensions( void )
 	else
 	{
 		ri.Printf( PRINT_ALL, "...GL_EXT_compiled_vertex_array not found\n" );
+	}
+
+	// GL_NV_fog_distance
+	if ( R_HaveExtension( "GL_NV_fog_distance" ) )
+	{
+		if ( r_ext_NV_fog_dist->integer )
+		{
+			glConfig.NVFogAvailable = qtrue;
+			ri.Printf( PRINT_ALL, "...using GL_NV_fog_distance\n" );
+		}
+		else
+		{
+			ri.Printf( PRINT_ALL, "...ignoring GL_NV_fog_distance\n" );
+			ri.Cvar_Set( "r_ext_NV_fog_dist", "0" );
+		}
+	}
+	else
+	{
+		ri.Printf( PRINT_ALL, "...GL_NV_fog_distance not found\n" );
+		ri.Cvar_Set( "r_ext_NV_fog_dist", "0" );
+	}
+
+	// GL_ATI_pn_triangles
+	if ( R_HaveExtension( "GL_ATI_pn_triangles" ) )
+	{
+		if ( r_ext_ATI_pntriangles->integer )
+		{
+			qglPNTrianglesiATI = ri.GL_GetProcAddress( "glPNTrianglesiATI" );
+
+			if ( qglPNTrianglesiATI ) {
+				int _maxtess = 0;
+
+				// get max supported tesselation
+				qglGetIntegerv( GL_MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI, &_maxtess );
+
+	#ifdef __APPLE__
+				glConfig.ATIMaxTruformTess = _maxtess = 7;
+	#else
+				glConfig.ATIMaxTruformTess = _maxtess;
+	#endif
+
+				if ( _maxtess <= 0 ) {
+					ri.Printf( PRINT_ALL, "...GL_ATI_pn_triangles not properly supported!\n" );
+					ri.Cvar_Set( "r_ext_ATI_pntriangles", "0" );
+					_maxtess = glConfig.ATIMaxTruformTess = 0;
+					qglPNTrianglesiATI = NULL;
+				}
+				else
+				{
+					if ( r_ati_truform_tess->value > _maxtess ) {
+						ri.Cvar_Set( "r_ati_truform_tess", va( "%d", _maxtess ) );
+					}
+					ri.Printf( PRINT_ALL, "...using GL_ATI_pn_triangles\n" );
+				}
+			}
+			else
+			{
+				ri.Printf( PRINT_ALL, "...GL_ATI_pn_triangles not properly supported\n" );
+				ri.Cvar_Set( "r_ext_ATI_pntriangles", "0" );
+				glConfig.ATIMaxTruformTess = 0;
+				qglPNTrianglesiATI = NULL;
+			}
+		}
+		else
+		{
+			ri.Printf( PRINT_ALL, "...ignoring GL_ATI_pn_triangles\n" );
+		}
+	}
+	else
+	{
+		ri.Printf( PRINT_ALL, "...GL_ATI_pn_triangles not found\n" );
+		ri.Cvar_Set( "r_ext_ATI_pntriangles", "0" );
 	}
 
 	if ( R_HaveExtension( "GL_EXT_texture_filter_anisotropic" ) )
@@ -1433,6 +1519,10 @@ static void GL_SetDefaultState( void )
 	qglEnable( GL_SCISSOR_TEST );
 	qglDisable( GL_CULL_FACE );
 	qglDisable( GL_BLEND );
+
+	if ( qglPNTrianglesiATI ) {
+		qglPNTrianglesiATI( GL_PN_TRIANGLES_TESSELATION_LEVEL_ATI, r_ati_truform_tess->value );
+	}
 }
 
 
@@ -1792,6 +1882,9 @@ static void R_Register( void )
 	r_dlightIntensity = ri.Cvar_Get( "r_dlightIntensity", "1.0", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_dlightIntensity, "0.1", "1", CV_FLOAT );
 	ri.Cvar_SetDescription( r_dlightIntensity, "Adjusts dynamic light intensity but not radius" );
+	r_dlightMaxIntensity = ri.Cvar_Get( "r_dlightMaxIntensity", "1.25", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_dlightMaxIntensity, "0", "8", CV_FLOAT );
+	ri.Cvar_SetDescription( r_dlightMaxIntensity, "Clamps dynamic light intensity in per-pixel modes; values above this no longer brighten the light, matching legacy saturation and suppressing overbright flicker from mods that animate intensity. 0 = unlimited" );
 #endif // USE_PMLIGHT
 	r_dlightSaturation = ri.Cvar_Get( "r_dlightSaturation", "1", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_dlightSaturation, "0", "1", CV_FLOAT );
@@ -2003,6 +2096,12 @@ static void R_Register( void )
 //----(SA)	end
 	ri.Cvar_CheckRange( r_ext_max_anisotropy, "1", NULL, CV_INTEGER );
 	ri.Cvar_SetDescription( r_ext_max_anisotropy, "Sets maximum anisotropic level for your graphics driver. Requires \\r_ext_texture_filter_anisotropic" );
+
+	r_ext_NV_fog_dist = ri.Cvar_Get( "r_ext_NV_fog_dist", "0", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE );
+	r_nv_fogdist_mode = ri.Cvar_Get( "r_nv_fogdist_mode", "GL_EYE_RADIAL_NV", CVAR_ARCHIVE_ND | CVAR_UNSAFE );  // default to 'looking good'
+
+	r_ext_ATI_pntriangles = ri.Cvar_Get( "r_ext_ATI_pntriangles", "0", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_UNSAFE ); //----(SA)	default to '0'
+	r_ati_truform_tess = ri.Cvar_Get( "r_ati_truform_tess", "1", CVAR_ARCHIVE_ND | CVAR_UNSAFE );
 
 	r_clampToEdge = ri.Cvar_Get( "r_clampToEdge", "1", CVAR_ARCHIVE_ND | CVAR_LATCH | CVAR_DEVELOPER | CVAR_UNSAFE ); // ydnar: opengl 1.2 GL_CLAMP_TO_EDGE support
 	ri.Cvar_SetDescription( r_clampToEdge, "Allow GL_CLAMP_TO_EDGE instead of GL_CLAMP texture rendering. Requires OpenGL 1.2+.\nAvoids black box lines on skybox on NVIDIA hardware" );

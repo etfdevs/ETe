@@ -3805,7 +3805,6 @@ static void CL_InitRef( void ) {
 	rimp.GLimp_Shutdown = GLimp_Shutdown;
 	rimp.GL_GetProcAddress = GL_GetProcAddress;
 	rimp.GLimp_EndFrame = GLimp_EndFrame;
-	rimp.GLimp_NormalFontBase = GLimp_NormalFontBase;
 #endif
 
 	// Vulkan API

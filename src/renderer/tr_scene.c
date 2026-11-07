@@ -428,8 +428,6 @@ void RE_AddRefEntityToScene( const refEntity_t *ent, qboolean intShaderTime ) {
 	R_AddModelShadow( ent );
 }
 
-extern qboolean modIsETF;
-
 /*
 RE_AddLightToScene()
 ydnar: modified dlight system to support seperate radius and intensity
@@ -464,15 +462,16 @@ void RE_AddLightToScene( const vec3_t org, float radius, float intensity, float 
 	if ( R_GetDlightMode() )
 #endif
 	{
-		// ETF powerup hack
-		if ( modIsETF && ( radius == 200 || radius == 150 ) && intensity >= 1.25f )
-			intensity = 1.25f;
-
-		// ENSI NOTE FIXME this is quick and dirty hack to support intensity dlights (dyna)
-		r *= intensity;
-		g *= intensity;
-		b *= intensity;
-		// END ENSI
+		// Keep intensity separate from color: the per-pixel shaders apply it
+		// themselves and clamp the final contribution the same way legacy
+		// dynamic lights do.  Baking it into the color made directed lights and
+		// entity lighting apply intensity twice, and made mods that animate
+		// intensity (e.g. ETF powerup glows) pulse much harder than in legacy
+		// mode.  The optional cap removes that overbright flicker without
+		// mod-specific code.
+		if ( r_dlightMaxIntensity->value > 0.0f && intensity > r_dlightMaxIntensity->value ) {
+			intensity = r_dlightMaxIntensity->value;
+		}
 
 		r *= r_dlightIntensity->value;
 		g *= r_dlightIntensity->value;

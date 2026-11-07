@@ -862,7 +862,6 @@ void	GLimp_FlashWindow( int state );
 void	GLimp_Init( glconfig_t *config );
 void	GLimp_Shutdown( qboolean unloadDLL );
 void	GLimp_EndFrame( void );
-int		GLimp_NormalFontBase( void );
 void	*GL_GetProcAddress( const char *name );
 #endif
 

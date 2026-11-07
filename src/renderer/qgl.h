@@ -177,14 +177,32 @@ typedef char GLchar;
 #define GL_RENDERBUFFER                     0x8D41
 #endif
 
+#ifndef GL_ATI_pn_triangles
+#define GL_ATI_pn_triangles 1
+#define GL_PN_TRIANGLES_ATI               0x87F0
+#define GL_MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI 0x87F1
+#define GL_PN_TRIANGLES_POINT_MODE_ATI    0x87F2
+#define GL_PN_TRIANGLES_NORMAL_MODE_ATI   0x87F3
+#define GL_PN_TRIANGLES_TESSELATION_LEVEL_ATI 0x87F4
+#define GL_PN_TRIANGLES_POINT_MODE_LINEAR_ATI 0x87F5
+#define GL_PN_TRIANGLES_POINT_MODE_CUBIC_ATI 0x87F6
+#define GL_PN_TRIANGLES_NORMAL_MODE_LINEAR_ATI 0x87F7
+#define GL_PN_TRIANGLES_NORMAL_MODE_QUADRATIC_ATI 0x87F8
+#endif /* GL_ATI_pn_triangles */
+
+#ifndef GL_NV_fog_distance
+#define GL_NV_fog_distance 1
+#define GL_FOG_DISTANCE_MODE_NV           0x855A
+#define GL_EYE_RADIAL_NV                  0x855B
+#define GL_EYE_PLANE_ABSOLUTE_NV          0x855C
+#endif /* GL_NV_fog_distance */
+
 //===========================================================================
 
 #define QGL_Core_PROCS \
 	GLE( void, glAlphaFunc, GLenum func, GLclampf ref ) \
-	GLE( void, glBegin, GLenum mode ) \
 	GLE( void, glBindTexture, GLenum target, GLuint texture ) \
 	GLE( void, glBlendFunc, GLenum sfactor, GLenum dfactor ) \
-	GLE( void, glCallLists, GLsizei n, GLenum type, const GLvoid *lists ) \
 	GLE( void, glClear, GLbitfield mask ) \
 	GLE( void, glClearColor, GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha ) \
 	GLE( void, glClearDepth, GLclampd depth ) \
@@ -204,7 +222,6 @@ typedef char GLchar;
 	GLE( void, glDrawElements, GLenum mode, GLsizei count, GLenum type, const GLvoid *indices ) \
 	GLE( void, glEnable, GLenum cap ) \
 	GLE( void, glEnableClientState, GLenum array ) \
-	GLE( void, glEnd, void ) \
 	GLE( void, glFinish, void ) \
 	GLE( void, glFogf, GLenum pname, GLfloat param ) \
 	GLE( void, glFogfv, GLenum pname, const GLfloat *params ) \
@@ -216,7 +233,6 @@ typedef char GLchar;
 	GLE( const GLubyte*, glGetString, GLenum name ) \
 	GLE( void, glHint, GLenum target, GLenum mode ) \
 	GLE( void, glLineWidth, GLfloat width ) \
-	GLE( void, glListBase, GLuint base ) \
 	GLE( void, glLoadIdentity, void ) \
 	GLE( void, glLoadMatrixf, const GLfloat *m ) \
 	GLE( void, glMatrixMode, GLenum mode ) \
@@ -224,11 +240,8 @@ typedef char GLchar;
 	GLE( void, glPointSize, GLfloat size ) \
 	GLE( void, glPolygonMode, GLenum face, GLenum mode ) \
 	GLE( void, glPolygonOffset, GLfloat factor, GLfloat units ) \
-	GLE( void, glPopAttrib, void ) \
 	GLE( void, glPopMatrix, void ) \
-	GLE( void, glPushAttrib, GLbitfield mask ) \
 	GLE( void, glPushMatrix, void ) \
-	GLE( void, glRasterPos3fv, const GLfloat *v ) \
 	GLE( void, glReadPixels, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid *pixels ) \
 	GLE( void, glScissor, GLint x, GLint y, GLsizei width, GLsizei height ) \
 	GLE( void, glShadeModel, GLenum mode ) \
@@ -239,8 +252,6 @@ typedef char GLchar;
 	GLE( void, glTexImage2D, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *pixels ) \
 	GLE( void, glTexParameteri, GLenum target, GLenum pname, GLint param ) \
 	GLE( void, glTexSubImage2D, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels ) \
-	GLE( void, glVertex3f, GLfloat x, GLfloat y, GLfloat z ) \
-	GLE( void, glVertex3fv, const GLfloat *v ) \
 	GLE( void, glVertexPointer, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer ) \
 	GLE( void, glViewport, GLint x, GLint y, GLsizei width, GLsizei height )
 
@@ -248,8 +259,9 @@ typedef char GLchar;
 	GLE( void, glMultiTexCoord2fARB, GLenum texture, GLfloat s, GLfloat t ) \
 	GLE( void, glActiveTextureARB, GLenum texture ) \
 	GLE( void, glClientActiveTextureARB, GLenum texture ) \
-	GLE( void, glLockArraysEXT, GLint, GLint) \
-	GLE( void, glUnlockArraysEXT, void )
+	GLE( void, glLockArraysEXT, GLint, GLint ) \
+	GLE( void, glUnlockArraysEXT, void ) \
+	GLE( void, glPNTrianglesiATI, GLenum, GLint ) \
 
 #define QGL_ARB_PROGRAM_PROCS \
 	GLE( void, glGenProgramsARB, GLsizei n, GLuint *programs ) \
@@ -292,10 +304,6 @@ typedef char GLchar;
 	GLE( PROC,  wglGetProcAddress, LPCSTR ) \
 	GLE( BOOL,  wglMakeCurrent, HDC, HGLRC )
 
-// These require the ansi suffix when calling GetProcAddress
-#define QGL_Win32_ANSI_PROCS \
-	GLE( BOOL,  wglUseFontBitmaps, HDC, DWORD, DWORD, DWORD )
-
 #ifdef _WIN32
 #define QGL_Swp_PROCS \
 	GLE( BOOL,	wglSwapIntervalEXT, int interval )
@@ -320,7 +328,6 @@ typedef char GLchar;
 	QGL_Swp_PROCS;
 #ifdef _WIN32
 	QGL_Win32_PROCS;
-	QGL_Win32_ANSI_PROCS;
 #else // assume in opposition to win32
 	QGL_LinX11_PROCS;
 #endif

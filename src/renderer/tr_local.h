@@ -340,6 +340,8 @@ typedef struct {
 
 	short			vboVPindex[3];		// normal, eye-in, eye-out
 	short			vboFPindex[2];		// normal, fog-blend
+	short			vboVPindexGLFog[3];	// glFog variants
+	short			vboFPindexGLFog[2];	// glFog variants
 	
 	uint32_t		color_offset;		// within current shader
 	uint32_t		tex_offset[2];		// within current shader
@@ -620,7 +622,7 @@ typedef struct {
 	float		eyeInside; // 0.0 or 1.0
 	vec4_t		fogDistanceVector;
 	vec4_t		fogDepthVector;
-	const float *fogColor; // vec4_t
+	vec4_t		fogColor;
 	qboolean	level;
 } fogProgramParms_t;
 
@@ -1505,6 +1507,7 @@ extern cvar_t	*r_dlightSpecPower;		// 1 - 32
 extern cvar_t	*r_dlightSpecColor;		// -1.0 - 1.0
 extern cvar_t	*r_dlightScale;			// 0.1 - 1.0
 extern cvar_t	*r_dlightIntensity;		// 0.1 - 1.0
+extern cvar_t	*r_dlightMaxIntensity;	// 0 - unlimited
 #endif
 extern cvar_t	*r_dlightSaturation;	// 0.0 - 1.0
 #ifdef USE_VBO
@@ -1745,6 +1748,21 @@ skin_t  *R_GetSkinByHandle( qhandle_t hSkin );
 
 void    RB_DebugText( const vec3_t org, float r, float g, float b, const char *text, qboolean neverOcclude );
 const void *RB_TakeVideoFrameCmd( const void *data );
+
+//
+// tr_debug.c
+//
+extern const color4ub_t debugWhite;
+extern const color4ub_t debugGrey;
+extern const color4ub_t debugMesh;
+extern const color4ub_t debugOrange;
+extern const color4ub_t debugWeight2;
+extern const color4ub_t debugWeight3;
+extern const color4ub_t debugWeight4;
+
+void    R_DebugLine( const vec3_t start, const vec3_t end, color4ub_t color );
+void    R_DebugPoint( const vec3_t xyz, color4ub_t color );
+void    R_DebugLineFlush( void );
 
 float R_ClampDenorm( float v );
 

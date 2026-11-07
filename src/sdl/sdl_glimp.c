@@ -939,7 +939,3 @@ void Sys_SetClipboardBitmap( const byte *bitmap, int length )
 	CloseClipboard();
 #endif
 }
-
-int GLimp_NormalFontBase( void ) {
-    return 0;
-}

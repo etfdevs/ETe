@@ -1475,7 +1475,6 @@ static const void *RB_StretchPicGradient( const void *data ) {
 	return (const void *)( cmd + 1 );
 }
 
-
 static void transform_to_eye_space( const vec3_t v, vec3_t v_eye )
 {
 	const float *m = backEnd.viewParms.world.modelMatrix;
@@ -1537,31 +1536,6 @@ RB_DebugPolygon
 	qglDepthRange( 0, 1 );
 
 	qglEnable( GL_TEXTURE_2D );
-}
-
-
-/*
-================
-RB_DebugText
-================
-*/
-void RB_DebugText( const vec3_t org, float r, float g, float b, const char *text, qboolean neverOcclude ) {
-
-	if ( neverOcclude ) {
-		qglDepthRange( 0, 0 );  // never occluded
-
-	}
-	qglColor4f( r, g, b, 1 );
-	qglRasterPos3fv( org );
-	qglPushAttrib( GL_LIST_BIT );
-	qglListBase( ri.GLimp_NormalFontBase() );
-	qglCallLists( strlen( text ), GL_UNSIGNED_BYTE, text );
-	qglListBase( 0 );
-	qglPopAttrib();
-
-	if ( neverOcclude ) {
-		qglDepthRange( 0, 1 );
-	}
 }
 
 

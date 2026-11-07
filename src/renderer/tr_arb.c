@@ -156,6 +156,14 @@ static void ARB_Lighting( const shaderStage_t* pStage )
 
 	for ( i = 0; i < tess.numVertexes; ++i ) {
 		vec3_t dist;
+
+		// directed lights have no position: dl->transformed is a direction here,
+		// so there is nothing meaningful to clip individual vertices against
+		if ( isDirected ) {
+			clipBits[ i ] = 0;
+			continue;
+		}
+
 		VectorSubtract( dl->transformed, tess.xyz[i], dist );
 
 		if ( tess.surfType != SF_GRID ) {
@@ -300,6 +308,7 @@ void ARB_SetupLightParams( void )
 	ARB_ProgramEnable( vertexProgram, fragmentProgram );
 
 	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, lightRGB[0], lightRGB[1], lightRGB[2], 1.0f / Square( radius ) );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, dl->intensity, dl->intensity, dl->intensity, dl->intensity );
 
 	if ( dl->linear )
 	{
@@ -533,7 +542,8 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 	strcat( program,
 	"!!ARBfp1.0 \n"
 	"OPTION ARB_precision_hint_fastest; \n"
-	"PARAM lightRGB = program.local[0]; \n" );
+	"PARAM lightRGB = program.local[0]; \n"
+	"PARAM lightScale = program.local[1]; \n" );
 
 	if ( directional ) {
 		// .xyz = direction normal, .w = intensity
@@ -590,8 +600,17 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		"MUL tmp.x, tmp.w, lightRGB.w; \n"
 		"SUB tmp.x, {1.0}, tmp.x; \n"
 		// discard blank fragments
-		"KIL tmp.x; \n"
+		"KIL tmp.x; \n" );
 
+		if ( !linear ) {
+			// apply intensity and clamp the contribution like legacy dynamic
+			// lights do; linear lights encode their strength in the radius
+			strcat( program,
+			"MUL tmp.x, tmp.x, lightScale.x; \n"
+			"MIN tmp.x, tmp.x, {1.0}.x; \n" );
+		}
+
+		strcat( program,
 		"MUL light, lightRGB, tmp.x; \n" ); // light.rgb
 	}
 
@@ -654,7 +673,8 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		strcat( program,
 		"MUL tmp.x, dirLV.w, {0.125}.x; \n" // remainder = intensity * 0.125
 		"MAD bump.w, bump.w, dirLV.w, tmp.x; \n" // modulate = dot * intensity + remainder
-		"MAX bump.w, bump.w, {0.0}.x; \n" ); // clamp to 0
+		"MAX bump.w, bump.w, {0.0}.x; \n" // clamp to 0
+		"MIN bump.w, bump.w, {1.0}.x; \n" ); // and to 1, like legacy dlights
 	} else {
 		if ( abslight ) {
 			strcat( program,

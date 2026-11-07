@@ -1401,23 +1401,17 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 
 				GL_Bind( tr.whiteImage );
 				qglLineWidth( 1 );
-				qglBegin( GL_LINES );
 				for ( j = 0; j < 3; j++ ) {
-					qglColor4f( 1, 1, 1, 1 );
-					qglVertex3fv( bonePtr->translation );
 					VectorMA( bonePtr->translation, 5, bonePtr->matrix[j], vec );
-					qglVertex3fv( vec );
+					R_DebugLine( bonePtr->translation, vec, debugWhite );
 				}
-				qglEnd();
+				R_DebugLineFlush();
 
 				// connect to our parent if it's valid
 				if ( validBones[boneInfo[*boneRefs].parent] ) {
 					qglLineWidth( 2 );
-					qglBegin( GL_LINES );
-					qglColor4f( .6f, .6f, .6f, 1.f );
-					qglVertex3fv( bonePtr->translation );
-					qglVertex3fv( bones[boneInfo[*boneRefs].parent].translation );
-					qglEnd();
+					R_DebugLine( bonePtr->translation, bones[boneInfo[*boneRefs].parent].translation, debugGrey );
+					R_DebugLineFlush();
 				}
 
 				qglLineWidth( 1 );
@@ -1433,22 +1427,15 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 
 			GL_Bind( tr.whiteImage );
 			qglLineWidth( 1 );
-			qglBegin( GL_LINES );
-			qglColor4f( 0.0f, 0.0f, 0.8f, 1.f );
 
 			pIndexes = &tess.indexes[oldIndexes];
 			for ( j = 0; j < render_indexes / 3; j++, pIndexes += 3 ) {
-				qglVertex3fv( tempVert + 4 * pIndexes[0] );
-				qglVertex3fv( tempVert + 4 * pIndexes[1] );
-
-				qglVertex3fv( tempVert + 4 * pIndexes[1] );
-				qglVertex3fv( tempVert + 4 * pIndexes[2] );
-
-				qglVertex3fv( tempVert + 4 * pIndexes[2] );
-				qglVertex3fv( tempVert + 4 * pIndexes[0] );
+				R_DebugLine( tempVert + 4 * pIndexes[0], tempVert + 4 * pIndexes[1], debugMesh );
+				R_DebugLine( tempVert + 4 * pIndexes[1], tempVert + 4 * pIndexes[2], debugMesh );
+				R_DebugLine( tempVert + 4 * pIndexes[2], tempVert + 4 * pIndexes[0], debugMesh );
 			}
 
-			qglEnd();
+			R_DebugLineFlush();
 
 //----(SA)	track debug stats
 			if ( r_bonesDebug->integer == 4 ) {
@@ -1546,27 +1533,6 @@ int R_GetBoneTag( orientation_t *outTag, mdsHeader_t *mds, int startTagIndex, co
 
 	memcpy( outTag->axis, bones[ pTag->boneIndex ].matrix, sizeof( outTag->axis ) );
 	VectorCopy( bones[ pTag->boneIndex ].translation, outTag->origin );
-
-/* code not functional, not in backend
-	if (r_bonesDebug->integer == 4) {
-		int j;
-		// DEBUG: show the tag position/axis
-		GL_Bind( tr.whiteImage );
-		qglLineWidth( 2 );
-		qglBegin( GL_LINES );
-		for (j=0; j<3; j++) {
-			VectorClear(vec);
-			vec[j] = 1;
-			qglColor3fv( vec );
-			qglVertex3fv( outTag->origin );
-			VectorMA( outTag->origin, 8, outTag->axis[j], vec );
-			qglVertex3fv( vec );
-		}
-		qglEnd();
-
-		qglLineWidth( 1 );
-	}
-*/
 
 	return i;
 }
