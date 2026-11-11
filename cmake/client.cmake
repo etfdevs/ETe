@@ -130,6 +130,16 @@ foreach(LIBRARY IN LISTS CLIENT_DEPLOY_LIBRARIES)
             $<TARGET_FILE_DIR:${CLIENT_BINARY}>)
 endforeach()
 
+foreach(ENTRY IN LISTS CLIENT_DEPLOY_LIBRARY_RENAMES)
+    string(REPLACE "=>" ";" ENTRY_PARTS "${ENTRY}")
+    list(GET ENTRY_PARTS 0 LIBRARY)
+    list(GET ENTRY_PARTS 1 LIBRARY_NAME)
+    add_custom_command(TARGET ${CLIENT_BINARY} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${LIBRARY}"
+            "$<TARGET_FILE_DIR:${CLIENT_BINARY}>/${LIBRARY_NAME}")
+endforeach()
+
 if(POST_CLIENT_CONFIGURE_FUNCTION)
     cmake_language(CALL ${POST_CLIENT_CONFIGURE_FUNCTION})
 endif()
