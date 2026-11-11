@@ -700,7 +700,7 @@ typedef struct {
 	float		eyeInside; // 0.0 or 1.0
 	vec4_t		fogDistanceVector;
 	vec4_t		fogDepthVector;
-	const float *fogColor; // vec4_t
+	vec4_t		fogColor;
 	qboolean	level;
 } fogProgramParms_t;
 
@@ -1587,6 +1587,7 @@ extern cvar_t	*r_dlightMode;			// 0 - vq3, 1 - pmlight
 //extern cvar_t	*r_dlightSpecColor;		// -1.0 - 1.0
 extern cvar_t	*r_dlightScale;			// 0.1 - 1.0
 extern cvar_t	*r_dlightIntensity;		// 0.1 - 1.0
+extern cvar_t	*r_dlightMaxIntensity;	// 0 - unlimited
 #endif
 extern cvar_t	*r_dlightSaturation;	// 0.0 - 1.0
 #ifdef USE_VULKAN
@@ -1983,6 +1984,8 @@ int R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, ve
 
 #ifdef USE_PMLIGHT
 void VK_LightingPass( void );
+void VK_DisableGLFog( void );
+void VK_ResetGLFogState( void );
 qboolean R_LightCullBounds( const dlight_t* dl, const vec3_t mins, const vec3_t maxs );
 #endif // USE_PMLIGHT
 
@@ -2402,6 +2405,7 @@ extern qboolean fogIsOn;
 
 extern void         R_FogOff( void );
 extern void         R_FogOn( void );
+const glfog_t      *R_GetActiveGLFog( void );
 
 extern void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b, float density );
 

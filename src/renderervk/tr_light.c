@@ -44,6 +44,15 @@ void R_TransformDlights( int count, dlight_t *dl, orientationr_t *or) {
 	vec3_t	temp, temp2;
 
 	for ( i = 0 ; i < count ; i++, dl++ ) {
+		if ( dl->flags & REF_DIRECTED_DLIGHT ) {
+			// directional lights have no position: rotate the direction into
+			// the same space as the surface normals
+			dl->transformed[0] = DotProduct( dl->origin, or->axis[0] );
+			dl->transformed[1] = DotProduct( dl->origin, or->axis[1] );
+			dl->transformed[2] = DotProduct( dl->origin, or->axis[2] );
+			continue;
+		}
+
 		VectorSubtract( dl->origin, or->origin, temp );
 		dl->transformed[0] = DotProduct( temp, or->axis[0] );
 		dl->transformed[1] = DotProduct( temp, or->axis[1] );

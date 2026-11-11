@@ -23,10 +23,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "tr_local.h"
 
-#ifdef _WIN32
-#include <windows.h> // for VirtualAlloc, VirtualFree, FormatMessage, GetLastError - See R_Hunk_* functions
-#endif
-
 #define	LL(x) x=LittleLong(x)
 
 // Ridah

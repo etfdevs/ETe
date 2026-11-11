@@ -90,6 +90,9 @@ void main() {
 
 	// light intensity
 	float intensFactor = 1.0 - dot(L.xyz, L.xyz) * lightColorRadius.w;
+	// non-linear lights carry intensity in lightVector.w; apply it and clamp
+	// the contribution like legacy dynamic lights
+	intensFactor = min(intensFactor * lightVector.w, 1.0);
 #endif
 
 	if (intensFactor <= 0.0)

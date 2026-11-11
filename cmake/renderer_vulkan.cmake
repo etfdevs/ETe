@@ -4,6 +4,7 @@ endif()
 
 include(utils/arch)
 include(utils/set_target_platform_details)
+include(utils/vulkan_shaders)
 include(renderer_common)
 
 set(RENDERER_VULKAN_SOURCES
@@ -83,6 +84,8 @@ if(USE_RENDERER_DLOPEN)
     set(RENDERER_VULKAN_TYPE MODULE)
 
     add_library(${RENDERER_VULKAN_BINARY} ${RENDERER_VULKAN_TYPE} ${RENDERER_VULKAN_BINARY_SOURCES})
+
+    add_vulkan_shader_generation(${RENDERER_VULKAN_BINARY})
 
     target_link_libraries(      ${RENDERER_VULKAN_BINARY} PRIVATE c_compiler_opts)
     target_link_libraries(      ${RENDERER_VULKAN_BINARY} PRIVATE ${RENDERER_LIBRARIES})

@@ -560,6 +560,8 @@ static void ProjectDlightTexture( void ) {
 uint32_t VK_PushUniform( const vkUniform_t *uniform );
 void VK_SetFogParams( vkUniform_t *uniform, int *fogStage );
 static vkUniform_t uniform;
+static qboolean s_glFogWasActive;
+static qboolean s_glFogStateValid;
 
 /*
 ===================
@@ -592,6 +594,7 @@ static void RB_FogPass( qboolean rebindIndex ) {
 	VK_SetFogParams( &uniform, &fog_stage );
 	VK_PushUniform( &uniform );
 	vk_update_descriptor( VK_DESC_FOG_ONLY, tr.fogImage->descriptor );
+	vk_bind_geometry( TESS_XYZ );
 	vk_draw_geometry( DEPTH_RANGE_NORMAL, qtrue );
 #else
 	const fog_t	*fog = tr.world->fogs + tess.fogNum;
@@ -989,6 +992,52 @@ void SetIteratorFog( void ) {
 }
 
 
+#ifdef USE_VULKAN
+/*
+** VK_SetGLFogParams
+**
+** Fills the runtime glFog parameters from the active glfogsettings entry.
+** This is the Vulkan equivalent of fixed-function GL linear/exponential fog;
+** the volume/world fog texture path is handled separately by RB_FogPass().
+*/
+static qboolean VK_SetGLFogParams( vkUniform_t *u ) {
+	const glfog_t *fog;
+
+	if ( backEnd.projection2D ) {
+		u->glFogParams[3] = -1.0f;
+		return qfalse;
+	}
+
+	fog = R_GetActiveGLFog();
+	if ( !fog ) {
+		u->glFogParams[3] = -1.0f;
+		return qfalse;
+	}
+
+	Vector4Copy( fog->color, u->glFogColor );
+	u->glFogParams[0] = fog->start;
+	u->glFogParams[1] = r_zfar->value ? r_zfar->value : fog->end;
+	u->glFogParams[2] = fog->density;
+	u->glFogParams[3] = ( fog->mode == GL_EXP ) ? 1.0f : 0.0f;
+
+	// view forward expressed in the same space as the geometry being drawn;
+	// the world entity already uses world coordinates, other entities use
+	// model space (matching backEnd.orientation.viewOrigin)
+	if ( !backEnd.currentEntity || backEnd.currentEntity == &tr.worldEntity ) {
+		VectorCopy( backEnd.viewParms.orientation.axis[0], u->glFogView );
+	} else {
+		u->glFogView[0] = DotProduct( backEnd.viewParms.orientation.axis[0], backEnd.orientation.axis[0] );
+		u->glFogView[1] = DotProduct( backEnd.viewParms.orientation.axis[0], backEnd.orientation.axis[1] );
+		u->glFogView[2] = DotProduct( backEnd.viewParms.orientation.axis[0], backEnd.orientation.axis[2] );
+		VectorNormalize( u->glFogView ); // compensate for scaled entity axes
+	}
+	u->glFogView[3] = 0.0f;
+
+	return qtrue;
+}
+#endif
+
+
 /*
 ** RB_IterateStagesGeneric
 */
@@ -1012,6 +1061,25 @@ static void RB_IterateStagesGeneric( const shaderCommands_t *input )
 	tess_flags = input->shader->tessFlags;
 
 	pushUniform = qfalse;
+
+#ifdef USE_VULKAN
+	{
+		qboolean glFogActive = VK_SetGLFogParams( &uniform );
+
+		if ( glFogActive ) {
+			// eye-plane fog depth is computed in gen_vert from this eye position
+			VectorCopy( backEnd.orientation.viewOrigin, uniform.eyePos );
+			uniform.eyePos[3] = 0.0f;
+			pushUniform = qtrue;
+		} else if ( s_glFogWasActive || !s_glFogStateValid ) {
+			// push once to turn the shader path off, including after a restart
+			pushUniform = qtrue;
+		}
+
+		s_glFogWasActive = glFogActive;
+		s_glFogStateValid = qtrue;
+	}
+#endif
 
 #ifdef USE_FOG_COLLAPSE
 	if ( fogCollapse ) {
@@ -1195,14 +1263,28 @@ static void VK_SetLightParams( vkUniform_t *uniform, const dlight_t *dl ) {
 	VectorCopy( dl->transformed, uniform->light.pos ); uniform->light.pos[3] = 0.0f;
 
 	// fragment data
-	uniform->light.color[3] = 1.0f / Square( radius );
-
-	if ( dl->linear )
+	if ( dl->flags & REF_DIRECTED_DLIGHT )
+	{
+		// directional lights have no position: light.pos holds the (rotated)
+		// direction, there is no distance attenuation and intensity is applied
+		// by the per-pixel shader
+		uniform->light.color[3] = 0.0f;
+		uniform->light.vector[3] = dl->intensity;
+	}
+	else if ( dl->linear )
 	{
 		vec4_t ab;
+		uniform->light.color[3] = 1.0f / Square( radius );
 		VectorSubtract( dl->transformed2, dl->transformed, ab );
 		ab[3] = 1.0f / DotProduct( ab, ab );
 		Vector4Copy( ab, uniform->light.vector );
+	}
+	else
+	{
+		uniform->light.color[3] = 1.0f / Square( radius );
+		// the per-pixel shader applies intensity and clamps the contribution
+		// the same way legacy dynamic lights do
+		uniform->light.vector[3] = dl->intensity;
 	}
 }
 #endif
@@ -1223,6 +1305,34 @@ uint32_t VK_PushUniform( const vkUniform_t *uniform ) {
 	vk_update_descriptor_offset( VK_DESC_UNIFORM, vk.cmd->uniform_read_offset );
 
 	return offset;
+}
+
+
+/*
+** VK_DisableGLFog
+**
+** Pushes the current uniform with the runtime glFog path disabled. The
+** skybox uses the generic fixed-color shader but bypasses the stage iterator,
+** so without this it would inherit the last world fog uniform.
+*/
+void VK_DisableGLFog( void ) {
+	uniform.glFogParams[3] = -1.0f;
+	VK_PushUniform( &uniform );
+	s_glFogWasActive = qfalse;
+	s_glFogStateValid = qtrue;
+}
+
+
+/*
+** VK_ResetGLFogState
+**
+** Called on renderer init so the first stage batch uploads a known glFog
+** state, even if the geometry buffer was recreated.
+*/
+void VK_ResetGLFogState( void ) {
+	s_glFogWasActive = qfalse;
+	s_glFogStateValid = qfalse;
+	uniform.glFogParams[3] = -1.0f;
 }
 
 
@@ -1271,7 +1381,9 @@ void VK_LightingPass( void )
 	if ( fog_stage )
 		vk_update_descriptor( VK_DESC_FOG_DLIGHT, tr.fogImage->descriptor );
 
-	if ( tess.light->linear )
+	if ( tess.light->flags & REF_DIRECTED_DLIGHT )
+		pipeline = vk.dlight_dir_pipelines_x[cull][tess.shader->polygonOffset][fog_stage][abs_light];
+	else if ( tess.light->linear )
 		pipeline = vk.dlight1_pipelines_x[cull][tess.shader->polygonOffset][fog_stage][abs_light];
 	else
 		pipeline = vk.dlight_pipelines_x[cull][tess.shader->polygonOffset][fog_stage][abs_light];

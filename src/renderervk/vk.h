@@ -58,6 +58,7 @@ typedef enum {
 
 	TYPE_SIGNLE_TEXTURE_LIGHTING,
 	TYPE_SIGNLE_TEXTURE_LIGHTING_LINEAR,
+	TYPE_SIGNLE_TEXTURE_LIGHTING_DIRECTED,
 
 	TYPE_SIGNLE_TEXTURE_DF,
 
@@ -215,6 +216,9 @@ typedef struct vkUniform_s {
 	vec4_t fogDepthVector;		// vertex
 	vec4_t fogEyeT;				// vertex
 	vec4_t fogColor;			// fragment
+	vec4_t glFogColor;			// fragment: runtime glFog color
+	vec4_t glFogParams;			// fragment: x=start, y=end, z=density, w=mode (-1 disabled)
+	vec4_t glFogView;			// vertex: view forward in geometry space
 } vkUniform_t;
 
 #define TESS_XYZ   (1)
@@ -488,6 +492,7 @@ typedef struct {
 			VkShaderModule ident1[2][2][2]; // tx[0,1], env0[0,1] fog[0,1]
 			VkShaderModule fixed[2][2][2];  // tx[0,1], env0[0,1] fog[0,1]
 			VkShaderModule light[2];        // fog[0,1]
+			VkShaderModule light_dir[2];    // fog[0,1]
 		} vert;
 		struct {
 			VkShaderModule gen0_df;
@@ -550,6 +555,7 @@ typedef struct {
 #ifdef USE_PMLIGHT
 	uint32_t dlight_pipelines_x[3][2][2][2];
 	uint32_t dlight1_pipelines_x[3][2][2][2];
+	uint32_t dlight_dir_pipelines_x[3][2][2][2];
 #endif
 
 	// debug visualization pipelines

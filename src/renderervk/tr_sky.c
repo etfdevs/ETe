@@ -484,6 +484,7 @@ static void DrawSkySide( image_t *image, const int mins[2], const int maxs[2] )
 #ifdef USE_VULKAN
 		tess.svars.texcoordPtr[0] = tess.texCoords[0];
 
+		VK_DisableGLFog();
 		vk_bind_pipeline( vk.skybox_pipelines[0] );
 		vk_bind_index();
 		vk_bind_geometry( TESS_XYZ | TESS_ST0 );
@@ -513,6 +514,7 @@ static void DrawSkySideInner( image_t *image, const int mins[2], const int maxs[
 #ifdef USE_VULKAN
 		tess.svars.texcoordPtr[0] = tess.texCoords[0];
 
+		VK_DisableGLFog();
 		vk_bind_pipeline( vk.skybox_pipelines[1] );
 		vk_bind_index();
 		vk_bind_geometry( TESS_XYZ | TESS_ST0 );

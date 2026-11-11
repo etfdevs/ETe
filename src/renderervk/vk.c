@@ -2792,7 +2792,11 @@ qboolean vk_alloc_vbo( const byte *vbo_data, int vbo_size )
 }
 #endif
 
+#ifdef USE_GENERATED_VULKAN_SHADERS
+#include "shader_data.c"
+#else
 #include "shaders/spirv/shader_data.c"
+#endif
 #define SHADER_MODULE(name) SHADER_MODULE(name,sizeof(name))
 
 static void vk_create_shader_modules( void )
@@ -2955,6 +2959,11 @@ static void vk_create_shader_modules( void )
 	vk.modules.vert.light[1] = SHADER_MODULE( vert_light_fog );
 	SET_OBJECT_NAME( vk.modules.vert.light[0], "light vertex module", VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT );
 	SET_OBJECT_NAME( vk.modules.vert.light[1], "light fog vertex module", VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT );
+
+	vk.modules.vert.light_dir[0] = SHADER_MODULE( vert_light_dir );
+	vk.modules.vert.light_dir[1] = SHADER_MODULE( vert_light_dir_fog );
+	SET_OBJECT_NAME( vk.modules.vert.light_dir[0], "directed light vertex module", VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT );
+	SET_OBJECT_NAME( vk.modules.vert.light_dir[1], "directed light fog vertex module", VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT );
 
 	vk.modules.frag.light[0][0] = SHADER_MODULE( frag_light );
 	vk.modules.frag.light[0][1] = SHADER_MODULE( frag_light_fog );
@@ -3127,6 +3136,8 @@ static void vk_alloc_persistent_pipelines( void )
 						vk.dlight_pipelines_x[i][j][k][l] = vk_find_pipeline_ext( 0, &def, qfalse );
 						def.shader_type = TYPE_SIGNLE_TEXTURE_LIGHTING_LINEAR;
 						vk.dlight1_pipelines_x[i][j][k][l] = vk_find_pipeline_ext( 0, &def, qfalse );
+						def.shader_type = TYPE_SIGNLE_TEXTURE_LIGHTING_DIRECTED;
+						vk.dlight_dir_pipelines_x[i][j][k][l] = vk_find_pipeline_ext( 0, &def, qfalse );
 					}
 				}
 			}
@@ -5760,6 +5771,11 @@ VkPipeline create_pipeline( const Vk_Pipeline_Def *def, renderPass_t renderPassI
 			fs_module = &vk.modules.frag.light[1][0];
 			break;
 
+		case TYPE_SIGNLE_TEXTURE_LIGHTING_DIRECTED:
+			vs_module = &vk.modules.vert.light_dir[0];
+			fs_module = &vk.modules.frag.light[0][0];
+			break;
+
 		case TYPE_SIGNLE_TEXTURE_DF:
 			state_bits |= GLS_DEPTHMASK_TRUE;
 			vs_module = &vk.modules.vert.ident1[0][0][0];
@@ -5994,6 +6010,7 @@ VkPipeline create_pipeline( const Vk_Pipeline_Def *def, renderPass_t renderPassI
 	switch ( def->shader_type ) {
 		case TYPE_SIGNLE_TEXTURE_LIGHTING:
 		case TYPE_SIGNLE_TEXTURE_LIGHTING_LINEAR:
+		case TYPE_SIGNLE_TEXTURE_LIGHTING_DIRECTED:
 			frag_spec_data[5].i = def->abs_light ? 1 : 0;
 		default:
 			break;
@@ -6217,6 +6234,7 @@ VkPipeline create_pipeline( const Vk_Pipeline_Def *def, renderPass_t renderPassI
 
 		case TYPE_SIGNLE_TEXTURE_LIGHTING:
 		case TYPE_SIGNLE_TEXTURE_LIGHTING_LINEAR:
+		case TYPE_SIGNLE_TEXTURE_LIGHTING_DIRECTED:
 			push_bind( 0, sizeof( vec4_t ) );					// xyz array
 			push_bind( 1, sizeof( vec2_t ) );					// st0 array
 			push_bind( 2, sizeof( vec4_t ) );					// normals array
@@ -7282,6 +7300,51 @@ void vk_draw_geometry( Vk_Depth_Range depth_range, qboolean indexed ) {
 }
 
 
+/*
+** vk_get_main_clear_color
+**
+** Background/sky color used when the main render pass clears the color
+** attachment. This replaces the fixed-function glFog clear color, which is
+** not available in Vulkan and is compiled out by USE_BUFFER_CLEAR.
+*/
+static void vk_get_main_clear_color( vec4_t color ) {
+	const fogParms_t *fog;
+
+	if ( r_fastsky->integer ) {
+		Vector4Copy( tr.clearColor, color );
+		return;
+	}
+
+	// glfogsettings are the OpenGL-equivalent clear color; sky fog wins when
+	// the map defines it, otherwise use the current/map fog
+	if ( glfogsettings[FOG_SKY].registered ) {
+		Vector4Copy( glfogsettings[FOG_SKY].color, color );
+		return;
+	}
+	if ( glfogsettings[FOG_CURRENT].registered ) {
+		Vector4Copy( glfogsettings[FOG_CURRENT].color, color );
+		return;
+	}
+	if ( glfogsettings[FOG_MAP].registered ) {
+		Vector4Copy( glfogsettings[FOG_MAP].color, color );
+		return;
+	}
+
+	// fall back to a global BSP fog (fogparms) for maps that don't drive
+	// glfogsettings through the game module
+	if ( tr.world && tr.world->globalFog >= 0 && tr.world->fogs[tr.world->globalFog].shader ) {
+		fog = &tr.world->fogs[tr.world->globalFog].shader->fogParms;
+		color[0] = fog->color[0] * tr.identityLight;
+		color[1] = fog->color[1] * tr.identityLight;
+		color[2] = fog->color[2] * tr.identityLight;
+		color[3] = 1.0f;
+		return;
+	}
+
+	Vector4Copy( tr.clearColor, color );
+}
+
+
 static void vk_begin_render_pass( VkRenderPass renderPass, VkFramebuffer frameBuffer, qboolean clearValues, uint32_t width, uint32_t height )
 {
 	VkRenderPassBeginInfo render_pass_begin_info;
@@ -7307,6 +7370,15 @@ static void vk_begin_render_pass( VkRenderPass renderPass, VkFramebuffer frameBu
 #ifndef USE_REVERSED_DEPTH
 		clear_values[1].depthStencil.depth = 1.0;
 #endif
+		if ( renderPass == vk.render_pass.main || renderPass == vk.render_pass.main_load ) {
+			vec4_t clear_color;
+
+			vk_get_main_clear_color( clear_color );
+			Vector4Copy( clear_color, clear_values[0].color.float32 );
+			if ( vk.msaaActive ) {
+				Vector4Copy( clear_color, clear_values[2].color.float32 );
+			}
+		}
 		render_pass_begin_info.clearValueCount = vk.msaaActive ? 3 : 2;
 		render_pass_begin_info.pClearValues = clear_values;
 

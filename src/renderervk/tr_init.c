@@ -71,6 +71,7 @@ cvar_t  *r_mergeLightmaps;
 cvar_t	*r_dlightMode;
 cvar_t	*r_dlightScale;
 cvar_t	*r_dlightIntensity;
+cvar_t	*r_dlightMaxIntensity;
 #endif
 cvar_t	*r_dlightSaturation;
 #ifdef USE_VULKAN
@@ -1838,6 +1839,9 @@ static void R_Register( void )
 	r_dlightIntensity = ri.Cvar_Get( "r_dlightIntensity", "1.0", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_dlightIntensity, "0.1", "1", CV_FLOAT );
 	ri.Cvar_SetDescription( r_dlightIntensity, "Adjusts dynamic light intensity but not radius" );
+	r_dlightMaxIntensity = ri.Cvar_Get( "r_dlightMaxIntensity", "1.25", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_dlightMaxIntensity, "0", "8", CV_FLOAT );
+	ri.Cvar_SetDescription( r_dlightMaxIntensity, "Clamps dynamic light intensity in per-pixel modes; values above this no longer brighten the light, matching legacy saturation and suppressing overbright flicker from mods that animate intensity. 0 = unlimited" );
 #endif // USE_PMLIGHT
 	r_dlightSaturation = ri.Cvar_Get( "r_dlightSaturation", "1", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_dlightSaturation, "0", "1", CV_FLOAT );
@@ -2099,7 +2103,6 @@ static void R_Register( void )
 #endif // USE_VULKAN
 }
 
-qboolean modIsETF = qfalse;
 #define FUNCTABLE_EPSILON 1e-6f
 
 /*
@@ -2116,13 +2119,13 @@ void R_Init( void ) {
 
 	ri.Printf( PRINT_ALL, "----- R_Init -----\n" );
 
-	modIsETF = ( ri.CL_CurrentGameMod() == GAMEMOD_ETF ) ? qtrue : qfalse;
-
 	// clear all our internal state
 	Com_Memset( &tr, 0, sizeof( tr ) );
 	Com_Memset( &backEnd, 0, sizeof( backEnd ) );
 	Com_Memset( &tess, 0, sizeof( tess ) );
 	Com_Memset( &glState, 0, sizeof( glState ) );
+
+	VK_ResetGLFogState();
 
 	if ( (intptr_t)tess.xyz & 15 ) {
 		ri.Printf( PRINT_WARNING, "tess.xyz not 16 byte aligned\n" );

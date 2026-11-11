@@ -42,7 +42,12 @@ void main() {
 
 	frag_tex_coord = in_tex_coord;
 	N = in_normal;
+#ifdef USE_DIRECTED
+	// directional lights have no position: lightPos holds the direction
+	L = vec4(normalize(lightPos.xyz), 0.0);
+#else
 	L = lightPos - vec4(in_position, 1.0);
+#endif
 	V = eyePos - vec4(in_position, 1.0);
 
 #ifdef USE_FOG

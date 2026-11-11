@@ -1125,7 +1125,15 @@ const fogProgramParms_t *RB_CalcFogProgramParms( void )
 	VectorCopy( fog->surface, fogSurface );
 	fogSurface[3] = fog->surface[3] + DotProduct( fogSurface, bmodel->orientation.origin );
 
-	parm.fogColor = fog->parms.color;
+	// use the same live byte color as RB_FogPass() so runtime global fog
+	// transitions, r_mapGreyScale and overbright scaling stay in sync
+	{
+		const byte *colorInt = ( const byte * )&fog->shader->fogParms.colorInt;
+		parm.fogColor[0] = colorInt[0] * ( 1.0f / 255.0f );
+		parm.fogColor[1] = colorInt[1] * ( 1.0f / 255.0f );
+		parm.fogColor[2] = colorInt[2] * ( 1.0f / 255.0f );
+		parm.fogColor[3] = colorInt[3] * ( 1.0f / 255.0f );
+	}
 
 	// ydnar: general fog case
 	if ( fog->originalBrushNumber >= 0 ) {
@@ -1160,6 +1168,12 @@ const fogProgramParms_t *RB_CalcFogProgramParms( void )
 	else
 	{
 		parm.level = qtrue;
+		// level-wide fog has no depth plane; force t to the top row so the
+		// fog texture is sampled by distance only, matching
+		// RB_CalcFogTexCoords() (st[1] = 1.0 for level fog)
+		parm.fogDepthVector[3] = 1.0f;
+		parm.eyeT = 0.0f;
+		parm.eyeInside = 1.0f;
 	}
 
 	return &parm;

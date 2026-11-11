@@ -2145,7 +2145,6 @@ static void R_Register( void )
 #endif // USE_FBO
 }
 
-qboolean modIsETF = qfalse;
 #define FUNCTABLE_EPSILON 1e-6f
 
 /*
@@ -2159,8 +2158,6 @@ void R_Init( void ) {
 	byte *ptr;
 
 	ri.Printf( PRINT_ALL, "----- R_Init -----\n" );
-
-	modIsETF = ( ri.CL_CurrentGameMod() == GAMEMOD_ETF ) ? qtrue : qfalse;
 
 	// clear all our internal state
 	Com_Memset( &tr, 0, sizeof( tr ) );

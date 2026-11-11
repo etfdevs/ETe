@@ -118,8 +118,13 @@ static qboolean R_CullSurface( const surfaceType_t *surface, shader_t *shader ) 
 #ifdef USE_PMLIGHT
 qboolean R_LightCullBounds( const dlight_t* dl, const vec3_t mins, const vec3_t maxs )
 {
+	// directional lights affect every surface regardless of position
 	if ( dl->flags & REF_DIRECTED_DLIGHT )
 		return qfalse;
+
+	// junior lights only contribute to the entity light grid, never to surfaces
+	if ( dl->flags & REF_JUNIOR_DLIGHT )
+		return qtrue;
 
 	if ( dl->linear ) {
 		if (dl->transformed[0] - dl->radius > maxs[0] && dl->transformed2[0] - dl->radius > maxs[0] )
@@ -389,21 +394,27 @@ static void R_RecursiveLightNode( const mnode_t* node )
 
 		children[0] = children[1] = qfalse;
 
-		d = DotProduct( tr.light->origin, node->plane->normal ) - node->plane->dist;
-		if ( d > -tr.light->radius ) {
-			children[0] = qtrue;
-		}
-		if ( d < tr.light->radius ) {
-			children[1] = qtrue;
-		}
-
-		if ( tr.light->linear ) {
-			d = DotProduct( tr.light->origin2, node->plane->normal ) - node->plane->dist;
+		if ( tr.light->flags & REF_DIRECTED_DLIGHT ) {
+			// a directional light has no position: origin holds a direction,
+			// so it can't be used to cull the BSP. Light every visible surface.
+			children[0] = children[1] = qtrue;
+		} else {
+			d = DotProduct( tr.light->origin, node->plane->normal ) - node->plane->dist;
 			if ( d > -tr.light->radius ) {
 				children[0] = qtrue;
 			}
 			if ( d < tr.light->radius ) {
 				children[1] = qtrue;
+			}
+
+			if ( tr.light->linear ) {
+				d = DotProduct( tr.light->origin2, node->plane->normal ) - node->plane->dist;
+				if ( d > -tr.light->radius ) {
+					children[0] = qtrue;
+				}
+				if ( d < tr.light->radius ) {
+					children[1] = qtrue;
+				}
 			}
 		}
 
@@ -1059,6 +1070,12 @@ void R_AddWorldSurfaces( void ) {
 		{
 			dl = &tr.viewParms.dlights[i];	
 			dl->head = dl->tail = NULL;
+
+			// junior lights don't affect world surfaces
+			if ( dl->flags & REF_JUNIOR_DLIGHT ) {
+				continue;
+			}
+
 			if ( R_CullDlight( dl ) == CULL_OUT ) {
 				tr.pc.c_light_cull_out++;
 				continue;

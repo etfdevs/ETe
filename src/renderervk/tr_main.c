@@ -46,6 +46,11 @@ glfog_t glfogsettings[NUM_FOGS];
 glfogType_t glfogNum = FOG_NONE;
 qboolean fogIsOn = qfalse;
 
+#ifdef USE_VULKAN
+static glfog_t	s_activeGLFog;
+static qboolean	s_activeGLFogValid = qfalse;
+#endif
+
 
 /*
 =================
@@ -53,6 +58,9 @@ R_Fog (void)
 =================
 */
 void R_Fog( glfog_t *curfog ) {
+#ifdef USE_VULKAN
+	s_activeGLFogValid = qfalse;
+#endif
 	if ( !r_wolffog->integer ) {
 		R_FogOff();
 		return;
@@ -77,6 +85,13 @@ void R_Fog( glfog_t *curfog ) {
 
 
 	R_FogOn();
+
+#ifdef USE_VULKAN
+	// keep a copy of the active fixed-function style fog for the global fog
+	// shader path; the values are updated by R_SetFog/R_UpdateFog each frame
+	s_activeGLFog = *curfog;
+	s_activeGLFogValid = qtrue;
+#endif
 
 #ifndef USE_VULKAN
 
@@ -117,7 +132,9 @@ void R_Fog( glfog_t *curfog ) {
 
 	qglClearColor( curfog->color[0], curfog->color[1], curfog->color[2], curfog->color[3] );
 #else
+#ifndef USE_BUFFER_CLEAR
 	vk_clear_color( curfog->color );
+#endif
 #endif
 }
 
@@ -131,6 +148,13 @@ void R_FogOff( void ) {
 #endif
 	fogIsOn = qfalse;
 }
+
+
+#ifdef USE_VULKAN
+const glfog_t *R_GetActiveGLFog( void ) {
+	return ( fogIsOn && s_activeGLFogValid ) ? &s_activeGLFog : NULL;
+}
+#endif
 
 void R_FogOn( void ) {
 	if ( fogIsOn ) {
