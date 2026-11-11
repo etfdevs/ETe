@@ -348,6 +348,30 @@ typedef struct vk_tess_s {
 	Vk_Depth_Range		depth_range;
 	VkPipeline			last_pipeline;
 
+	// cached command-buffer state, lets repeated draws skip redundant binds
+	struct {
+		VkBuffer		buffers[8];
+		VkDeviceSize	offsets[8];
+		uint32_t		base, count;
+		qboolean		valid;
+	} last_vertex_bind;
+
+	struct {
+		VkDescriptorSet	sets[VK_DESC_COUNT];
+		uint32_t		offsets[VK_DESC_COUNT];
+		uint32_t		start, count, offset_count;
+		VkPipelineLayout layout;
+		qboolean		valid;
+	} last_descriptor_bind;
+
+	struct {
+		VkPipelineLayout	layout;
+		VkShaderStageFlags	stages;
+		uint32_t			size;
+		float				data[16];
+		qboolean			valid;
+	} last_push_constants;
+
 	uint32_t num_indexes; // value from most recent vk_bind_index() call
 
 	VkRect2D scissor_rect;

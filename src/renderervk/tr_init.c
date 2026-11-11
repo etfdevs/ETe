@@ -90,6 +90,7 @@ cvar_t	*r_renderWidth;
 cvar_t	*r_renderHeight;
 cvar_t	*r_renderScale;
 cvar_t	*r_ext_supersample;
+cvar_t	*r_vkPipelineCache;
 #endif // USE_VULKAN
 
 //cvar_t	*r_dlightBacks;
@@ -2058,6 +2059,10 @@ static void R_Register( void )
 		" -1 - first discrete GPU\n" \
 		" -2 - first integrated GPU" );
 	r_device->modified = qfalse;
+
+	r_vkPipelineCache = ri.Cvar_Get( "r_vkPipelineCache", "1", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_vkPipelineCache, "0", "1", CV_INTEGER );
+	ri.Cvar_SetDescription( r_vkPipelineCache, "Cache compiled Vulkan pipelines in fs_homepath between runs, reducing startup time and shader compilation stutter" );
 
 	r_fbo = ri.Cvar_Get( "r_fbo", R_FBO_DEFAULT, CVAR_ARCHIVE_ND | CVAR_LATCH );
 #ifdef USE_SDL3

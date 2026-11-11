@@ -1606,6 +1606,7 @@ extern cvar_t	*r_bloom_modulate;
 extern cvar_t	*r_renderWidth;
 extern cvar_t	*r_renderHeight;
 extern cvar_t	*r_renderScale;
+extern cvar_t	*r_vkPipelineCache;
 #endif
 
 //extern cvar_t	*r_dlightBacks;			// dlight non-facing surfaces for continuity

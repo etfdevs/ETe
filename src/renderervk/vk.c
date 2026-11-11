@@ -14,6 +14,10 @@ static int vkMaxSamples = VK_SAMPLE_COUNT_1_BIT;
 static VkInstance vk_instance = VK_NULL_HANDLE;
 static VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 
+// persisted pipeline cache, kept in fs_homepath and validated against the
+// selected physical device before use
+#define VK_PIPELINE_CACHE_FILE "et_vk_pipeline_cache.bin"
+
 #ifndef NDEBUG
 VkDebugReportCallbackEXT vk_debug_callback = VK_NULL_HANDLE;
 #endif
@@ -110,6 +114,7 @@ static PFN_vkGetBufferMemoryRequirements				qvkGetBufferMemoryRequirements;
 static PFN_vkGetDeviceQueue								qvkGetDeviceQueue;
 static PFN_vkGetImageMemoryRequirements					qvkGetImageMemoryRequirements;
 static PFN_vkGetImageSubresourceLayout					qvkGetImageSubresourceLayout;
+static PFN_vkGetPipelineCacheData						qvkGetPipelineCacheData;
 static PFN_vkInvalidateMappedMemoryRanges				qvkInvalidateMappedMemoryRanges;
 static PFN_vkMapMemory									qvkMapMemory;
 static PFN_vkQueueSubmit								qvkQueueSubmit;
@@ -1944,6 +1949,87 @@ static void vk_destroy_instance( void ) {
 }
 
 
+/*
+** vk_load_pipeline_cache
+**
+** Reads the persisted pipeline cache and checks its header against the
+** selected physical device, so a cache from another GPU/driver revision is
+** ignored instead of being handed to the driver.
+*/
+static void *vk_load_pipeline_cache( size_t *size ) {
+	VkPhysicalDeviceProperties props;
+	const VkPipelineCacheHeaderVersionOne *header;
+	void *data;
+	int len;
+
+	*size = 0;
+
+	if ( !r_vkPipelineCache->integer )
+		return NULL;
+
+	len = ri.FS_ReadFile( VK_PIPELINE_CACHE_FILE, &data );
+	if ( len <= 0 || data == NULL ) {
+		return NULL;
+	}
+
+	if ( (size_t)len < sizeof( VkPipelineCacheHeaderVersionOne ) ) {
+		ri.FS_FreeFile( data );
+		return NULL;
+	}
+
+	qvkGetPhysicalDeviceProperties( vk.physical_device, &props );
+	header = (const VkPipelineCacheHeaderVersionOne *)data;
+
+	if ( header->headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||
+		header->headerSize < sizeof( VkPipelineCacheHeaderVersionOne ) ||
+		header->vendorID != props.vendorID ||
+		header->deviceID != props.deviceID ||
+		memcmp( header->pipelineCacheUUID, props.pipelineCacheUUID, VK_UUID_SIZE ) != 0 ) {
+		ri.Printf( PRINT_DEVELOPER, "...pipeline cache ignored: header mismatch\n" );
+		ri.FS_FreeFile( data );
+		return NULL;
+	}
+
+	*size = (size_t)len;
+	ri.Printf( PRINT_DEVELOPER, "...pipeline cache loaded: %i bytes\n", len );
+
+	return data;
+}
+
+
+/*
+** vk_save_pipeline_cache
+**
+** Writes the pipeline cache to fs_homepath. Called on shutdown, when all
+** lazily created pipeline variants have been recorded.
+*/
+static void vk_save_pipeline_cache( void ) {
+	void *data;
+	size_t size;
+	VkResult res;
+
+	if ( !r_vkPipelineCache->integer || vk.pipelineCache == VK_NULL_HANDLE )
+		return;
+
+	size = 0;
+	res = qvkGetPipelineCacheData( vk.device, vk.pipelineCache, &size, NULL );
+	if ( res != VK_SUCCESS || size == 0 )
+		return;
+
+	data = ri.Malloc( size );
+	if ( data == NULL )
+		return;
+
+	res = qvkGetPipelineCacheData( vk.device, vk.pipelineCache, &size, data );
+	if ( res == VK_SUCCESS && size > 0 ) {
+		ri.FS_WriteFile( VK_PIPELINE_CACHE_FILE, data, (int)size );
+		ri.Printf( PRINT_DEVELOPER, "...pipeline cache saved: %i bytes\n", (int)size );
+	}
+
+	ri.Free( data );
+}
+
+
 static void init_vulkan_library( void )
 {
 	VkPhysicalDeviceProperties props;
@@ -2124,6 +2210,7 @@ static void init_vulkan_library( void )
 	INIT_DEVICE_FUNCTION(vkGetDeviceQueue)
 	INIT_DEVICE_FUNCTION(vkGetImageMemoryRequirements)
 	INIT_DEVICE_FUNCTION(vkGetImageSubresourceLayout)
+	INIT_DEVICE_FUNCTION(vkGetPipelineCacheData)
 	INIT_DEVICE_FUNCTION(vkInvalidateMappedMemoryRanges)
 	INIT_DEVICE_FUNCTION(vkMapMemory)
 	INIT_DEVICE_FUNCTION(vkQueueSubmit)
@@ -2255,6 +2342,7 @@ static void deinit_device_functions( void )
 	qvkGetDeviceQueue							= NULL;
 	qvkGetImageMemoryRequirements				= NULL;
 	qvkGetImageSubresourceLayout				= NULL;
+	qvkGetPipelineCacheData						= NULL;
 	qvkInvalidateMappedMemoryRanges				= NULL;
 	qvkMapMemory								= NULL;
 	qvkQueueSubmit								= NULL;
@@ -4450,9 +4538,29 @@ void vk_initialize( void )
 
 	{
 		VkPipelineCacheCreateInfo ci;
+		void *cache_data;
+		size_t cache_size;
+		VkResult res;
+
+		cache_data = vk_load_pipeline_cache( &cache_size );
+
 		Com_Memset( &ci, 0, sizeof( ci ) );
 		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-		VK_CHECK( qvkCreatePipelineCache( vk.device, &ci, NULL, &vk.pipelineCache ) );
+		ci.initialDataSize = cache_size;
+		ci.pInitialData = cache_data;
+
+		res = qvkCreatePipelineCache( vk.device, &ci, NULL, &vk.pipelineCache );
+		if ( res != VK_SUCCESS && cache_data != NULL ) {
+			// stale/incompatible cache data, retry with an empty cache
+			ci.initialDataSize = 0;
+			ci.pInitialData = NULL;
+			res = qvkCreatePipelineCache( vk.device, &ci, NULL, &vk.pipelineCache );
+		}
+		VK_CHECK( res );
+
+		if ( cache_data != NULL ) {
+			ri.FS_FreeFile( cache_data );
+		}
 	}
 
 	vk.renderPassIndex = RENDER_PASS_MAIN; // default render pass
@@ -4659,6 +4767,8 @@ void vk_shutdown( refShutdownCode_t code )
 	if ( qvkQueuePresentKHR == NULL ) { // not fully initialized
 		goto __cleanup;
 	}
+
+	vk_save_pipeline_cache();
 
 	vk_destroy_framebuffers();
 
@@ -6958,7 +7068,22 @@ void vk_update_mvp( const float *m ) {
 	else
 		get_mvp_transform( push_constants );
 
+	// the same matrix is pushed once per entity/stage; skip redundant updates
+	if ( vk.cmd->last_push_constants.valid &&
+		vk.cmd->last_push_constants.layout == vk.pipeline_layout &&
+		vk.cmd->last_push_constants.stages == VK_SHADER_STAGE_VERTEX_BIT &&
+		vk.cmd->last_push_constants.size == sizeof( push_constants ) &&
+		memcmp( vk.cmd->last_push_constants.data, push_constants, sizeof( push_constants ) ) == 0 ) {
+		return;
+	}
+
 	qvkCmdPushConstants( vk.cmd->command_buffer, vk.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof( push_constants ), push_constants );
+
+	vk.cmd->last_push_constants.layout = vk.pipeline_layout;
+	vk.cmd->last_push_constants.stages = VK_SHADER_STAGE_VERTEX_BIT;
+	vk.cmd->last_push_constants.size = sizeof( push_constants );
+	Com_Memcpy( vk.cmd->last_push_constants.data, push_constants, sizeof( push_constants ) );
+	vk.cmd->last_push_constants.valid = qtrue;
 
 	vk.stats.push_size += sizeof( push_constants );
 }
@@ -7019,6 +7144,45 @@ void vk_bind_index_buffer( VkBuffer buffer, uint32_t offset )
 
 	vk.cmd->curr_index_buffer = buffer;
 	vk.cmd->curr_index_offset = offset;
+}
+
+
+/*
+** vk_bind_vertex_buffers
+**
+** Binds the given vertex buffers unless the exact same range is already
+** bound. Consecutive static VBO draws reuse the same shader layout, so this
+** cuts a large number of redundant driver calls.
+*/
+static void vk_bind_vertex_buffers( uint32_t base, uint32_t count, const VkBuffer *buffers, const VkDeviceSize *offsets )
+{
+	if ( !count ) {
+		return;
+	}
+
+	if ( base + count > ARRAY_LEN( vk.cmd->last_vertex_bind.buffers ) ) {
+		// never happen with the 8 bindings the shaders use; bind without
+		// caching rather than risk stale state
+		qvkCmdBindVertexBuffers( vk.cmd->command_buffer, base, count, buffers, offsets );
+		vk.cmd->last_vertex_bind.valid = qfalse;
+		return;
+	}
+
+	if ( vk.cmd->last_vertex_bind.valid &&
+		vk.cmd->last_vertex_bind.base == base &&
+		vk.cmd->last_vertex_bind.count == count &&
+		memcmp( vk.cmd->last_vertex_bind.buffers, buffers, count * sizeof( buffers[0] ) ) == 0 &&
+		memcmp( vk.cmd->last_vertex_bind.offsets, offsets, count * sizeof( offsets[0] ) ) == 0 ) {
+		return;
+	}
+
+	qvkCmdBindVertexBuffers( vk.cmd->command_buffer, base, count, buffers, offsets );
+
+	vk.cmd->last_vertex_bind.base = base;
+	vk.cmd->last_vertex_bind.count = count;
+	Com_Memcpy( vk.cmd->last_vertex_bind.buffers, buffers, count * sizeof( buffers[0] ) );
+	Com_Memcpy( vk.cmd->last_vertex_bind.offsets, offsets, count * sizeof( offsets[0] ) );
+	vk.cmd->last_vertex_bind.valid = qtrue;
 }
 
 
@@ -7111,7 +7275,7 @@ void vk_bind_geometry( uint32_t flags )
 			vk_bind_index_attr( 7 );
 		}
 
-		qvkCmdBindVertexBuffers( vk.cmd->command_buffer, bind_base, bind_count, shade_bufs, vk.cmd->vbo_offset + bind_base );
+		vk_bind_vertex_buffers( bind_base, bind_count, shade_bufs, vk.cmd->vbo_offset + bind_base );
 
 	} else
 #endif // USE_VBO
@@ -7150,7 +7314,7 @@ void vk_bind_geometry( uint32_t flags )
 			vk_bind_attr(7, sizeof( color4ub_t ), tess.svars.colors[2][0].rgba);
 		}
 
-		qvkCmdBindVertexBuffers( vk.cmd->command_buffer, bind_base, bind_count, shade_bufs, vk.cmd->buf_offset + bind_base );
+		vk_bind_vertex_buffers( bind_base, bind_count, shade_bufs, vk.cmd->buf_offset + bind_base );
 	}
 }
 
@@ -7169,7 +7333,7 @@ void vk_bind_lighting( int stage, int bundle )
 		vk.cmd->vbo_offset[1] = tess.shader->stages[ stage ]->tex_offset[ bundle ];
 		vk.cmd->vbo_offset[2] = tess.shader->normalOffset;
 
-		qvkCmdBindVertexBuffers( vk.cmd->command_buffer, 0, 3, shade_bufs, vk.cmd->vbo_offset + 0 );
+		vk_bind_vertex_buffers( 0, 3, shade_bufs, vk.cmd->vbo_offset + 0 );
 
 	}
 	else
@@ -7181,7 +7345,7 @@ void vk_bind_lighting( int stage, int bundle )
 		vk_bind_attr( 1, sizeof( vec2_t ), tess.svars.texcoordPtr[ bundle ] );
 		vk_bind_attr( 2, sizeof( tess.normal[0] ), tess.normal );
 
-		qvkCmdBindVertexBuffers( vk.cmd->command_buffer, bind_base, bind_count, shade_bufs, vk.cmd->buf_offset + bind_base );
+		vk_bind_vertex_buffers( bind_base, bind_count, shade_bufs, vk.cmd->buf_offset + bind_base );
 	}
 }
 
@@ -7233,7 +7397,28 @@ void vk_bind_descriptor_sets( void )
 		}
 	}
 
-	qvkCmdBindDescriptorSets( vk.cmd->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipeline_layout, start, count, vk.cmd->descriptor_set.current + start, offset_count, offsets );
+	// skip the bind when the exact same range and dynamic offset is current
+	if ( vk.cmd->last_descriptor_bind.valid &&
+		vk.cmd->last_descriptor_bind.layout == vk.pipeline_layout &&
+		vk.cmd->last_descriptor_bind.start == start &&
+		vk.cmd->last_descriptor_bind.count == count &&
+		vk.cmd->last_descriptor_bind.offset_count == offset_count &&
+		memcmp( vk.cmd->last_descriptor_bind.sets, vk.cmd->descriptor_set.current + start, count * sizeof( VkDescriptorSet ) ) == 0 &&
+		memcmp( vk.cmd->last_descriptor_bind.offsets, offsets, offset_count * sizeof( uint32_t ) ) == 0 ) {
+		// already bound
+	} else {
+		qvkCmdBindDescriptorSets( vk.cmd->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipeline_layout, start, count, vk.cmd->descriptor_set.current + start, offset_count, offsets );
+
+		vk.cmd->last_descriptor_bind.layout = vk.pipeline_layout;
+		vk.cmd->last_descriptor_bind.start = start;
+		vk.cmd->last_descriptor_bind.count = count;
+		vk.cmd->last_descriptor_bind.offset_count = offset_count;
+		Com_Memcpy( vk.cmd->last_descriptor_bind.sets, vk.cmd->descriptor_set.current + start, count * sizeof( VkDescriptorSet ) );
+		if ( offset_count ) {
+			Com_Memcpy( vk.cmd->last_descriptor_bind.offsets, offsets, offset_count * sizeof( uint32_t ) );
+		}
+		vk.cmd->last_descriptor_bind.valid = qtrue;
+	}
 
 	vk.cmd->descriptor_set.end = 0;
 	vk.cmd->descriptor_set.start = ~0U;
@@ -7251,6 +7436,20 @@ void vk_bind_pipeline( uint32_t pipeline ) {
 	}
 
 	vk_world.dirty_depth_attachment |= ( vk.pipelines[ pipeline ].def.state_bits & GLS_DEPTHMASK_TRUE );
+}
+
+
+/*
+** vk_reset_bind_cache
+**
+** Invalidates the command-buffer state cache. Called when a new command
+** buffer starts recording, since all bindings are then undefined.
+*/
+static void vk_reset_bind_cache( void ) {
+	vk.cmd->last_pipeline = VK_NULL_HANDLE;
+	vk.cmd->last_vertex_bind.valid = qfalse;
+	vk.cmd->last_descriptor_bind.valid = qfalse;
+	vk.cmd->last_push_constants.valid = qfalse;
 }
 
 static void vk_update_depth_range( Vk_Depth_Range depth_range )
@@ -7613,7 +7812,7 @@ _retry:
 		vk.stats.push_size_max = vk.stats.push_size;
 	}
 
-	vk.cmd->last_pipeline = VK_NULL_HANDLE;
+	vk_reset_bind_cache();
 
 	backEnd.screenMapDone = qfalse;
 
@@ -8197,6 +8396,10 @@ qboolean vk_bloom( void )
 			}
 		}
 	}
+
+	// the post-process passes above bind their own sets at the scene's set
+	// numbers; the cached range no longer applies
+	vk.cmd->last_descriptor_bind.valid = qfalse;
 
 	backEnd.doneBloom = qtrue;
 

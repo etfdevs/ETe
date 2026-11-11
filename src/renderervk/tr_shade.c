@@ -594,7 +594,6 @@ static void RB_FogPass( qboolean rebindIndex ) {
 	VK_SetFogParams( &uniform, &fog_stage );
 	VK_PushUniform( &uniform );
 	vk_update_descriptor( VK_DESC_FOG_ONLY, tr.fogImage->descriptor );
-	vk_bind_geometry( TESS_XYZ );
 	vk_draw_geometry( DEPTH_RANGE_NORMAL, qtrue );
 #else
 	const fog_t	*fog = tr.world->fogs + tess.fogNum;
