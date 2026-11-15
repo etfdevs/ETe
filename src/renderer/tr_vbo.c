@@ -611,21 +611,17 @@ static qboolean isStaticShader( shader_t *shader )
 			stage->vboFPindex[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 0 );
 			stage->vboVPindexGLFog[1] = getVPindex( mtx, VP_FOG_EYE_IN, texgen, 1 );
 			stage->vboVPindexGLFog[2] = getVPindex( mtx, VP_FOG_EYE_OUT, texgen, 1 );
-			stage->vboFPindexGLFog[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 1 );
 			CompileVertexProgram( stage->vboVPindex[1], mtx, VP_FOG_EYE_IN, texgen, 0 );
 			CompileVertexProgram( stage->vboVPindex[2], mtx, VP_FOG_EYE_OUT, texgen, 0 );
 			CompileFragmentProgram( stage->vboFPindex[1], mtx, atestBits, FP_FOG_BLEND, 0 );
 			CompileVertexProgram( stage->vboVPindexGLFog[1], mtx, VP_FOG_EYE_IN, texgen, 1 );
 			CompileVertexProgram( stage->vboVPindexGLFog[2], mtx, VP_FOG_EYE_OUT, texgen, 1 );
-			CompileFragmentProgram( stage->vboFPindexGLFog[1], mtx, atestBits, FP_FOG_BLEND, 1 );
 			stage->vboVPindex[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 0 );
 			stage->vboFPindex[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 0 );
 			stage->vboVPindexGLFog[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 1 );
-			stage->vboFPindexGLFog[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 1 );
 			CompileVertexProgram( stage->vboVPindex[0], mtx, VP_FOG_NONE, texgen, 0 );
 			CompileFragmentProgram( stage->vboFPindex[0], mtx, atestBits, FP_FOG_NONE, 0 );
 			CompileVertexProgram( stage->vboVPindexGLFog[0], mtx, VP_FOG_NONE, texgen, 1 );
-			CompileFragmentProgram( stage->vboFPindexGLFog[0], mtx, atestBits, FP_FOG_NONE, 1 );
 		}
 	}
 
@@ -1419,8 +1415,7 @@ static void VBO_PrepareQueues( void )
 
 static void VBO_SetupGLFog( void )
 {
-	const glfog_t *curfog;
-	float radial, absolute, expMode;
+	float radial, absolute;
 
 	if ( glConfig.NVFogAvailable ) {
 		radial = ( glConfig.NVFogMode == GL_EYE_RADIAL_NV ) ? 1.0f : 0.0f;
@@ -1431,18 +1426,7 @@ static void VBO_SetupGLFog( void )
 		absolute = 1.0f;
 	}
 
-	// use the same fog slot as SetIteratorFog()
-	if ( backEnd.refdef.rdflags & RDF_DRAWINGSKY )
-		curfog = &glfogsettings[FOG_SKY];
-	else if ( skyboxportal && ( backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ) )
-		curfog = &glfogsettings[FOG_PORTALVIEW];
-	else
-		curfog = &glfogsettings[FOG_CURRENT];
-
-	expMode = ( curfog->mode == GL_LINEAR ) ? 0.0f : 1.0f;
-
 	qglProgramLocalParameter4fARB( GL_VERTEX_PROGRAM_ARB, 1, radial, absolute, 0.0f, 0.0f );
-	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, expMode, 0.0f, 0.0f, 0.0f );
 }
 
 
@@ -1455,7 +1439,7 @@ static void VBO_SetupGLFog( void )
 **
 ** fogIsOn matters here: OPTION ARB_fog_* applies fog from the fog state whether
 ** GL_FOG is enabled or not (measured on NVIDIA and Mesa), while glfogActive is
-** only ever replaced, never cleared. Without this a map with brush fog but no
+** only ever replaced, never cleared. Without it a map with brush fog but no
 ** active glFog - or the first surface after a map change - would be fogged with
 ** the previous fog's colour and range.
 */

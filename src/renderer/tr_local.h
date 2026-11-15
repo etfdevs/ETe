@@ -341,7 +341,6 @@ typedef struct {
 	short			vboVPindex[3];		// normal, eye-in, eye-out
 	short			vboFPindex[2];		// normal, fog-blend
 	short			vboVPindexGLFog[3];	// glFog variants
-	short			vboFPindexGLFog[2];	// glFog variants
 	
 	uint32_t		color_offset;		// within current shader
 	uint32_t		tex_offset[2];		// within current shader
