@@ -92,6 +92,7 @@ typedef struct vbo_s {
 
 	short fogFPindex;	// fog-only
 	short fogVPindex[2];// eye-in/eye-out
+	short fogVPindexGLFog[2];// eye-in/eye-out, with a glFog fog coordinate
 
 } vbo_t;
 
@@ -610,31 +611,33 @@ static qboolean isStaticShader( shader_t *shader )
 			stage->vboFPindex[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 0 );
 			stage->vboVPindexGLFog[1] = getVPindex( mtx, VP_FOG_EYE_IN, texgen, 1 );
 			stage->vboVPindexGLFog[2] = getVPindex( mtx, VP_FOG_EYE_OUT, texgen, 1 );
-			stage->vboFPindexGLFog[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 1 );
 			CompileVertexProgram( stage->vboVPindex[1], mtx, VP_FOG_EYE_IN, texgen, 0 );
 			CompileVertexProgram( stage->vboVPindex[2], mtx, VP_FOG_EYE_OUT, texgen, 0 );
 			CompileFragmentProgram( stage->vboFPindex[1], mtx, atestBits, FP_FOG_BLEND, 0 );
 			CompileVertexProgram( stage->vboVPindexGLFog[1], mtx, VP_FOG_EYE_IN, texgen, 1 );
 			CompileVertexProgram( stage->vboVPindexGLFog[2], mtx, VP_FOG_EYE_OUT, texgen, 1 );
-			CompileFragmentProgram( stage->vboFPindexGLFog[1], mtx, atestBits, FP_FOG_BLEND, 1 );
 			stage->vboVPindex[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 0 );
 			stage->vboFPindex[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 0 );
 			stage->vboVPindexGLFog[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 1 );
-			stage->vboFPindexGLFog[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 1 );
 			CompileVertexProgram( stage->vboVPindex[0], mtx, VP_FOG_NONE, texgen, 0 );
 			CompileFragmentProgram( stage->vboFPindex[0], mtx, atestBits, FP_FOG_NONE, 0 );
 			CompileVertexProgram( stage->vboVPindexGLFog[0], mtx, VP_FOG_NONE, texgen, 1 );
-			CompileFragmentProgram( stage->vboFPindexGLFog[0], mtx, atestBits, FP_FOG_NONE, 1 );
 		}
 	}
 
 	world_vbo.fogVPindex[0] = getVPindex( 0, VP_FOG_EYE_IN, 0, 0 );
 	world_vbo.fogVPindex[1] = getVPindex( 0, VP_FOG_EYE_OUT, 0, 0 );
 
+	world_vbo.fogVPindexGLFog[0] = getVPindex( 0, VP_FOG_EYE_IN, 0, 1 );
+	world_vbo.fogVPindexGLFog[1] = getVPindex( 0, VP_FOG_EYE_OUT, 0, 1 );
+
 	world_vbo.fogFPindex = getFPindex( 0, 0, FP_FOG_ONLY, 0 );
 
 	CompileVertexProgram( world_vbo.fogVPindex[0], 0, VP_FOG_EYE_IN, 0, 0 );
 	CompileVertexProgram( world_vbo.fogVPindex[1], 0, VP_FOG_EYE_OUT, 0, 0 );
+
+	CompileVertexProgram( world_vbo.fogVPindexGLFog[0], 0, VP_FOG_EYE_IN, 0, 1 );
+	CompileVertexProgram( world_vbo.fogVPindexGLFog[1], 0, VP_FOG_EYE_OUT, 0, 1 );
 
 	CompileFragmentProgram( world_vbo.fogFPindex, 0 /*mtx*/, 0 /*atest*/, FP_FOG_ONLY, 0 );
 
@@ -1412,8 +1415,7 @@ static void VBO_PrepareQueues( void )
 
 static void VBO_SetupGLFog( void )
 {
-	const glfog_t *curfog;
-	float radial, absolute, expMode;
+	float radial, absolute;
 
 	if ( glConfig.NVFogAvailable ) {
 		radial = ( glConfig.NVFogMode == GL_EYE_RADIAL_NV ) ? 1.0f : 0.0f;
@@ -1424,18 +1426,7 @@ static void VBO_SetupGLFog( void )
 		absolute = 1.0f;
 	}
 
-	// use the same fog slot as SetIteratorFog()
-	if ( backEnd.refdef.rdflags & RDF_DRAWINGSKY )
-		curfog = &glfogsettings[FOG_SKY];
-	else if ( skyboxportal && ( backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ) )
-		curfog = &glfogsettings[FOG_PORTALVIEW];
-	else
-		curfog = &glfogsettings[FOG_CURRENT];
-
-	expMode = ( curfog->mode == GL_LINEAR ) ? 0.0f : 1.0f;
-
 	qglProgramLocalParameter4fARB( GL_VERTEX_PROGRAM_ARB, 1, radial, absolute, 0.0f, 0.0f );
-	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, expMode, 0.0f, 0.0f, 0.0f );
 }
 
 
@@ -1445,10 +1436,16 @@ static void VBO_SetupGLFog( void )
 ** Which ARB fog option to compile into a program: 0 none, 1 linear, 2
 ** exponential. It has to follow the mode R_Fog() applied, because the driver
 ** evaluates the fog from its own state.
+**
+** fogIsOn matters here: OPTION ARB_fog_* applies fog from the fog state whether
+** GL_FOG is enabled or not (measured on NVIDIA and Mesa), while glfogActive is
+** only ever replaced, never cleared. Without it a map with brush fog but no
+** active glFog - or the first surface after a map change - would be fogged with
+** the previous fog's colour and range.
 */
 static int VBO_GLFogMode( void )
 {
-	if ( !glfogActiveValid ) {
+	if ( !fogIsOn || !glfogActiveValid ) {
 		return 0;
 	}
 
@@ -1683,10 +1680,22 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	//fog-only pass
 	if ( fogPass && fparm == NULL ) {
 
+		int glfogMode = VBO_GLFogMode();
+
 		GL_ClientState( 0, CLS_NONE );
 
-		VBO_SetupFog( world_vbo.fogVPindex[0],
-			VBO_FragmentProgram( 0, 0, FP_FOG_ONLY, VBO_GLFogMode() ), &vp, &fp );
+		// The fog volume pass is drawn with fixed-function fog enabled in
+		// RB_FogPass(), so it gets glFog applied on top of the fog texture.
+		// Do the same here: the fog option needs a vertex program that writes
+		// result.fogcoord, or the driver leaves the pass unfogged.
+		if ( glfogMode ) {
+			VBO_SetupFog( world_vbo.fogVPindexGLFog[0],
+				VBO_FragmentProgram( 0, 0, FP_FOG_ONLY, glfogMode ), &vp, &fp );
+			VBO_SetupGLFog();
+		} else {
+			VBO_SetupFog( world_vbo.fogVPindex[0],
+				VBO_FragmentProgram( 0, 0, FP_FOG_ONLY, 0 ), &vp, &fp );
+		}
 
 		if ( tess.shader->fogPass == FP_EQUAL ) {
 			GL_State( GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA | GLS_DEPTHFUNC_EQUAL );
