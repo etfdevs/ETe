@@ -104,7 +104,11 @@ void ARB_ProgramEnableExt( GLuint vertexProgram, GLuint fragmentProgram )
 	// silently disable every ARB program whenever the dlight/FBO program set
 	// fails to compile, including the VBO programs, which are compiled and
 	// managed independently of it.
-	if ( vertexProgram || fragmentProgram || programCompiled )
+	//
+	// The current bindings are part of the condition, not just the arguments:
+	// ARB_ProgramEnableExt( 0, 0 ) still has to disable a program that is bound,
+	// or it leaks into the following fixed-function drawing.
+	if ( vertexProgram || fragmentProgram || current_vp || current_fp )
 	{
 		if ( current_vp != vertexProgram ) {
 			current_vp = vertexProgram;
@@ -125,7 +129,7 @@ void ARB_ProgramEnableExt( GLuint vertexProgram, GLuint fragmentProgram )
 				qglDisable( GL_FRAGMENT_PROGRAM_ARB );
 			}
 		}
-		programEnabled = 1;
+		programEnabled = ( current_vp || current_fp ) ? 1 : 0;
 	}
 }
 
