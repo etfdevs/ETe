@@ -622,7 +622,7 @@ static qboolean isStaticShader( shader_t *shader )
 			texgen |= 2;
 		}
 
-		if ( texgen || shader->numUnfoggedPasses == 1 ) {
+		{
 			stage->vboVPindex[1] = getVPindex( mtx, VP_FOG_EYE_IN, texgen, 0 );
 			stage->vboVPindex[2] = getVPindex( mtx, VP_FOG_EYE_OUT, texgen, 0 );
 			stage->vboFPindex[1] = getFPindex( mtx, atestBits, FP_FOG_BLEND, 0 );
@@ -635,16 +635,14 @@ static qboolean isStaticShader( shader_t *shader )
 			CompileVertexProgram( stage->vboVPindexGLFog[1], mtx, VP_FOG_EYE_IN, texgen, 1 );
 			CompileVertexProgram( stage->vboVPindexGLFog[2], mtx, VP_FOG_EYE_OUT, texgen, 1 );
 			CompileFragmentProgram( stage->vboFPindexGLFog[1], mtx, atestBits, FP_FOG_BLEND, 1 );
-			if ( texgen ) {
-				stage->vboVPindex[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 0 );
-				stage->vboFPindex[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 0 );
-				stage->vboVPindexGLFog[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 1 );
-				stage->vboFPindexGLFog[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 1 );
-				CompileVertexProgram( stage->vboVPindex[0], mtx, VP_FOG_NONE, texgen, 0 );
-				CompileFragmentProgram( stage->vboFPindex[0], mtx, atestBits, FP_FOG_NONE, 0 );
-				CompileVertexProgram( stage->vboVPindexGLFog[0], mtx, VP_FOG_NONE, texgen, 1 );
-				CompileFragmentProgram( stage->vboFPindexGLFog[0], mtx, atestBits, FP_FOG_NONE, 1 );
-			}
+			stage->vboVPindex[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 0 );
+			stage->vboFPindex[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 0 );
+			stage->vboVPindexGLFog[0] = getVPindex( mtx, VP_FOG_NONE, texgen, 1 );
+			stage->vboFPindexGLFog[0] = getFPindex( mtx, atestBits, FP_FOG_NONE, 1 );
+			CompileVertexProgram( stage->vboVPindex[0], mtx, VP_FOG_NONE, texgen, 0 );
+			CompileFragmentProgram( stage->vboFPindex[0], mtx, atestBits, FP_FOG_NONE, 0 );
+			CompileVertexProgram( stage->vboVPindexGLFog[0], mtx, VP_FOG_NONE, texgen, 1 );
+			CompileFragmentProgram( stage->vboFPindexGLFog[0], mtx, atestBits, FP_FOG_NONE, 1 );
 		}
 	}
 
