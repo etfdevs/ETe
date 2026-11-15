@@ -2382,6 +2382,8 @@ GL FOG
 //extern glfog_t		glfogCurrent;
 extern glfog_t glfogsettings[NUM_FOGS];         // [0] never used (FOG_NONE)
 extern glfogType_t glfogNum;                    // fog type to use (from the fog_t enum list)
+extern glfog_t glfogActive;                     // fog last applied to the fixed-function state
+extern qboolean glfogActiveValid;
 
 extern qboolean fogIsOn;
 

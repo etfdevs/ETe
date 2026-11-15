@@ -100,7 +100,11 @@ void GL_ProgramDisable( void )
 
 void ARB_ProgramEnableExt( GLuint vertexProgram, GLuint fragmentProgram )
 {
-	if ( programCompiled )
+	// Bind whatever program we are given. Gating this on programCompiled would
+	// silently disable every ARB program whenever the dlight/FBO program set
+	// fails to compile, including the VBO programs, which are compiled and
+	// managed independently of it.
+	if ( vertexProgram || fragmentProgram || programCompiled )
 	{
 		if ( current_vp != vertexProgram ) {
 			current_vp = vertexProgram;
@@ -1088,6 +1092,12 @@ qboolean ARB_CompileProgram( programType ptype, const char *text, GLuint program
 
 	qglBindProgramARB( kind, program );
 	qglProgramStringARB( kind, GL_PROGRAM_FORMAT_ASCII_ARB, strlen( text ), text );
+
+	// Compiling binds a program behind ARB_ProgramEnableExt()'s back; drop the
+	// cached binding so the next enable rebinds and re-enables properly.
+	current_vp = 0;
+	current_fp = 0;
+
 	qglGetIntegerv( GL_PROGRAM_ERROR_POSITION_ARB, &errorPos );
 	if ( (errCode = qglGetError()) != GL_NO_ERROR || errorPos != -1 )
 	{
