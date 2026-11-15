@@ -1218,6 +1218,7 @@ static void R_CalcBones( const refEntity_t *refent, int *boneList, int numBones 
 
 		// (SA) also reset these counter statics
 //----(SA)	print stats for the complete model (not per-surface)
+#ifndef USE_VULKAN
 		if ( r_bonesDebug->integer == 4 && totalrt ) {
 			ri.Printf( PRINT_ALL, "Lod %.2f  verts %4d/%4d  tris %4d/%4d  (%.2f%%)\n",
 					   lodScale,
@@ -1227,6 +1228,7 @@ static void R_CalcBones( const refEntity_t *refent, int *boneList, int numBones 
 					   totalt,
 					   ( float )( 100.0 * totalrt ) / (float) totalt );
 		}
+#endif
 //----(SA)	end
 		totalrv = totalrt = totalv = totalt = 0;
 	}
