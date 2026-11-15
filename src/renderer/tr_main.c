@@ -49,6 +49,11 @@ static surfaceType_t entitySurface = SF_ENTITY;
 
 // fog stuff
 glfog_t glfogsettings[NUM_FOGS];
+
+// copy of the fog R_Fog() last applied to the fixed-function state; the VBO
+// programs need its mode to pick the matching ARB_fog_* option
+glfog_t glfogActive;
+qboolean glfogActiveValid = qfalse;
 glfogType_t glfogNum = FOG_NONE;
 qboolean fogIsOn = qfalse;
 
@@ -83,6 +88,9 @@ void R_Fog( glfog_t *curfog ) {
 
 
 	R_FogOn();
+
+	glfogActive = *curfog;
+	glfogActiveValid = qtrue;
 
 	// only send changes if necessary
 
