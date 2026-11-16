@@ -55,6 +55,14 @@ If you have questions concerning this license or the applicable additional terms
 
 #define GL_INDEX_TYPE		GL_UNSIGNED_INT
 
+/*
+ * Renderer-neutral names for the ET runtime fog state. The shared tr_types.h
+ * names are kept for the refdef ABI and for the Vulkan renderer, which still
+ * uses them directly.
+ */
+typedef glfog_t fogState_t;
+typedef glfogType_t fogType_t;
+
 typedef uint32_t glIndex_t;
 
 #define	REFENTITYNUM_BITS	12	// as we actually using only 1 bit for dlight mask in opengl1 renderer
@@ -336,6 +344,7 @@ typedef struct {
 
 	qboolean isDetail;
 	qboolean isFogged;              // used only for shaders that have fog disabled, so we can enable it for individual stages
+	qboolean fogEnabled;            // precomputed: this stage receives runtime fog
 	qboolean		depthFragment;
 
 	short			vboVPindex[3];		// normal, eye-in, eye-out
@@ -648,7 +657,7 @@ typedef struct {
 	vec3_t		visBounds[2];
 	float		zFar;
 	stereoFrame_t	stereoFrame;
-	glfog_t		glFog;                  // fog parameters	//----(SA)	added
+	fogState_t		glFog;                  // fog parameters	//----(SA)	added
 
 #ifdef USE_PMLIGHT
 	// each view will have its own dlight set
@@ -1456,6 +1465,9 @@ typedef struct {
 	qboolean				mapNoBloom;
 
 	vec4_t					trisColor;
+	vec4_t					clearColorDebug;
+	qboolean				clearDebugEnabled;
+
 } trGlobals_t;
 
 extern backEndState_t backEnd;
@@ -1524,6 +1536,7 @@ extern cvar_t	*r_bloom_blend_base;
 extern cvar_t	*r_bloom_intensity;
 extern cvar_t	*r_bloom_filter_size;
 extern cvar_t	*r_bloom_reflection;
+extern cvar_t	*r_bloom_saturation;
 
 extern cvar_t	*r_renderWidth;
 extern cvar_t	*r_renderHeight;
@@ -1564,7 +1577,7 @@ extern cvar_t  *r_lightmap;                     // render lightmaps only
 extern cvar_t  *r_logFile;                      // number of frames to emit GL logs
 extern cvar_t  *r_showtris;                     // enables wireframe rendering of the world
 extern cvar_t  *r_trisMode;
-extern cvar_t  *r_trisColor;                    // enables modifying of the wireframe colour (in 0xRRGGBB[AA] format, alpha defaults to FF)
+extern cvar_t  *r_trisColor;                    // wireframe colour: 0xRRGGBB[AA] or "r g b [a]" (0..1)
 extern cvar_t  *r_showsky;                      // forces sky in front of all surfaces
 extern cvar_t  *r_shownormals;                  // draws wireframe normals
 extern cvar_t  *r_normallength;                 // length of the normals
@@ -1876,6 +1889,7 @@ void RB_ShowImages( void );
 void RB_DrawBounds( vec3_t mins, vec3_t maxs ); // ydnar
 
 void R_SetTrisColor( void );
+void R_SetClearColor( void );
 
 /*
 ============================================================
@@ -2378,16 +2392,19 @@ GL FOG
 ============================================================
 */
 
-//extern glfog_t		glfogCurrent;
-extern glfog_t glfogsettings[NUM_FOGS];         // [0] never used (FOG_NONE)
-extern glfogType_t glfogNum;                    // fog type to use (from the fog_t enum list)
-extern glfog_t glfogActive;                     // fog last applied to the fixed-function state
-extern qboolean glfogActiveValid;
+//extern fogState_t		glfogCurrent;
+extern fogState_t fogSettings[NUM_FOGS];         // [0] never used (FOG_NONE)
+extern fogType_t fogType;                    // fog type to use (from the fog_t enum list)
+extern fogState_t fogStateActive;                     // fog last applied to the fixed-function state
+extern qboolean fogStateActiveValid;
 
 extern qboolean fogIsOn;
 
 extern void         R_FogOff( void );
 extern void         R_FogOn( void );
+
+extern fogState_t *R_GetFogState( void );
+extern const fogState_t *R_GetActiveFogState( void );
 
 extern void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b, float density );
 

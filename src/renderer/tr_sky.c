@@ -324,11 +324,11 @@ static void MakeSkyVec( float s, float t, int axis, vec3_t outXYZ )
 	float	boxSize;
 
 // JPW NERVE swiped from Sherman SP fix
-//	if(glfogNum > FOG_NONE && glfogsettings[FOG_CURRENT].mode == GL_EXP) {
-	if ( glfogsettings[FOG_SKY].registered ) {     // (SA) trying this...
+//	if(fogType > FOG_NONE && fogSettings[FOG_CURRENT].mode == GL_EXP) {
+	if ( fogSettings[FOG_SKY].registered ) {     // (SA) trying this...
 ///		boxSize = backEnd.viewParms.zFar / 1.75;		// div sqrt(3)
-//		boxSize = glfogsettings[FOG_CURRENT].end / 1.75;
-		boxSize = glfogsettings[FOG_SKY].end;       // (SA) trying this...
+//		boxSize = fogSettings[FOG_CURRENT].end / 1.75;
+		boxSize = fogSettings[FOG_SKY].end;       // (SA) trying this...
 // jpw
 	} else {
 		boxSize = backEnd.viewParms.zFar / 1.75;        // div sqrt(3)
@@ -961,7 +961,7 @@ void RB_DrawSun( void ) {
 
 
 
-extern void R_Fog( glfog_t *curfog );
+extern void R_Fog( fogState_t *curfog );
 
 /*
 ================
@@ -997,8 +997,8 @@ void RB_StageIteratorSky( void ) {
 		if ( !backEnd.viewParms.glFog.drawsky ) {
 			return;
 		}
-	} else if ( glfogNum > FOG_NONE )      {
-		if ( !glfogsettings[FOG_CURRENT].drawsky ) {
+	} else if ( fogType > FOG_NONE )      {
+		if ( !fogSettings[FOG_CURRENT].drawsky ) {
 			return;
 		}
 	}

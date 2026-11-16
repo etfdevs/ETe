@@ -48,14 +48,43 @@ refimport_t	ri;
 static surfaceType_t entitySurface = SF_ENTITY;
 
 // fog stuff
-glfog_t glfogsettings[NUM_FOGS];
+fogState_t fogSettings[NUM_FOGS];
 
 // copy of the fog R_Fog() last applied to the fixed-function state; the VBO
 // programs need its mode to pick the matching ARB_fog_* option
-glfog_t glfogActive;
-qboolean glfogActiveValid = qfalse;
-glfogType_t glfogNum = FOG_NONE;
+fogState_t fogStateActive;
+qboolean fogStateActiveValid = qfalse;
+fogType_t fogType = FOG_NONE;
 qboolean fogIsOn = qfalse;
+
+
+/*
+=================
+R_GetFogState
+
+Returns the ET fog state that applies to the current view, without touching
+the fixed-function GL fog state. R_Fog() is the only thing that emits GL state.
+=================
+*/
+fogState_t *R_GetFogState( void ) {
+	if ( backEnd.refdef.rdflags & RDF_NOWORLDMODEL ) {
+		return NULL;
+	}
+
+	if ( backEnd.refdef.rdflags & RDF_DRAWINGSKY ) {
+		return fogSettings[FOG_SKY].registered ? &fogSettings[FOG_SKY] : NULL;
+	}
+
+	if ( skyboxportal && backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ) {
+		return fogSettings[FOG_PORTALVIEW].registered ? &fogSettings[FOG_PORTALVIEW] : NULL;
+	}
+
+	if ( fogType > FOG_NONE ) {
+		return &fogSettings[FOG_CURRENT];
+	}
+
+	return NULL;
+}
 
 
 /*
@@ -63,7 +92,7 @@ qboolean fogIsOn = qfalse;
 R_Fog (void)
 =================
 */
-void R_Fog( glfog_t *curfog ) {
+void R_Fog( fogState_t *curfog ) {
 	if ( !r_wolffog->integer ) {
 		R_FogOff();
 		return;
@@ -89,8 +118,8 @@ void R_Fog( glfog_t *curfog ) {
 
 	R_FogOn();
 
-	glfogActive = *curfog;
-	glfogActiveValid = qtrue;
+	fogStateActive = *curfog;
+	fogStateActiveValid = qtrue;
 
 	// only send changes if necessary
 
@@ -132,7 +161,9 @@ void R_Fog( glfog_t *curfog ) {
 		qglFogi( GL_FOG_DISTANCE_MODE_NV, glConfig.NVFogMode );
 	}
 
-	qglClearColor( curfog->color[0], curfog->color[1], curfog->color[2], curfog->color[3] );
+	// The view clear color is owned by RB_BeginDrawingView(). Fog setup runs
+	// during surface drawing, after the view has already been cleared, so
+	// touching qglClearColor() here only leaks state into the next frame.
 }
 
 // Ridah, allow disabling fog temporarily
@@ -164,10 +195,10 @@ void R_FogOn( void ) {
 //	}
 
 	if ( backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ) { // don't force world fog on portal sky
-		if ( !( glfogsettings[FOG_PORTALVIEW].registered ) ) {
+		if ( !( fogSettings[FOG_PORTALVIEW].registered ) ) {
 			return;
 		}
-	} else if ( !glfogNum )     {
+	} else if ( !fogType )     {
 		return;
 	}
 
@@ -175,6 +206,20 @@ void R_FogOn( void ) {
 	fogIsOn = qtrue;
 }
 // done.
+
+
+/*
+=================
+R_GetActiveFogState
+
+Returns the ET fog state that R_Fog() last applied to the fixed-function
+pipeline, or NULL while GL fog is disabled. The VBO programs use this instead
+of reading the GL fog state directly.
+=================
+*/
+const fogState_t *R_GetActiveFogState( void ) {
+	return ( fogIsOn && fogStateActiveValid ) ? &fogStateActive : NULL;
+}
 
 
 
@@ -201,56 +246,56 @@ void R_SetFog( int fogvar, int var1, int var2, float r, float g, float b, float 
 	if ( fogvar != FOG_CMD_SWITCHFOG ) {   // just set the parameters and return
 
 		if ( var1 == 0 && var2 == 0 ) {    // clear this fog
-			glfogsettings[fogvar].registered = qfalse;
+			fogSettings[fogvar].registered = qfalse;
 			return;
 		}
 
-		glfogsettings[fogvar].color[0]      = r * tr.identityLight;
-		glfogsettings[fogvar].color[1]      = g * tr.identityLight;
-		glfogsettings[fogvar].color[2]      = b * tr.identityLight;
-		glfogsettings[fogvar].color[3]      = 1;
-		glfogsettings[fogvar].start         = var1;
-		glfogsettings[fogvar].end           = var2;
+		fogSettings[fogvar].color[0]      = r * tr.identityLight;
+		fogSettings[fogvar].color[1]      = g * tr.identityLight;
+		fogSettings[fogvar].color[2]      = b * tr.identityLight;
+		fogSettings[fogvar].color[3]      = 1;
+		fogSettings[fogvar].start         = var1;
+		fogSettings[fogvar].end           = var2;
 		if ( density >= 1 ) {
-			glfogsettings[fogvar].mode          = GL_LINEAR;
-			glfogsettings[fogvar].drawsky       = qfalse;
-			glfogsettings[fogvar].clearscreen   = qtrue;
-			glfogsettings[fogvar].density       = 1.0;
+			fogSettings[fogvar].mode          = GL_LINEAR;
+			fogSettings[fogvar].drawsky       = qfalse;
+			fogSettings[fogvar].clearscreen   = qtrue;
+			fogSettings[fogvar].density       = 1.0;
 		} else
 		{
-			glfogsettings[fogvar].mode          = GL_EXP;
-			glfogsettings[fogvar].drawsky       = qtrue;
-			glfogsettings[fogvar].clearscreen   = qfalse;
-			glfogsettings[fogvar].density       = density;
+			fogSettings[fogvar].mode          = GL_EXP;
+			fogSettings[fogvar].drawsky       = qtrue;
+			fogSettings[fogvar].clearscreen   = qfalse;
+			fogSettings[fogvar].density       = density;
 		}
-		glfogsettings[fogvar].hint          = GL_DONT_CARE;
-		glfogsettings[fogvar].registered    = qtrue;
+		fogSettings[fogvar].hint          = GL_DONT_CARE;
+		fogSettings[fogvar].registered    = qtrue;
 
 		return;
 	}
 
 	// don't switch to invalid fogs
-	if ( glfogsettings[var1].registered != qtrue ) {
+	if ( fogSettings[var1].registered != qtrue ) {
 		return;
 	}
 
-	glfogNum = var1;
+	fogType = var1;
 
 	// transitioning to new fog, store the current values as the 'from'
 
-	if ( glfogsettings[FOG_CURRENT].registered ) {
-		memcpy( &glfogsettings[FOG_LAST], &glfogsettings[FOG_CURRENT], sizeof( glfog_t ) );
+	if ( fogSettings[FOG_CURRENT].registered ) {
+		memcpy( &fogSettings[FOG_LAST], &fogSettings[FOG_CURRENT], sizeof( fogState_t ) );
 	} else {
 		// if no current fog fall back to world fog
 		// FIXME: handle transition if there is no FOG_MAP fog
-		memcpy( &glfogsettings[FOG_LAST], &glfogsettings[FOG_MAP], sizeof( glfog_t ) );
+		memcpy( &fogSettings[FOG_LAST], &fogSettings[FOG_MAP], sizeof( fogState_t ) );
 	}
 
-	memcpy( &glfogsettings[FOG_TARGET], &glfogsettings[glfogNum], sizeof( glfog_t ) );
+	memcpy( &fogSettings[FOG_TARGET], &fogSettings[fogType], sizeof( fogState_t ) );
 
 	// setup transition times
-	glfogsettings[FOG_TARGET].startTime = tr.refdef.time;
-	glfogsettings[FOG_TARGET].finishTime = tr.refdef.time + var2;
+	fogSettings[FOG_TARGET].startTime = tr.refdef.time;
+	fogSettings[FOG_TARGET].finishTime = tr.refdef.time + var2;
 }
 
 //----(SA) end
@@ -698,86 +743,86 @@ void R_SetFrameFog( void ) {
 	}
 
 	if ( r_speeds->integer == 5 ) {
-		if ( !glfogsettings[FOG_TARGET].registered ) {
+		if ( !fogSettings[FOG_TARGET].registered ) {
 			ri.Printf( PRINT_ALL, "no fog - calc zFar: %0.1f\n", tr.viewParms.zFar );
 			return;
 		}
 	}
 
 	// DHM - Nerve :: If fog is not valid, don't use it
-	if ( !glfogsettings[FOG_TARGET].registered ) {
+	if ( !fogSettings[FOG_TARGET].registered ) {
 		return;
 	}
 
 	// still fading
-	if ( glfogsettings[FOG_TARGET].finishTime && glfogsettings[FOG_TARGET].finishTime >= tr.refdef.time ) {
+	if ( fogSettings[FOG_TARGET].finishTime && fogSettings[FOG_TARGET].finishTime >= tr.refdef.time ) {
 		float lerpPos;
 		int fadeTime;
 
 		// transitioning from density to distance
-		if ( glfogsettings[FOG_LAST].mode == GL_EXP && glfogsettings[FOG_TARGET].mode == GL_LINEAR ) {
+		if ( fogSettings[FOG_LAST].mode == GL_EXP && fogSettings[FOG_TARGET].mode == GL_LINEAR ) {
 			// for now just fast transition to the target when dissimilar fogs are
-			memcpy( &glfogsettings[FOG_CURRENT], &glfogsettings[FOG_TARGET], sizeof( glfog_t ) );
-			glfogsettings[FOG_TARGET].finishTime = 0;
+			memcpy( &fogSettings[FOG_CURRENT], &fogSettings[FOG_TARGET], sizeof( fogState_t ) );
+			fogSettings[FOG_TARGET].finishTime = 0;
 		}
 		// transitioning from distance to density
-		else if ( glfogsettings[FOG_LAST].mode == GL_LINEAR && glfogsettings[FOG_TARGET].mode == GL_EXP ) {
-			memcpy( &glfogsettings[FOG_CURRENT], &glfogsettings[FOG_TARGET], sizeof( glfog_t ) );
-			glfogsettings[FOG_TARGET].finishTime = 0;
+		else if ( fogSettings[FOG_LAST].mode == GL_LINEAR && fogSettings[FOG_TARGET].mode == GL_EXP ) {
+			memcpy( &fogSettings[FOG_CURRENT], &fogSettings[FOG_TARGET], sizeof( fogState_t ) );
+			fogSettings[FOG_TARGET].finishTime = 0;
 		}
 		// transitioning like fog modes
 		else {
 
-			fadeTime = glfogsettings[FOG_TARGET].finishTime - glfogsettings[FOG_TARGET].startTime;
+			fadeTime = fogSettings[FOG_TARGET].finishTime - fogSettings[FOG_TARGET].startTime;
 			if ( fadeTime <= 0 ) {
 				fadeTime = 1;   // avoid divide by zero
 
 
 			}
-			lerpPos = (float)( tr.refdef.time - glfogsettings[FOG_TARGET].startTime ) / (float)fadeTime;
+			lerpPos = (float)( tr.refdef.time - fogSettings[FOG_TARGET].startTime ) / (float)fadeTime;
 			if ( lerpPos > 1 ) {
 				lerpPos = 1;
 			}
 
 			// lerp near/far
-			glfogsettings[FOG_CURRENT].start        = glfogsettings[FOG_LAST].start + ( ( glfogsettings[FOG_TARGET].start - glfogsettings[FOG_LAST].start ) * lerpPos );
-			glfogsettings[FOG_CURRENT].end          = glfogsettings[FOG_LAST].end + ( ( glfogsettings[FOG_TARGET].end - glfogsettings[FOG_LAST].end ) * lerpPos );
+			fogSettings[FOG_CURRENT].start        = fogSettings[FOG_LAST].start + ( ( fogSettings[FOG_TARGET].start - fogSettings[FOG_LAST].start ) * lerpPos );
+			fogSettings[FOG_CURRENT].end          = fogSettings[FOG_LAST].end + ( ( fogSettings[FOG_TARGET].end - fogSettings[FOG_LAST].end ) * lerpPos );
 
 			// lerp color
-			glfogsettings[FOG_CURRENT].color[0]     = glfogsettings[FOG_LAST].color[0] + ( ( glfogsettings[FOG_TARGET].color[0] - glfogsettings[FOG_LAST].color[0] ) * lerpPos );
-			glfogsettings[FOG_CURRENT].color[1]     = glfogsettings[FOG_LAST].color[1] + ( ( glfogsettings[FOG_TARGET].color[1] - glfogsettings[FOG_LAST].color[1] ) * lerpPos );
-			glfogsettings[FOG_CURRENT].color[2]     = glfogsettings[FOG_LAST].color[2] + ( ( glfogsettings[FOG_TARGET].color[2] - glfogsettings[FOG_LAST].color[2] ) * lerpPos );
+			fogSettings[FOG_CURRENT].color[0]     = fogSettings[FOG_LAST].color[0] + ( ( fogSettings[FOG_TARGET].color[0] - fogSettings[FOG_LAST].color[0] ) * lerpPos );
+			fogSettings[FOG_CURRENT].color[1]     = fogSettings[FOG_LAST].color[1] + ( ( fogSettings[FOG_TARGET].color[1] - fogSettings[FOG_LAST].color[1] ) * lerpPos );
+			fogSettings[FOG_CURRENT].color[2]     = fogSettings[FOG_LAST].color[2] + ( ( fogSettings[FOG_TARGET].color[2] - fogSettings[FOG_LAST].color[2] ) * lerpPos );
 
-			glfogsettings[FOG_CURRENT].density      = glfogsettings[FOG_TARGET].density;
-			glfogsettings[FOG_CURRENT].mode         = glfogsettings[FOG_TARGET].mode;
-			glfogsettings[FOG_CURRENT].registered   = qtrue;
+			fogSettings[FOG_CURRENT].density      = fogSettings[FOG_TARGET].density;
+			fogSettings[FOG_CURRENT].mode         = fogSettings[FOG_TARGET].mode;
+			fogSettings[FOG_CURRENT].registered   = qtrue;
 
 			// if either fog in the transition clears the screen, clear the background this frame to avoid hall of mirrors
-			glfogsettings[FOG_CURRENT].clearscreen  = ( glfogsettings[FOG_TARGET].clearscreen || glfogsettings[FOG_LAST].clearscreen );
+			fogSettings[FOG_CURRENT].clearscreen  = ( fogSettings[FOG_TARGET].clearscreen || fogSettings[FOG_LAST].clearscreen );
 		}
 	} else {
 		// probably usually not necessary to copy the whole thing.
 		// potential FIXME: since this is the most common occurance, diff first and only set changes
-		memcpy( &glfogsettings[FOG_CURRENT], &glfogsettings[FOG_TARGET], sizeof( glfog_t ) );
+		memcpy( &fogSettings[FOG_CURRENT], &fogSettings[FOG_TARGET], sizeof( fogState_t ) );
 	}
 
 
 	// shorten the far clip if the fog opaque distance is closer than the procedural farcip dist
 
-	if ( glfogsettings[FOG_CURRENT].mode == GL_LINEAR ) {
-		if ( glfogsettings[FOG_CURRENT].end < tr.viewParms.zFar ) {
-			tr.viewParms.zFar = glfogsettings[FOG_CURRENT].end;
+	if ( fogSettings[FOG_CURRENT].mode == GL_LINEAR ) {
+		if ( fogSettings[FOG_CURRENT].end < tr.viewParms.zFar ) {
+			tr.viewParms.zFar = fogSettings[FOG_CURRENT].end;
 		}
 	}
 //	else
-//		glfogsettings[FOG_CURRENT].end = 5;
+//		fogSettings[FOG_CURRENT].end = 5;
 
 
 	if ( r_speeds->integer == 5 ) {
-		if ( glfogsettings[FOG_CURRENT].mode == GL_LINEAR ) {
-			ri.Printf( PRINT_ALL, "farclip fog - den: %0.1f  calc zFar: %0.1f  fog zfar: %0.1f\n", glfogsettings[FOG_CURRENT].density, tr.viewParms.zFar, glfogsettings[FOG_CURRENT].end );
+		if ( fogSettings[FOG_CURRENT].mode == GL_LINEAR ) {
+			ri.Printf( PRINT_ALL, "farclip fog - den: %0.1f  calc zFar: %0.1f  fog zfar: %0.1f\n", fogSettings[FOG_CURRENT].density, tr.viewParms.zFar, fogSettings[FOG_CURRENT].end );
 		} else {
-			ri.Printf( PRINT_ALL, "density fog - den: %0.4f  calc zFar: %0.1f  fog zFar: %0.1f\n", glfogsettings[FOG_CURRENT].density, tr.viewParms.zFar, glfogsettings[FOG_CURRENT].end );
+			ri.Printf( PRINT_ALL, "density fog - den: %0.4f  calc zFar: %0.1f  fog zFar: %0.1f\n", fogSettings[FOG_CURRENT].density, tr.viewParms.zFar, fogSettings[FOG_CURRENT].end );
 		}
 	}
 }

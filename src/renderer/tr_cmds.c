@@ -415,6 +415,11 @@ RE_SetGlobalFog
 ====================
 */
 void RE_SetGlobalFog( qboolean restore, int duration, float r, float g, float b, float depthForOpaque ) {
+	// no BSP global fog volume (or no world yet)
+	if ( !tr.world || tr.world->globalFog < 0 ) {
+		return;
+	}
+
 	if ( restore ) {
 		if ( duration > 0 ) {
 			VectorCopy( tr.world->fogs[tr.world->globalFog].shader->fogParms.color, tr.world->globalTransStartFog );
@@ -478,6 +483,16 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 	backEnd.doneBloom = qfalse;
 
 	backEnd.color2D.u32 = ~0U;
+
+	// refresh cached debug colors only when their cvars change
+	if ( r_trisColor->modified ) {
+		R_SetTrisColor();
+		r_trisColor->modified = qfalse;
+	}
+	if ( r_clear->modified ) {
+		R_SetClearColor();
+		r_clear->modified = qfalse;
+	}
 
 	// check for errors
 	GL_CheckErrors();
@@ -619,12 +634,6 @@ void RE_EndFrame( int *frontEndMsec, int *backEndMsec ) {
 	}
 	backEnd.pc.msec = 0;
 	backEnd.throttle = qfalse;
-
-	if ( r_trisColor->modified )
-	{
-		R_SetTrisColor();
-		r_trisColor->modified = qfalse;
-	}
 
 	// NVidia fog control
 	if ( glConfig.NVFogAvailable && r_nv_fogdist_mode->modified ) {

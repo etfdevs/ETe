@@ -3369,6 +3369,14 @@ static shader_t *FinishShader( void ) {
 		}
 	}
 
+	// precompute the per-stage runtime fog enable used by the backend
+	for ( i = 0; i < shader.numUnfoggedPasses; i++ ) {
+		if ( !stages[i].active ) {
+			continue;
+		}
+		stages[i].fogEnabled = ( !shader.noFog || stages[i].isFogged );
+	}
+
 	// determine which stage iterator function is appropriate
 	ComputeStageIteratorFunc();
 
@@ -4524,7 +4532,7 @@ R_InitShaders
 */
 void R_InitShaders( void ) {
 
-	glfogNum = FOG_NONE;
+	fogType = FOG_NONE;
 
 	ri.Printf( PRINT_ALL, "Initializing Shaders\n" );
 

@@ -95,6 +95,7 @@ cvar_t	*r_bloom_blend_base;
 cvar_t	*r_bloom_intensity;
 cvar_t	*r_bloom_filter_size;
 cvar_t	*r_bloom_reflection;
+cvar_t	*r_bloom_saturation;
 
 cvar_t	*r_renderWidth;
 cvar_t	*r_renderHeight;
@@ -1905,7 +1906,14 @@ static void R_Register( void )
 	ri.Cvar_SetDescription(r_bloom_threshold, "Color level to extract to bloom texture" );
 	ri.Cvar_SetGroup( r_bloom_threshold, CVG_RENDERER );
 	r_bloom_threshold_mode = ri.Cvar_Get( "r_bloom_threshold_mode", "0", CVAR_ARCHIVE_ND );
-	ri.Cvar_SetDescription( r_bloom_threshold_mode, "Color extraction mode:\n 0: (r|g|b) >= threshold\n 1: (r + g + b ) / 3 >= threshold\n 2: luma(r, g, b) >= threshold" );
+	ri.Cvar_SetDescription( r_bloom_threshold_mode, "Color extraction mode:\n"
+		" 0: (r|g|b) >= threshold, binary mask\n"
+		" 1: (r + g + b) / 3 >= threshold, binary mask\n"
+		" 2: luma(r, g, b) >= threshold, binary mask\n"
+		" 3: subtractive, per-channel: max(rgb - threshold, 0), normalized\n"
+		" 4: soft knee, scaled by ((r + g + b) / 3 - threshold) / (1 - threshold)\n"
+		" 5: soft knee, scaled by (luma(r, g, b) - threshold) / (1 - threshold)" );
+	ri.Cvar_CheckRange( r_bloom_threshold_mode, "0", "5", CV_INTEGER );
 	ri.Cvar_SetGroup( r_bloom_threshold_mode, CVG_RENDERER );
 	r_bloom_intensity = ri.Cvar_Get( "r_bloom_intensity", "0.5", CVAR_ARCHIVE_ND );
 	ri.Cvar_SetDescription( r_bloom_intensity, "Final bloom blend factor" );
@@ -1919,6 +1927,10 @@ static void R_Register( void )
 	r_bloom_modulate = ri.Cvar_Get( "r_bloom_modulate", "0", CVAR_ARCHIVE_ND );
 	ri.Cvar_SetDescription( r_bloom_modulate, "Modulate extracted color:\n 0: off (color = color, i.e. no changes)\n 1: by itself (color = color * color)\n 2: by intensity (color = color * luma(color))" );
 	ri.Cvar_SetGroup( r_bloom_modulate, CVG_RENDERER );
+	r_bloom_saturation = ri.Cvar_Get( "r_bloom_saturation", "1", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_bloom_saturation, "0", "1", CV_FLOAT );
+	ri.Cvar_SetDescription( r_bloom_saturation, "Saturation of the extracted bloom color:\n 1: preserve source color\n 0: fully desaturated (neutral glow)" );
+	// passed as a shader uniform, no need to recompile programs on change
 	r_bloom_filter_size = ri.Cvar_Get( "r_bloom_filter_size", "6", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_bloom_filter_size, XSTRING( MIN_FILTER_SIZE ), XSTRING( MAX_FILTER_SIZE ), CV_INTEGER );
 	ri.Cvar_SetDescription( r_bloom_filter_size, "Filter size of Gaussian Blur effect for each pass, bigger filter size means stronger and wider blur, lower values are faster" );
@@ -2032,8 +2044,9 @@ static void R_Register( void )
 		" 1 - Q3A / ET \\r_showtris 2 style (default)\n" );
 	ri.Cvar_CheckRange( r_trisMode, "0", "1", CV_INTEGER );
 	r_trisColor = ri.Cvar_Get( "r_trisColor", "1.0 1.0 1.0 1.0", CVAR_ARCHIVE_ND );
+	ri.Cvar_SetDescription( r_trisColor, "Color of \\r_showtris wireframe, as 0xRRGGBB[AA] hex\n"
+		"or \"r g b [a]\" values from 0 to 1" );
 	R_SetTrisColor();
-	r_trisColor->flags &= ~CVAR_LATCH;  // If we were running renderervk before, we need to remove latch
 	r_trisColor->modified = qfalse;
 	r_showsky = ri.Cvar_Get( "r_showsky", "0", 0 );
 	ri.Cvar_SetDescription( r_showsky, "Forces sky in front of all surfaces" );
@@ -2048,7 +2061,10 @@ static void R_Register( void )
 		"  0 - disable screen clear (recommended)\n" \
 		"  1 - magenta\n" \
 		"  2 - black\n"
-		"  rrr ggg bbb - color format also accepted" );
+		"  rrr ggg bbb - color format also accepted (values from 0 to 1)" );
+
+	R_SetClearColor();
+	r_clear->modified = qfalse;
 
 	r_offsetFactor = ri.Cvar_Get( "r_offsetfactor", "-1", CVAR_CHEAT );
 	ri.Cvar_SetDescription( r_offsetFactor, "Offset factor for shaders with polygonOffset stages" );
@@ -2162,6 +2178,7 @@ void R_Init( void ) {
 	// clear all our internal state
 	Com_Memset( &tr, 0, sizeof( tr ) );
 	Vector4Set( tr.trisColor, 1.0f, 1.0f, 1.0f, 1.0f );
+	Vector4Set( tr.clearColorDebug, 0.0f, 0.0f, 0.0f, 1.0f );
 	Com_Memset( &backEnd, 0, sizeof( backEnd ) );
 	Com_Memset( &tess, 0, sizeof( tess ) );
 	Com_Memset( &glState, 0, sizeof( glState ) );

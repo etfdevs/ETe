@@ -532,6 +532,8 @@ static void RB_BeginDrawingView( void ) {
 //	if(r_uiFullScreen->integer) {
 //		clearBits = GL_DEPTH_BUFFER_BIT;	// (SA) always just clear depth for menus
 //	}
+	// The view clear color is selected here, from the same ET fog state that
+	// R_Fog() applies during surface drawing. R_Fog() no longer writes it.
 	// ydnar: global q3 fog volume
 	if ( tr.world && tr.world->globalFog >= 0 ) {
 		clearBits |= GL_DEPTH_BUFFER_BIT;
@@ -550,19 +552,19 @@ static void RB_BeginDrawingView( void ) {
 
 				// try clearing first with the portal sky fog color, then the world fog color, then finally a default
 				clearBits |= GL_COLOR_BUFFER_BIT;
-				if ( glfogsettings[FOG_PORTALVIEW].registered ) {
-					qglClearColor( glfogsettings[FOG_PORTALVIEW].color[0], glfogsettings[FOG_PORTALVIEW].color[1], glfogsettings[FOG_PORTALVIEW].color[2], glfogsettings[FOG_PORTALVIEW].color[3] );
-				} else if ( glfogNum > FOG_NONE && glfogsettings[FOG_CURRENT].registered )      {
-					qglClearColor( glfogsettings[FOG_CURRENT].color[0], glfogsettings[FOG_CURRENT].color[1], glfogsettings[FOG_CURRENT].color[2], glfogsettings[FOG_CURRENT].color[3] );
+				if ( fogSettings[FOG_PORTALVIEW].registered ) {
+					qglClearColor( fogSettings[FOG_PORTALVIEW].color[0], fogSettings[FOG_PORTALVIEW].color[1], fogSettings[FOG_PORTALVIEW].color[2], fogSettings[FOG_PORTALVIEW].color[3] );
+				} else if ( fogType > FOG_NONE && fogSettings[FOG_CURRENT].registered )      {
+					qglClearColor( fogSettings[FOG_CURRENT].color[0], fogSettings[FOG_CURRENT].color[1], fogSettings[FOG_CURRENT].color[2], fogSettings[FOG_CURRENT].color[3] );
 				} else {
 //					qglClearColor ( 1.0, 0.0, 0.0, 1.0 );	// red clear for testing portal sky clear
 					qglClearColor( 0.5, 0.5, 0.5, 1.0 );
 				}
 			} else {                                                    // rendered sky (either clear color or draw quake sky)
-				if ( glfogsettings[FOG_PORTALVIEW].registered ) {
-					qglClearColor( glfogsettings[FOG_PORTALVIEW].color[0], glfogsettings[FOG_PORTALVIEW].color[1], glfogsettings[FOG_PORTALVIEW].color[2], glfogsettings[FOG_PORTALVIEW].color[3] );
+				if ( fogSettings[FOG_PORTALVIEW].registered ) {
+					qglClearColor( fogSettings[FOG_PORTALVIEW].color[0], fogSettings[FOG_PORTALVIEW].color[1], fogSettings[FOG_PORTALVIEW].color[2], fogSettings[FOG_PORTALVIEW].color[3] );
 
-					if ( glfogsettings[FOG_PORTALVIEW].clearscreen ) {    // portal fog requests a screen clear (distance fog rather than quake sky)
+					if ( fogSettings[FOG_PORTALVIEW].clearscreen ) {    // portal fog requests a screen clear (distance fog rather than quake sky)
 						clearBits |= GL_COLOR_BUFFER_BIT;
 					}
 				}
@@ -572,9 +574,9 @@ static void RB_BeginDrawingView( void ) {
 
 			clearBits |= GL_DEPTH_BUFFER_BIT;   // this will go when I get the portal sky rendering way out in the zbuffer (or not writing to zbuffer at all)
 
-			if ( glfogNum > FOG_NONE && glfogsettings[FOG_CURRENT].registered ) {
+			if ( fogType > FOG_NONE && fogSettings[FOG_CURRENT].registered ) {
 				if ( backEnd.refdef.rdflags & RDF_UNDERWATER ) {
-					if ( glfogsettings[FOG_CURRENT].mode == GL_LINEAR ) {
+					if ( fogSettings[FOG_CURRENT].mode == GL_LINEAR ) {
 						clearBits |= GL_COLOR_BUFFER_BIT;
 					}
 
@@ -582,7 +584,7 @@ static void RB_BeginDrawingView( void ) {
 					clearBits |= GL_COLOR_BUFFER_BIT;
 				}
 
-				qglClearColor( glfogsettings[FOG_CURRENT].color[0], glfogsettings[FOG_CURRENT].color[1], glfogsettings[FOG_CURRENT].color[2], glfogsettings[FOG_CURRENT].color[3] );
+				qglClearColor( fogSettings[FOG_CURRENT].color[0], fogSettings[FOG_CURRENT].color[1], fogSettings[FOG_CURRENT].color[2], fogSettings[FOG_CURRENT].color[3] );
 			} else if ( !( r_portalsky->integer ) ) {      // ydnar: portal skies have been manually turned off, clear bg color
 				clearBits |= GL_COLOR_BUFFER_BIT;
 				qglClearColor( 0.5, 0.5, 0.5, 1.0 );
@@ -601,17 +603,17 @@ static void RB_BeginDrawingView( void ) {
 
 			clearBits |= GL_COLOR_BUFFER_BIT;
 
-			if ( glfogsettings[FOG_CURRENT].registered ) { // try to clear fastsky with current fog color
-				qglClearColor( glfogsettings[FOG_CURRENT].color[0], glfogsettings[FOG_CURRENT].color[1], glfogsettings[FOG_CURRENT].color[2], glfogsettings[FOG_CURRENT].color[3] );
+			if ( fogSettings[FOG_CURRENT].registered ) { // try to clear fastsky with current fog color
+				qglClearColor( fogSettings[FOG_CURRENT].color[0], fogSettings[FOG_CURRENT].color[1], fogSettings[FOG_CURRENT].color[2], fogSettings[FOG_CURRENT].color[3] );
 			} else {
 //				qglClearColor ( 0.0, 0.0, 1.0, 1.0 );	// blue clear for testing world sky clear
 				qglClearColor( 0.05f, 0.05f, 0.05f, 1.0f );  // JPW NERVE changed per id req was 0.5s
 			}
 		} else {        // world scene, no portal sky, not fastsky, clear color if fog says to, otherwise, just set the clearcolor
-			if ( glfogsettings[FOG_CURRENT].registered ) { // try to clear fastsky with current fog color
-				qglClearColor( glfogsettings[FOG_CURRENT].color[0], glfogsettings[FOG_CURRENT].color[1], glfogsettings[FOG_CURRENT].color[2], glfogsettings[FOG_CURRENT].color[3] );
+			if ( fogSettings[FOG_CURRENT].registered ) { // try to clear fastsky with current fog color
+				qglClearColor( fogSettings[FOG_CURRENT].color[0], fogSettings[FOG_CURRENT].color[1], fogSettings[FOG_CURRENT].color[2], fogSettings[FOG_CURRENT].color[3] );
 
-				if ( glfogsettings[FOG_CURRENT].clearscreen ) {   // world fog requests a screen clear (distance fog rather than quake sky)
+				if ( fogSettings[FOG_CURRENT].clearscreen ) {   // world fog requests a screen clear (distance fog rather than quake sky)
 					clearBits |= GL_COLOR_BUFFER_BIT;
 				}
 			}
@@ -1656,8 +1658,8 @@ static const void *RB_DrawBuffer( const void *data ) {
 #endif
 
 	// clear screen for debugging
-	if ( r_clear->integer && frameHasView ) {
-		qglClearColor( 1, 0, 0.5, 1 );
+	if ( tr.clearDebugEnabled && frameHasView ) {
+		qglClearColor( tr.clearColorDebug[0], tr.clearColorDebug[1], tr.clearColorDebug[2], tr.clearColorDebug[3] );
 		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	}
 

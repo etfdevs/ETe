@@ -111,37 +111,166 @@ void R_BindAnimatedImage( const textureBundle_t *bundle ) {
 }
 
 
-void R_SetTrisColor( void ) {
-	const char *s = r_trisColor->string;
+/*
+===============
+R_ParseColorFloats
 
-	if ( *s == '0' && ( *( s + 1 ) == 'x' || *( s + 1 ) == 'X' ) ) {
-		s += 2;
-		if ( Q_IsHexColorString( s ) ) {
-			tr.trisColor[0] = ( (float)( gethex( *( s ) ) * 16 + gethex( *( s + 1 ) ) ) ) / 255.00;
-			tr.trisColor[1] = ( (float)( gethex( *( s + 2 ) ) * 16 + gethex( *( s + 3 ) ) ) ) / 255.00;
-			tr.trisColor[2] = ( (float)( gethex( *( s + 4 ) ) * 16 + gethex( *( s + 5 ) ) ) ) / 255.00;
+Parses up to maxComponents floating point color values.
+Returns the number of components parsed, or -1 if the string is invalid.
+===============
+*/
+static int R_ParseColorFloats( const char *s, vec4_t color, int maxComponents ) {
+	int i;
+	const char *token;
 
-			if ( Q_HexColorStringHasAlpha( s ) ) {
-				tr.trisColor[3] = ( (float)( gethex( *( s + 6 ) ) * 16 + gethex( *( s + 7 ) ) ) ) / 255.00;
-			}
-		}
-	} else {
-		int i;
-		const char *token;
-
-		for ( i = 0 ; i < 4 ; i++ ) {
-			token = COM_ParseExt( &s, qfalse );
-			if ( token ) {
-				tr.trisColor[i] = Q_atof( token );
-			} else {
-				tr.trisColor[i] = 1.f;
-			}
+	for ( i = 0; i < maxComponents; i++ ) {
+		token = COM_ParseExt( &s, qfalse );
+		if ( !token[0] ) {
+			break;
 		}
 
-		if ( !tr.trisColor[3] ) {
-			tr.trisColor[3] = 1.f;
+		if ( !Q_isanumber( token ) ) {
+			return -1;
+		}
+
+		color[i] = Q_atof( token );
+	}
+
+	// reject trailing junk
+	token = COM_ParseExt( &s, qfalse );
+	if ( token[0] ) {
+		return -1;
+	}
+
+	return i;
+}
+
+
+/*
+===============
+R_ClampColor
+
+Clamps color components to the valid 0..1 range.
+===============
+*/
+static qboolean R_ClampColor( vec4_t color, int components ) {
+	qboolean clamped = qfalse;
+	int i;
+
+	for ( i = 0; i < components; i++ ) {
+		if ( color[i] < 0.0f ) {
+			color[i] = 0.0f;
+			clamped = qtrue;
+		} else if ( color[i] > 1.0f ) {
+			color[i] = 1.0f;
+			clamped = qtrue;
 		}
 	}
+
+	return clamped;
+}
+
+
+/*
+===============
+R_SetTrisColor
+
+Caches the wireframe color used by r_showtris.
+Accepts 0xRRGGBB[AA] or "r g b [a]" values in the 0..1 range.
+===============
+*/
+void R_SetTrisColor( void ) {
+	const char *s = r_trisColor->string;
+	vec4_t color;
+	int components;
+
+	Vector4Set( color, 1.0f, 1.0f, 1.0f, 1.0f );
+
+	if ( s[0] == '0' && ( s[1] == 'x' || s[1] == 'X' ) ) {
+		const char *hex = s + 2;
+		const size_t length = strlen( hex );
+
+		if ( ( length == 6 || length == 8 ) && Q_IsHexColorString( hex ) &&
+			( length == 6 || Q_HexColorStringHasAlpha( hex ) ) ) {
+			color[0] = ( (float)( gethex( hex[0] ) * 16 + gethex( hex[1] ) ) ) / 255.0f;
+			color[1] = ( (float)( gethex( hex[2] ) * 16 + gethex( hex[3] ) ) ) / 255.0f;
+			color[2] = ( (float)( gethex( hex[4] ) * 16 + gethex( hex[5] ) ) ) / 255.0f;
+
+			if ( length == 8 ) {
+				color[3] = ( (float)( gethex( hex[6] ) * 16 + gethex( hex[7] ) ) ) / 255.0f;
+			}
+		} else {
+			ri.Printf( PRINT_WARNING, "R_SetTrisColor: invalid value '%s' for r_trisColor, using white\n", s );
+		}
+	} else {
+		components = R_ParseColorFloats( s, color, 4 );
+
+		if ( components < 3 ) {
+			ri.Printf( PRINT_WARNING, "R_SetTrisColor: invalid value '%s' for r_trisColor, using white\n", s );
+			Vector4Set( color, 1.0f, 1.0f, 1.0f, 1.0f );
+		} else {
+			if ( components == 3 ) {
+				color[3] = 1.0f;
+			}
+
+			if ( R_ClampColor( color, 4 ) ) {
+				ri.Printf( PRINT_WARNING, "R_SetTrisColor: components for r_trisColor must be in the 0..1 range\n" );
+			}
+
+			if ( color[3] <= 0.0f ) {
+				color[3] = 1.0f;
+			}
+		}
+	}
+
+	Vector4Copy( color, tr.trisColor );
+}
+
+
+/*
+===============
+R_SetClearColor
+
+Caches the debug clear color used by r_clear.
+Accepts 0 (disabled), 1 (magenta), 2 (black) or "r g b" values in the 0..1 range.
+===============
+*/
+void R_SetClearColor( void ) {
+	vec4_t color;
+	int components;
+
+	Vector4Set( color, 0.0f, 0.0f, 0.0f, 1.0f );
+	components = R_ParseColorFloats( r_clear->string, color, 4 );
+
+	if ( components == 1 ) {
+		if ( color[0] == 0.0f ) {
+			tr.clearDebugEnabled = qfalse;
+			return;
+		}
+		if ( color[0] == 1.0f ) {
+			Vector4Set( tr.clearColorDebug, 1.0f, 0.0f, 0.5f, 1.0f );
+			tr.clearDebugEnabled = qtrue;
+			return;
+		}
+		if ( color[0] == 2.0f ) {
+			Vector4Set( tr.clearColorDebug, 0.0f, 0.0f, 0.0f, 1.0f );
+			tr.clearDebugEnabled = qtrue;
+			return;
+		}
+	} else if ( components == 3 ) {
+		if ( R_ClampColor( color, 3 ) ) {
+			ri.Printf( PRINT_WARNING, "R_SetClearColor: components for r_clear must be in the 0..1 range\n" );
+		}
+
+		color[3] = 1.0f;
+		Vector4Copy( color, tr.clearColorDebug );
+		tr.clearDebugEnabled = qtrue;
+		return;
+	}
+
+	ri.Printf( PRINT_WARNING, "R_SetClearColor: invalid value '%s' for r_clear, screen clear disabled\n",
+		r_clear->string );
+	tr.clearDebugEnabled = qfalse;
 }
 
 
@@ -409,13 +538,11 @@ static void DrawMultitextured( const shaderCommands_t *input, int stage ) {
 
 	pStage = tess.xstages[ stage ];
 
-	// Ridah
-	if ( tess.shader->noFog && pStage->isFogged ) {
+	// Ridah, per stage fogging (detail textures)
+	if ( pStage->fogEnabled ) {
 		R_FogOn();
-	} else if ( tess.shader->noFog && !pStage->isFogged ) {
+	} else {
 		R_FogOff(); // turn it back off
-	} else {    // make sure it's on
-		R_FogOn();
 	}
 	// done.
 
@@ -1103,7 +1230,7 @@ void R_ComputeTexCoords( const int b, const textureBundle_t *bundle ) {
 }
 
 
-extern void R_Fog( glfog_t *curfog );
+extern void R_Fog( fogState_t *curfog );
 
 /*
 ==============
@@ -1112,35 +1239,12 @@ SetIteratorFog
 ==============
 */
 void SetIteratorFog( void ) {
-	// changed for problem when you start the game with r_fastsky set to '1'
-//	if(r_fastsky->integer || backEnd.refdef.rdflags & RDF_NOWORLDMODEL ) {
-	if ( backEnd.refdef.rdflags & RDF_NOWORLDMODEL ) {
-		R_FogOff();
-		return;
-	}
+	fogState_t *fog = R_GetFogState();
 
-	if ( backEnd.refdef.rdflags & RDF_DRAWINGSKY ) {
-		if ( glfogsettings[FOG_SKY].registered ) {
-			R_Fog( &glfogsettings[FOG_SKY] );
-		} else {
-			R_FogOff();
-		}
-
-		return;
-	}
-
-	if ( skyboxportal && backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ) {
-		if ( glfogsettings[FOG_PORTALVIEW].registered ) {
-			R_Fog( &glfogsettings[FOG_PORTALVIEW] );
-		} else {
-			R_FogOff();
-		}
+	if ( fog ) {
+		R_Fog( fog );
 	} else {
-		if ( glfogNum > FOG_NONE ) {
-			R_Fog( &glfogsettings[FOG_CURRENT] );
-		} else {
-			R_FogOff();
-		}
+		R_FogOff();
 	}
 }
 
@@ -1188,12 +1292,10 @@ static void RB_IterateStagesGeneric( const shaderCommands_t *input )
 			R_BindAnimatedImage( &pStage->bundle[0] );
 
 			// Ridah, per stage fogging (detail textures)
-			if ( tess.shader->noFog && pStage->isFogged ) {
+			if ( pStage->fogEnabled ) {
 				R_FogOn();
-			} else if ( tess.shader->noFog && !pStage->isFogged ) {
+			} else {
 				R_FogOff(); // turn it back off
-			} else {    // make sure it's on
-				R_FogOn();
 			}
 			// done.
 

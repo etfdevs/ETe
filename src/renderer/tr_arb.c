@@ -790,25 +790,26 @@ static const char *gammaFP = {
 };
 
 static char *ARB_BuildBloomProgram( char *buf ) {
-	qboolean intensityCalculated;
 	char *s = buf;
 
-	intensityCalculated = qfalse;
 	s = Q_stradd( s,
 		"!!ARBfp1.0 \n"
 		"OPTION ARB_precision_hint_fastest; \n"
-		"PARAM thres = program.local[0]; \n"
+		"PARAM thres = program.local[0]; \n" // xyz: threshold, w: 1/(1-threshold) for subtractive modes
+		"PARAM satv = program.local[1]; \n" // x: saturation of extracted color
 		"TEMP base; \n"
 		"TEX base, fragment.texcoord[0], texture[0], 2D; \n" );
 
-	if ( r_bloom_threshold_mode->integer == 0 ) {
+	switch ( r_bloom_threshold_mode->integer ) {
+	case 0:
 		// (r|g|b) >= threshold
 		s = Q_stradd( s,
 			"TEMP minv; \n"
 			"SGE minv, base, thres; \n"
 			"DP3_SAT minv.w, minv, minv; \n"
 			"MUL base.rgb, base, minv.w; \n" );
-	} else if ( r_bloom_threshold_mode->integer == 1 ) {
+		break;
+	case 1:
 		// (r+g+b)/3 >= threshold
 		s = Q_stradd( s,
 			"PARAM scale = { 0.3333, 0.3334, 0.3333, 1.0 }; \n"
@@ -816,15 +817,42 @@ static char *ARB_BuildBloomProgram( char *buf ) {
 			"DP3_SAT avg, base, scale; \n"
 			"SGE avg.w, avg.x, thres.x; \n"
 			"MUL base.rgb, base, avg.w; \n" );
-	} else {
+		break;
+	case 2:
 		// luma(r,g,b) >= threshold
 		s = Q_stradd( s,
-			"PARAM luma = { 0.2126, 0.7152, 0.0722, 1.0 }; \n"
-			"TEMP intensity; \n"
-			"DP3_SAT intensity, base, luma; \n"
-			"SGE intensity.w, intensity.x, thres.x; \n"
-			"MUL base.rgb, base, intensity.w; \n" );
-		intensityCalculated = qtrue;
+			"PARAM luma2 = { 0.2126, 0.7152, 0.0722, 1.0 }; \n"
+			"TEMP intensity2; \n"
+			"DP3_SAT intensity2, base, luma2; \n"
+			"SGE intensity2.w, intensity2.x, thres.x; \n"
+			"MUL base.rgb, base, intensity2.w; \n" );
+		break;
+	case 3:
+		// subtractive, per-channel: max(rgb - threshold, 0), normalized
+		s = Q_stradd( s,
+			"SUB_SAT base.rgb, base, thres; \n"
+			"MUL_SAT base.rgb, base, thres.w; \n" );
+		break;
+	case 4:
+		// soft knee, scaled by ((r+g+b)/3 - threshold) / (1 - threshold)
+		s = Q_stradd( s,
+			"PARAM scale4 = { 0.3333, 0.3334, 0.3333, 1.0 }; \n"
+			"TEMP avg4; \n"
+			"DP3_SAT avg4, base, scale4; \n"
+			"SUB_SAT avg4.x, avg4.x, thres.x; \n"
+			"MUL_SAT avg4.x, avg4.x, thres.w; \n"
+			"MUL base.rgb, base, avg4.x; \n" );
+		break;
+	default:
+		// 5: soft knee, scaled by (luma(r,g,b) - threshold) / (1 - threshold)
+		s = Q_stradd( s,
+			"PARAM luma5 = { 0.2126, 0.7152, 0.0722, 1.0 }; \n"
+			"TEMP intensity5; \n"
+			"DP3_SAT intensity5, base, luma5; \n"
+			"SUB_SAT intensity5.x, intensity5.x, thres.x; \n"
+			"MUL_SAT intensity5.x, intensity5.x, thres.w; \n"
+			"MUL base.rgb, base, intensity5.x; \n" );
+		break;
 	}
 
 	// modulation
@@ -834,17 +862,20 @@ static char *ARB_BuildBloomProgram( char *buf ) {
 			s = Q_stradd( s, "MUL base, base, base; \n" );
 		} else {
 			// by intensity
-			if ( !intensityCalculated ) {
-				s = Q_stradd( s,
-					"PARAM luma = { 0.2126, 0.7152, 0.0722, 1.0 }; \n"
-					"TEMP intensity; \n"
-					"DP3_SAT intensity, base, luma; \n" );
-			}
-			s = Q_stradd( s, "MUL base, base, intensity; \n" );
+			s = Q_stradd( s,
+				"PARAM lumaM = { 0.2126, 0.7152, 0.0722, 1.0 }; \n"
+				"TEMP intensityM; \n"
+				"DP3_SAT intensityM, base, lumaM; \n"
+				"MUL base, base, intensityM; \n" );
 		}
 	}
 
-	/*s = */ Q_stradd( s,
+	// desaturate extracted color: sat 1 = keep source color, sat 0 = luma
+	s = Q_stradd( s,
+		"PARAM lumaD = { 0.2126, 0.7152, 0.0722, 1.0 }; \n"
+		"TEMP desat; \n"
+		"DP3_SAT desat, base, lumaD; \n"
+		"LRP base.rgb, satv.x, base, desat; \n"
 		"MOV base.w, 1.0; \n"
 		"MOV result.color, base; \n"
 		"END \n" );
@@ -1913,6 +1944,8 @@ qboolean FBO_Bloom( const float gamma, const float obScale, qboolean finalStage 
 {
 	const int w = glConfig.vidWidth;
 	const int h = glConfig.vidHeight;
+	const float threshold = r_bloom_threshold->value;
+	const float invThreshold = ( threshold < 1.0f ) ? ( 1.0f / ( 1.0f - threshold ) ) : 1.0f;
 
 	frameBuffer_t *src, *dst;
 	int finalBloomFBO;
@@ -1953,8 +1986,8 @@ qboolean FBO_Bloom( const float gamma, const float obScale, qboolean finalStage 
 	GL_BindTexture( 0, src->color );
 	qglViewport( 0, 0, dst->width, dst->height );
 	ARB_ProgramEnable( DUMMY_VERTEX, BLOOM_EXTRACT_FRAGMENT );
-	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, r_bloom_threshold->value, r_bloom_threshold->value,
-		r_bloom_threshold->value, 1.0 );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, threshold, threshold, threshold, invThreshold );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, r_bloom_saturation->value, 1.0, 1.0, 1.0 );
 	RenderQuad( w, h );
 
 	// downscale and blur

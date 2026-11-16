@@ -1437,19 +1437,18 @@ static void VBO_SetupGLFog( void )
 ** exponential. It has to follow the mode R_Fog() applied, because the driver
 ** evaluates the fog from its own state.
 **
-** fogIsOn matters here: OPTION ARB_fog_* applies fog from the fog state whether
-** GL_FOG is enabled or not (measured on NVIDIA and Mesa), while glfogActive is
-** only ever replaced, never cleared. Without it a map with brush fog but no
-** active glFog - or the first surface after a map change - would be fogged with
-** the previous fog's colour and range.
+** activeFog is the gate. It is captured once per batch, because OPTION
+** ARB_fog_* applies fog from the fog state whether GL_FOG is enabled or not
+** (measured on NVIDIA and Mesa) and a fixed-function fallback stage in the
+** same batch may toggle GL_FOG.
 */
-static int VBO_GLFogMode( void )
+static int VBO_GLFogMode( const fogState_t *fog )
 {
-	if ( !fogIsOn || !glfogActiveValid ) {
+	if ( !fog ) {
 		return 0;
 	}
 
-	return ( glfogActive.mode == GL_LINEAR ) ? 1 : 2;
+	return ( fog->mode == GL_LINEAR ) ? 1 : 2;
 }
 
 
@@ -1508,11 +1507,12 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 {
 	const shaderStage_t *pStage;
 	const fogProgramParms_t *fparm;
+	const fogState_t *activeFog;
 	int i;
 	GLbitfield stateBits, normalMask;
 	qboolean fogPass;
 	qboolean lightmapStage;
-	qboolean glFogStage;
+	qboolean stageFogged;
 	GLuint vp, fp;
 
 	fogPass = ( tess.fogNum && tess.shader->fogPass );
@@ -1520,13 +1520,15 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	if ( fogPass && ((tr.refdef.rdflags & RDF_SNOOPERVIEW) || tess.shader->noFog || !r_wolffog->integer ) )
 		fogPass = qfalse;
 
+	activeFog = R_GetActiveFogState();
+
 	if ( fogPass && tess.shader->numUnfoggedPasses == 1 ) {
 		// combined fog + single stage program
 		pStage = input->xstages[ 0 ];
-		if ( !tess.shader->noFog || pStage->isFogged ) {
-			if ( fogIsOn ) {
+		if ( pStage->fogEnabled ) {
+			if ( activeFog ) {
 				fparm = VBO_SetupFog( pStage->vboVPindexGLFog[1],
-					VBO_FragmentProgram( pStage->mtEnv, pStage->stateBits & GLS_ATEST_BITS, FP_FOG_BLEND, VBO_GLFogMode() ),
+					VBO_FragmentProgram( pStage->mtEnv, pStage->stateBits & GLS_ATEST_BITS, FP_FOG_BLEND, VBO_GLFogMode( activeFog ) ),
 					&vp, &fp );
 				VBO_SetupGLFog();
 			} else {
@@ -1566,30 +1568,33 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 		// stages, matching RB_IterateStagesGeneric().
 		lightmapStage = ( r_lightmap->integer && ( pStage->bundle[0].isLightmap || pStage->bundle[1].isLightmap ) );
 
-		// Ridah, per stage fogging (detail textures)
-		if ( tess.shader->noFog && pStage->isFogged ) {
-			R_FogOn();
-		} else if ( tess.shader->noFog && !pStage->isFogged ) {
-			R_FogOff(); // turn it back off
-		} else {    // make sure it's on
-			R_FogOn();
-		}
-		glFogStage = fogIsOn;
-		// done.
+		// Ridah, per stage fogging (detail textures). The flag is precomputed
+		// at shader load; only fixed-function fallback stages need GL_FOG.
+		stageFogged = ( activeFog != NULL && pStage->fogEnabled );
 
 		if ( fparm == NULL || lightmapStage ) {
 			if ( lightmapStage ) {
 				vp = fp = 0;
-			} else if ( glFogStage ) {
+			} else if ( stageFogged ) {
 				vp = vbo_vp[ pStage->vboVPindexGLFog[0] ];
-				fp = VBO_FragmentProgram( pStage->mtEnv, pStage->stateBits & GLS_ATEST_BITS, FP_FOG_NONE, VBO_GLFogMode() );
+				fp = VBO_FragmentProgram( pStage->mtEnv, pStage->stateBits & GLS_ATEST_BITS, FP_FOG_NONE, VBO_GLFogMode( activeFog ) );
 			} else {
 				vp = vbo_vp[ pStage->vboVPindex[0] ];
 				fp = vbo_fp[ pStage->vboFPindex[0] ];
 			}
 			ARB_ProgramEnableExt( vp, fp );
-			if ( fp && glFogStage )
+			if ( fp && stageFogged )
 				VBO_SetupGLFog();
+		}
+
+		// ARB programs apply fog through OPTION ARB_fog_* and ignore GL_FOG;
+		// only the fixed-function fallback needs the global enable.
+		if ( fp == 0 ) {
+			if ( stageFogged ) {
+				R_FogOn();
+			} else {
+				R_FogOff();
+			}
 		}
 
 		if ( fp ) {
@@ -1680,7 +1685,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	//fog-only pass
 	if ( fogPass && fparm == NULL ) {
 
-		int glfogMode = VBO_GLFogMode();
+		int glfogMode = VBO_GLFogMode( activeFog );
 
 		GL_ClientState( 0, CLS_NONE );
 
