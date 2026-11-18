@@ -1511,6 +1511,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	int i;
 	GLbitfield stateBits, normalMask;
 	qboolean fogPass;
+	qboolean fogCombined;
 	qboolean lightmapStage;
 	qboolean stageFogged;
 	GLuint vp, fp;
@@ -1521,6 +1522,10 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 		fogPass = qfalse;
 
 	activeFog = R_GetActiveFogState();
+
+	// fogCombined tracks whether the fog is applied by the stage program
+	// itself, in which case the separate fog volume pass must be skipped.
+	fogCombined = qfalse;
 
 	if ( fogPass && tess.shader->numUnfoggedPasses == 1 ) {
 		// combined fog + single stage program
@@ -1534,6 +1539,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 			} else {
 				fparm = VBO_SetupFog( pStage->vboVPindex[1], vbo_fp[ pStage->vboFPindex[1] ], &vp, &fp );
 			}
+			fogCombined = qtrue;
 		} else {
 			fparm = NULL;
 			vp = fp = 0;
@@ -1575,6 +1581,10 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 		if ( fparm == NULL || lightmapStage ) {
 			if ( lightmapStage ) {
 				vp = fp = 0;
+				// the lightmap stage is drawn through the fixed-function
+				// path, so the combined fog program is not used and the fog
+				// volume has to be applied by the separate pass below
+				fogCombined = qfalse;
 			} else if ( stageFogged ) {
 				vp = vbo_vp[ pStage->vboVPindexGLFog[0] ];
 				fp = VBO_FragmentProgram( pStage->mtEnv, pStage->stateBits & GLS_ATEST_BITS, FP_FOG_NONE, VBO_GLFogMode( activeFog ) );
@@ -1683,7 +1693,7 @@ static void RB_IterateStagesVBO( const shaderCommands_t *input )
 	GL_ClientState( 1, CLS_NONE );
 
 	//fog-only pass
-	if ( fogPass && fparm == NULL ) {
+	if ( fogPass && !fogCombined ) {
 
 		int glfogMode = VBO_GLFogMode( activeFog );
 
