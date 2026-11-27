@@ -121,6 +121,8 @@ static qboolean R_CullSurface( const surfaceType_t *surface, shader_t *shader ) 
 #ifdef USE_PMLIGHT
 qboolean R_LightCullBounds( const dlight_t* dl, const vec3_t mins, const vec3_t maxs )
 {
+	float radius;
+
 	// directional lights affect every surface regardless of position
 	if ( dl->flags & REF_DIRECTED_DLIGHT )
 		return qfalse;
@@ -129,38 +131,40 @@ qboolean R_LightCullBounds( const dlight_t* dl, const vec3_t mins, const vec3_t 
 	if ( dl->flags & REF_JUNIOR_DLIGHT )
 		return qtrue;
 
+	radius = R_GetDlightRadius( dl );
+
 	if ( dl->linear ) {
-		if (dl->transformed[0] - dl->radius > maxs[0] && dl->transformed2[0] - dl->radius > maxs[0] )
+		if (dl->transformed[0] - radius > maxs[0] && dl->transformed2[0] - radius > maxs[0] )
 			return qtrue;
-		if (dl->transformed[0] + dl->radius < mins[0] && dl->transformed2[0] + dl->radius < mins[0] )
-			return qtrue;
-
-		if (dl->transformed[1] - dl->radius > maxs[1] && dl->transformed2[1] - dl->radius > maxs[1] )
-			return qtrue;
-		if (dl->transformed[1] + dl->radius < mins[1] && dl->transformed2[1] + dl->radius < mins[1] )
+		if (dl->transformed[0] + radius < mins[0] && dl->transformed2[0] + radius < mins[0] )
 			return qtrue;
 
-		if (dl->transformed[2] - dl->radius > maxs[2] && dl->transformed2[2] - dl->radius > maxs[2] )
+		if (dl->transformed[1] - radius > maxs[1] && dl->transformed2[1] - radius > maxs[1] )
 			return qtrue;
-		if (dl->transformed[2] + dl->radius < mins[2] && dl->transformed2[2] + dl->radius < mins[2] )
+		if (dl->transformed[1] + radius < mins[1] && dl->transformed2[1] + radius < mins[1] )
+			return qtrue;
+
+		if (dl->transformed[2] - radius > maxs[2] && dl->transformed2[2] - radius > maxs[2] )
+			return qtrue;
+		if (dl->transformed[2] + radius < mins[2] && dl->transformed2[2] + radius < mins[2] )
 			return qtrue;
 
 		return qfalse;
 	}
 
-	if (dl->transformed[0] - dl->radius > maxs[0])
+	if (dl->transformed[0] - radius > maxs[0])
 		return qtrue;
-	if (dl->transformed[0] + dl->radius < mins[0])
-		return qtrue;
-
-	if (dl->transformed[1] - dl->radius > maxs[1])
-		return qtrue;
-	if (dl->transformed[1] + dl->radius < mins[1])
+	if (dl->transformed[0] + radius < mins[0])
 		return qtrue;
 
-	if (dl->transformed[2] - dl->radius > maxs[2])
+	if (dl->transformed[1] - radius > maxs[1])
 		return qtrue;
-	if (dl->transformed[2] + dl->radius < mins[2])
+	if (dl->transformed[1] + radius < mins[1])
+		return qtrue;
+
+	if (dl->transformed[2] - radius > maxs[2])
+		return qtrue;
+	if (dl->transformed[2] + radius < mins[2])
 		return qtrue;
 
 	return qfalse;
@@ -586,7 +590,7 @@ void R_AddBrushModelSurfaces( trRefEntity_t *ent ) {
 			}
 		}
 
-		R_SetupEntityLighting( &tr.refdef, ent );
+		R_SetupEntityLighting( &tr.refdef, ent, qtrue );
 		
 		R_TransformDlights( tr.viewParms.num_dlights, tr.viewParms.dlights, &tr.orientation );
 
@@ -615,7 +619,7 @@ void R_AddBrushModelSurfaces( trRefEntity_t *ent ) {
 #endif // USE_PMLIGHT
 
 #ifdef USE_LEGACY_DLIGHTS
-	R_SetupEntityLighting( &tr.refdef, ent );
+	R_SetupEntityLighting( &tr.refdef, ent, qfalse );
 	R_DlightBmodel( bmodel );
 
 	// add model surfaces

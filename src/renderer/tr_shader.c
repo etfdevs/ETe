@@ -2727,6 +2727,52 @@ static void FindLightingBundle( void )
 		}
 	}
 }
+
+
+/*
+====================
+R_GetDlightStage
+
+Returns the stage/bundle used by the per-pixel dlight pass. Falls back to the
+first drawable stage for model shaders that never got a lighting stage because
+they have no lightmap stage.
+====================
+*/
+int R_GetDlightStage( const shader_t *shader, int *bundle )
+{
+	int i;
+
+	if ( shader->lightingStage >= 0 ) {
+		*bundle = shader->lightingBundle;
+		return shader->lightingStage;
+	}
+
+	if ( shader->isSky || ( shader->surfaceFlags & ( SURF_NODLIGHT | SURF_SKY ) ) ) {
+		return -1;
+	}
+
+	if ( shader->sort == SS_ENVIRONMENT || shader->sort >= SS_FOG ) {
+		return -1;
+	}
+
+	for ( i = 0; i < shader->numUnfoggedPasses; i++ ) {
+		const shaderStage_t *st = shader->stages[i];
+		if ( st && st->active && !st->bundle[0].isLightmap && st->bundle[0].image[0] ) {
+			*bundle = 0;
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+
+qboolean R_ShaderCanDlight( const shader_t *shader )
+{
+	int bundle;
+
+	return R_GetDlightStage( shader, &bundle ) >= 0 ? qtrue : qfalse;
+}
 #endif // USE_PMLIGHT
 
 

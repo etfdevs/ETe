@@ -422,7 +422,7 @@ int R_CullPointAndRadius( const vec3_t pt, float radius )
 int R_CullDlight( const dlight_t* dl )
 {
 	int		i;
-	float	dist, dist2;
+	float	dist, dist2, radius;
 	cplane_t	*frust;
 	qboolean mightBeClipped = qfalse;
 
@@ -432,14 +432,20 @@ int R_CullDlight( const dlight_t* dl )
 	if ( dl->flags & REF_DIRECTED_DLIGHT )
 		return CULL_IN;
 
+#ifdef USE_PMLIGHT
+	radius = R_GetDlightRadius( dl );
+#else
+	radius = dl->radius;
+#endif
+
 	if ( dl->linear ) {
 		for ( i = 0 ; i < 6 ; i++ ) {
 			frust = &tr.viewParms.frustum[i];
 			dist = DotProduct( dl->transformed, frust->normal) - frust->dist;
 			dist2 = DotProduct( dl->transformed2, frust->normal) - frust->dist;
-			if ( dist < -dl->radius && dist2 < -dl->radius )
+			if ( dist < -radius && dist2 < -radius )
 				return CULL_OUT;
-			else if ( dist <= dl->radius || dist2 <= dl->radius ) 
+			else if ( dist <= radius || dist2 <= radius )
 				mightBeClipped = qtrue;
 		}
 	} 
@@ -448,9 +454,9 @@ int R_CullDlight( const dlight_t* dl )
 	for ( i = 0 ; i < 6 ; i++ ) {
 		frust = &tr.viewParms.frustum[i];
 		dist = DotProduct( dl->transformed, frust->normal) - frust->dist;
-		if ( dist < -dl->radius )
+		if ( dist < -radius )
 			return CULL_OUT;
-		else if ( dist <= dl->radius ) 
+		else if ( dist <= radius )
 			mightBeClipped = qtrue;
 	}
 

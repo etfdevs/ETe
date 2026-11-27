@@ -51,6 +51,15 @@ void R_TransformDlights( int count, dlight_t *dl, orientationr_t *or) {
 	vec3_t	temp, temp2;
 
 	for ( i = 0 ; i < count ; i++, dl++ ) {
+		if ( dl->flags & REF_DIRECTED_DLIGHT ) {
+			// directional lights have no position: rotate the direction into
+			// the same space as the surface normals
+			dl->transformed[0] = DotProduct( dl->origin, or->axis[0] );
+			dl->transformed[1] = DotProduct( dl->origin, or->axis[1] );
+			dl->transformed[2] = DotProduct( dl->origin, or->axis[2] );
+			continue;
+		}
+
 		VectorSubtract( dl->origin, or->origin, temp );
 		dl->transformed[0] = DotProduct( temp, or->axis[0] );
 		dl->transformed[1] = DotProduct( temp, or->axis[1] );
@@ -320,7 +329,7 @@ Calculates all the lighting values that will be used
 by the Calc_* functions
 =================
 */
-void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
+void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent, qboolean skipDlights ) {
 	int				i;
 	const dlight_t		*dl;
 	vec3_t			dir;
@@ -331,6 +340,8 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 	byte            *entityLight;
 #ifdef USE_PMLIGHT
 	vec3_t			shadowLightDir;
+	vec3_t			lightColor;
+	float			radius;
 #endif
 
 	// lighting calculations
@@ -338,6 +349,9 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 		return;
 	}
 	ent->lightingCalculated = qtrue;
+#ifdef USE_PMLIGHT
+	ent->shadowLightDirValid = qfalse;
+#endif
 
 	//
 	// trace a sample point down to find ambient light
@@ -395,31 +409,69 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 	d = VectorLength( ent->directedLight );
 	VectorScale( ent->lightDir, d, lightDir );
 #ifdef USE_PMLIGHT
-	if ( R_GetDlightMode() == 2 ) {
-		// only direct lights
-		// but we need to deal with shadow light direction
+	if ( R_GetDlightMode() == 2 || skipDlights ) {
+		// dlights are applied per-pixel; only keep a direction for stencil shadows
 		VectorCopy( lightDir, shadowLightDir );
 		if ( r_shadows->integer == 2 ) {
 			for ( i = 0 ; i < refdef->num_dlights ; i++ ) {
 				dl = &refdef->dlights[i];
-				if ( dl->linear ) // no support for linear lights atm
-					continue;
 
 				if ( dl->shader ) { //----(SA)	if the dlight has a diff shader specified, you don't know what it does, so don't let it affect entities lighting
 					continue;
 				}
 
-				VectorSubtract( dl->origin, lightOrigin, dir );
-				d = VectorNormalize( dir );
-				power = DLIGHT_AT_RADIUS * ( dl->radius * dl->radius );
-				if ( d < DLIGHT_MINIMUM_RADIUS ) {
-					d = DLIGHT_MINIMUM_RADIUS;
+				R_GetDlightColor( dl, lightColor );
+				radius = R_GetDlightRadius( dl );
+
+				if ( dl->flags & REF_DIRECTED_DLIGHT ) {
+					// directed lights have no position, origin is the direction
+					VectorCopy( dl->origin, dir );
+					power = R_GetDlightIntensity( dl );
+				} else if ( dl->linear ) {
+					vec3_t ab;
+					float t;
+
+					VectorSubtract( dl->origin2, dl->origin, ab );
+					t = DotProduct( ab, ab );
+					if ( t <= 0.0f ) {
+						continue;
+					}
+					VectorSubtract( lightOrigin, dl->origin, dir );
+					t = DotProduct( dir, ab ) / t;
+					if ( t < 0.0f ) {
+						t = 0.0f;
+					} else if ( t > 1.0f ) {
+						t = 1.0f;
+					}
+					VectorMA( dl->origin, t, ab, dir );
+					VectorSubtract( dir, lightOrigin, dir );
+					d = VectorNormalize( dir );
+					power = 1.0f - ( d * d ) / ( radius * radius );
+					if ( power <= 0.0f ) {
+						continue;
+					}
+					power *= R_GetDlightIntensity( dl );
+				} else {
+					VectorSubtract( dl->origin, lightOrigin, dir );
+					d = VectorNormalize( dir );
+					// match the per-pixel falloff used by pmlight
+					power = 1.0f - ( d * d ) / ( radius * radius );
+					if ( power <= 0.0f ) {
+						continue;
+					}
+					power *= R_GetDlightIntensity( dl );
 				}
-				d = power / ( d * d );
-				VectorMA( shadowLightDir, d, dir, shadowLightDir );
+
+				power *= LUMA( lightColor[0], lightColor[1], lightColor[2] );
+				if ( power <= 0.0f ) {
+					continue;
+				}
+
+				VectorMA( shadowLightDir, power, dir, shadowLightDir );
+				ent->shadowLightDirValid = qtrue;
 			}
 		} // if ( r_shadows->integer == 2 )
-	}  // if ( R_GetDlightMode() == 2 )
+	}  // if ( R_GetDlightMode() == 2 || skipDlights )
 	else
 #endif
 	for ( i = 0 ; i < refdef->num_dlights ; i++ ) {
@@ -512,7 +564,7 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent ) {
 	}
 
 #ifdef USE_PMLIGHT
-	if ( r_shadows->integer == 2 && R_GetDlightMode() == 2 ) {
+	if ( r_shadows->integer == 2 && ( R_GetDlightMode() == 2 || skipDlights ) ) {
 		VectorNormalize( shadowLightDir );
 		ent->shadowLightDir[0] = DotProduct( shadowLightDir, ent->e.axis[0] );
 		ent->shadowLightDir[1] = DotProduct( shadowLightDir, ent->e.axis[1] );
@@ -550,6 +602,44 @@ int R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, ve
 
 	return qtrue;
 }
+
+#ifdef USE_PMLIGHT
+/*
+=============
+R_GetDlightRadius / R_GetDlightIntensity / R_GetDlightColor
+
+Return the pmlight-scaled values without baking them into dlight_t, so
+r_dlightMode 1 can keep the original values for entity lighting.
+=============
+*/
+float R_GetDlightRadius( const dlight_t *dl )
+{
+	return dl->radius * r_dlightScale->value;
+}
+
+float R_GetDlightIntensity( const dlight_t *dl )
+{
+	float intensity = dl->intensity;
+
+	if ( dl->linear ) {
+		// linear lights encode their strength in the radius and historically
+		// used r_dlightScale for intensity instead of radius
+		intensity *= r_dlightScale->value;
+	} else if ( !( dl->flags & REF_DIRECTED_DLIGHT ) && r_dlightMaxIntensity->value > 0.0f && intensity > r_dlightMaxIntensity->value ) {
+		// directed lights keep their full intensity so the style/flicker
+		// amplitude matches r_dlightMode 0
+		intensity = r_dlightMaxIntensity->value;
+	}
+
+	return intensity;
+}
+
+void R_GetDlightColor( const dlight_t *dl, vec3_t color )
+{
+	VectorScale( dl->color, r_dlightIntensity->value, color );
+}
+#endif // USE_PMLIGHT
+
 
 /*
 =============

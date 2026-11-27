@@ -103,6 +103,7 @@ typedef struct {
 	float brightness;
 #ifdef USE_PMLIGHT
 	vec3_t		shadowLightDir;	// normalized direction towards light
+	qboolean	shadowLightDirValid;
 #endif
 	qboolean	intShaderTime;
 } trRefEntity_t;
@@ -1853,6 +1854,7 @@ typedef struct shaderCommands_s
 	const dlight_t* light;
 	qboolean	dlightPass;
 	qboolean	dlightUpdateParams;
+	qboolean	dlightWorldBlend;	// directed light uses the world BSP blend
 	cullType_t	cullType;
 #endif
 
@@ -1928,13 +1930,18 @@ LIGHTS
 void R_TransformDlights( int count, dlight_t *dl, orientationr_t *orientation );
 //void R_CullDlights( void );
 void R_DlightBmodel( bmodel_t *bmodel );
-void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent );
+void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent, qboolean skipDlights );
 int R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir );
 
 #ifdef USE_PMLIGHT
 void ARB_SetupLightParams( void );
 void ARB_LightingPass( void );
 qboolean R_LightCullBounds( const dlight_t* dl, const vec3_t mins, const vec3_t maxs );
+int R_GetDlightStage( const shader_t *shader, int *bundle );
+qboolean R_ShaderCanDlight( const shader_t *shader );
+float R_GetDlightRadius( const dlight_t *dl );
+float R_GetDlightIntensity( const dlight_t *dl );
+void R_GetDlightColor( const dlight_t *dl, vec3_t color );
 #endif // USE_PMLIGHT
 
 void R_BindAnimatedImage( const textureBundle_t *bundle );
@@ -2474,11 +2481,19 @@ typedef enum {
 	DLIGHT_LINEAR_ABS_FRAGMENT,
 	DLIGHT_LINEAR_ABS_FRAGMENT_FOG,
 
-	DLIGHT_DIRECTIONAL_FRAGMENT,
-	DLIGHT_DIRECTIONAL_FRAGMENT_FOG,
+	DLIGHT_DIRECTIONAL_ENTITY_FRAGMENT,
+	DLIGHT_DIRECTIONAL_ENTITY_FRAGMENT_FOG,
 
-	DLIGHT_DIRECTIONAL_ABS_FRAGMENT,
-	DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG,
+	DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT,
+	DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT_FOG,
+
+	// world BSP directed variant: uses the same result as the r_dlightMode 0
+	// world pass (DST_COLOR), while entity/model directed lights stay additive
+	DLIGHT_DIRECTIONAL_WORLD_FRAGMENT,
+	DLIGHT_DIRECTIONAL_WORLD_FRAGMENT_FOG,
+
+	DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT,
+	DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT_FOG,
 #endif
 	SPRITE_FRAGMENT,
 #ifdef USE_FBO

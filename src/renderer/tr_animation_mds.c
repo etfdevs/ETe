@@ -337,7 +337,7 @@ void R_AddAnimSurfaces( trRefEntity_t *ent ) {
 	// set up lighting now that we know we aren't culled
 	//
 	if ( !personalModel || r_shadows->integer > 1 ) {
-		R_SetupEntityLighting( &tr.refdef, ent );
+		R_SetupEntityLighting( &tr.refdef, ent, qfalse );
 	}
 
 #ifdef USE_PMLIGHT
@@ -438,7 +438,7 @@ void R_AddAnimSurfaces( trRefEntity_t *ent ) {
 		}
 
 #ifdef USE_PMLIGHT
-		if ( numDlights && shader->lightingStage >= 0 ) {
+		if ( numDlights && R_ShaderCanDlight( shader ) ) {
 			for ( n = 0; n < numDlights; n++ ) {
 				dl = dlights[n];
 				tr.light = dl;

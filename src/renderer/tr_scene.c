@@ -457,30 +457,6 @@ void RE_AddLightToScene( const vec3_t org, float radius, float intensity, float 
 			return;
 		}
 	}
-#ifdef USE_PMLIGHT
-#ifdef USE_LEGACY_DLIGHTS
-	if ( R_GetDlightMode() )
-#endif
-	{
-		// Keep intensity separate from color: the per-pixel shaders apply it
-		// themselves and clamp the final contribution the same way legacy
-		// dynamic lights do.  Baking it into the color made directed lights and
-		// entity lighting apply intensity twice, and made mods that animate
-		// intensity (e.g. ETF powerup glows) pulse much harder than in legacy
-		// mode.  The optional cap removes that overbright flicker without
-		// mod-specific code.
-		if ( r_dlightMaxIntensity->value > 0.0f && intensity > r_dlightMaxIntensity->value ) {
-			intensity = r_dlightMaxIntensity->value;
-		}
-
-		r *= r_dlightIntensity->value;
-		g *= r_dlightIntensity->value;
-		b *= r_dlightIntensity->value;
-		radius *= r_dlightScale->value;
-		//intensity *= r_dlightScale->value;
-	}
-#endif
-
 	if ( r_dlightSaturation->value != 1.0 )
 	{
 		float luminance = LUMA( r, g, b );
@@ -528,18 +504,6 @@ void RE_AddLinearLightToScene( const vec3_t start, const vec3_t end, float inten
 	if ( intensity <= 0 ) {
 		return;
 	}
-#ifdef USE_PMLIGHT
-#ifdef USE_LEGACY_DLIGHTS
-	if ( R_GetDlightMode() )
-#endif
-	{
-		r *= r_dlightIntensity->value;
-		g *= r_dlightIntensity->value;
-		b *= r_dlightIntensity->value;
-		intensity *= r_dlightScale->value;
-	}
-#endif
-
 	if ( r_dlightSaturation->value != 1.0 )
 	{
 		float luminance = LUMA( r, g, b );

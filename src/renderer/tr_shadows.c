@@ -138,7 +138,7 @@ void RB_ShadowTessEnd( void ) {
 	}
 
 #ifdef USE_PMLIGHT
-	if ( R_GetDlightMode() == 2 && r_shadows->integer == 2 )
+	if ( r_shadows->integer == 2 && backEnd.currentEntity->shadowLightDirValid )
 		VectorCopy( backEnd.currentEntity->shadowLightDir, lightDir );
 	else
 #endif
@@ -322,7 +322,7 @@ void RB_ProjectionShadowDeform( void ) {
 	groundDist = backEnd.orientation.origin[2] - backEnd.currentEntity->e.shadowPlane;
 
 #ifdef USE_PMLIGHT
-	if ( R_GetDlightMode() == 2 && r_shadows->integer == 2 )
+	if ( r_shadows->integer == 2 && backEnd.currentEntity->shadowLightDirValid )
 		VectorCopy( backEnd.currentEntity->shadowLightDir, lightDir );
 	else
 #endif

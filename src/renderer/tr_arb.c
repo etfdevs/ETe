@@ -147,7 +147,7 @@ void GL_ProgramEnable( void )
 
 
 #ifdef USE_PMLIGHT
-static void ARB_Lighting( const shaderStage_t* pStage )
+static void ARB_Lighting( const shaderStage_t* pStage, int bundle )
 {
 	const dlight_t* dl;
 	byte clipBits[ SHADER_MAX_VERTEXES ];
@@ -156,11 +156,13 @@ static void ARB_Lighting( const shaderStage_t* pStage )
 	int clip;
 	int i;
 	qboolean isDirected;
+	float radius;
 	
 	backEnd.pc.c_lit_vertices_lateculltest += tess.numVertexes;
 
 	dl = tess.light;
 	isDirected = (dl->flags & REF_DIRECTED_DLIGHT) != 0;
+	radius = R_GetDlightRadius( dl );
 
 	for ( i = 0; i < tess.numVertexes; ++i ) {
 		vec3_t dist;
@@ -182,19 +184,19 @@ static void ARB_Lighting( const shaderStage_t* pStage )
 		}
 
 		clip = 0;
-		if ( dist[0] > dl->radius ) {
+		if ( dist[0] > radius ) {
 			clip |= 1;
-		} else if ( dist[0] < -dl->radius ) {
+		} else if ( dist[0] < -radius ) {
 			clip |= 2;
 		}
-		if ( dist[1] > dl->radius ) {
+		if ( dist[1] > radius ) {
 			clip |= 4;
-		} else if ( dist[1] < -dl->radius ) {
+		} else if ( dist[1] < -radius ) {
 			clip |= 8;
 		}
-		if ( dist[2] > dl->radius ) {
+		if ( dist[2] > radius ) {
 			clip |= 16;
-		} else if ( dist[2] < -dl->radius ) {
+		} else if ( dist[2] < -radius ) {
 			clip |= 32;
 		}
 
@@ -225,7 +227,10 @@ static void ARB_Lighting( const shaderStage_t* pStage )
 	if ( !numIndexes )
 		return;
 
-	if ( tess.shader->sort < SS_OPAQUE ) {
+	if ( tess.dlightWorldBlend ) {
+		// r_dlightMode 0 world surfaces: scale the already-lit framebuffer
+		GL_State( GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ONE | GLS_DEPTHFUNC_EQUAL );
+	} else if ( tess.shader->sort < SS_OPAQUE ) {
 		GL_State( GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ONE | GLS_DEPTHFUNC_EQUAL );
 	} else {
 		GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHFUNC_EQUAL );
@@ -234,19 +239,22 @@ static void ARB_Lighting( const shaderStage_t* pStage )
 	GL_SelectTexture( 0 );
 
 	R_FogOff();
-	R_BindAnimatedImage( &pStage->bundle[ tess.shader->lightingBundle ] );
+	R_BindAnimatedImage( &pStage->bundle[ bundle ] );
 	
 	R_DrawElements( numIndexes, hitIndexes );
 	R_FogOn();
 }
 
 
-static void ARB_Lighting_Fast( const shaderStage_t* pStage )
+static void ARB_Lighting_Fast( const shaderStage_t* pStage, int bundle )
 {
 	if ( !tess.numIndexes )
 		return;
 
-	if ( tess.shader->sort < SS_OPAQUE ) {
+	if ( tess.dlightWorldBlend ) {
+		// r_dlightMode 0 world surfaces: scale the already-lit framebuffer
+		GL_State( GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ONE | GLS_DEPTHFUNC_EQUAL );
+	} else if ( tess.shader->sort < SS_OPAQUE ) {
 		GL_State( GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ONE | GLS_DEPTHFUNC_EQUAL );
 	} else {
 		GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHFUNC_EQUAL );
@@ -255,7 +263,7 @@ static void ARB_Lighting_Fast( const shaderStage_t* pStage )
 	GL_SelectTexture( 0 );
 
 	R_FogOff();
-	R_BindAnimatedImage( &pStage->bundle[ tess.shader->lightingBundle ] );
+	R_BindAnimatedImage( &pStage->bundle[ bundle ] );
 	
 	R_DrawElements( tess.numIndexes, tess.indexes );
 	R_FogOn();
@@ -271,6 +279,7 @@ void ARB_SetupLightParams( void )
 	const dlight_t *dl;
 	vec3_t lightRGB;
 	float radius;
+	float intensity;
 
 	tess.dlightUpdateParams = qfalse;
 	tess.cullType = tess.shader->cullType;
@@ -280,12 +289,12 @@ void ARB_SetupLightParams( void )
 
 	dl = tess.light;
 
+	R_GetDlightColor( dl, lightRGB );
 	if ( !glConfig.deviceSupportsGamma && !fboEnabled )
-		VectorScale( dl->color, 2 * powf( r_intensity->value, r_gamma->value ), lightRGB );
-	else
-		VectorCopy( dl->color, lightRGB );
+		VectorScale( lightRGB, 2 * powf( r_intensity->value, r_gamma->value ), lightRGB );
 
-	radius = dl->radius;
+	radius = R_GetDlightRadius( dl );
+	intensity = R_GetDlightIntensity( dl );
 
 	fogPass = ( tess.fogNum && tess.shader->fogPass );
 	if ( fogPass && ((tr.refdef.rdflags & RDF_SNOOPERVIEW) || tess.shader->noFog || !r_wolffog->integer ) )
@@ -297,7 +306,11 @@ void ARB_SetupLightParams( void )
 	if ( dl->linear ) {
 		fragmentProgram = (tess.shader->cullType == CT_TWO_SIDED) ? DLIGHT_LINEAR_ABS_FRAGMENT : DLIGHT_LINEAR_FRAGMENT;
 	} else if ( dl->flags & REF_DIRECTED_DLIGHT ) {
-		fragmentProgram = (tess.shader->cullType == CT_TWO_SIDED) ? DLIGHT_DIRECTIONAL_ABS_FRAGMENT : DLIGHT_DIRECTIONAL_FRAGMENT;
+		if ( tess.dlightWorldBlend ) {
+			fragmentProgram = (tess.shader->cullType == CT_TWO_SIDED) ? DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT : DLIGHT_DIRECTIONAL_WORLD_FRAGMENT;
+		} else {
+			fragmentProgram = (tess.shader->cullType == CT_TWO_SIDED) ? DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT : DLIGHT_DIRECTIONAL_ENTITY_FRAGMENT;
+		}
 	} else {
 		fragmentProgram = (tess.shader->cullType == CT_TWO_SIDED) ? DLIGHT_ABS_FRAGMENT : DLIGHT_FRAGMENT;
 	}
@@ -316,7 +329,7 @@ void ARB_SetupLightParams( void )
 	ARB_ProgramEnable( vertexProgram, fragmentProgram );
 
 	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, lightRGB[0], lightRGB[1], lightRGB[2], 1.0f / Square( radius ) );
-	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, dl->intensity, dl->intensity, dl->intensity, dl->intensity );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, intensity, intensity, intensity, intensity );
 
 	if ( dl->linear )
 	{
@@ -328,8 +341,9 @@ void ARB_SetupLightParams( void )
 	}
 	else if ( dl->flags & REF_DIRECTED_DLIGHT )
 	{
-		// Pass the directional normal and intensity
-		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 2, dl->origin[0], dl->origin[1], dl->origin[2], dl->intensity );
+		// Pass the directional normal (already rotated into the current
+		// entity/view space by R_TransformDlights) and intensity
+		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 2, dl->transformed[0], dl->transformed[1], dl->transformed[2], intensity );
 	}
 
 	qglProgramLocalParameter4fARB( GL_VERTEX_PROGRAM_ARB, 0, backEnd.orientation.viewOrigin[0], backEnd.orientation.viewOrigin[1], backEnd.orientation.viewOrigin[2], 0 );
@@ -354,8 +368,10 @@ void ARB_SetupLightParams( void )
 void ARB_LightingPass( void )
 {
 	const shaderStage_t* pStage;
+	int stage, bundle;
 
-	if ( tess.shader->lightingStage < 0 )
+	stage = R_GetDlightStage( tess.shader, &bundle );
+	if ( stage < 0 )
 		return;
 
 	// we may need to update programs for fog transitions
@@ -373,9 +389,9 @@ void ARB_LightingPass( void )
 		qglPolygonOffset( r_offsetFactor->value, r_offsetUnits->value );
 	}
 
-	pStage = tess.xstages[ tess.shader->lightingStage ];
+	pStage = tess.xstages[ stage ];
 
-	R_ComputeTexCoords( 0, &pStage->bundle[ tess.shader->lightingBundle ] );
+	R_ComputeTexCoords( 0, &pStage->bundle[ bundle ] );
 
 	GL_ClientState( 1, CLS_NONE );
 	GL_ClientState( 0, CLS_TEXCOORD_ARRAY | CLS_NORMAL_ARRAY );
@@ -391,9 +407,9 @@ void ARB_LightingPass( void )
 
 	// CPU may limit performance in following cases
 	if ( tess.light->linear || gl_version >= 40 )
-		ARB_Lighting_Fast( pStage );
+		ARB_Lighting_Fast( pStage, bundle );
 	else
-		ARB_Lighting( pStage );
+		ARB_Lighting( pStage, bundle );
 
 	if ( qglUnlockArraysEXT )
 		qglUnlockArraysEXT();
@@ -503,6 +519,7 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 	qboolean fog = qfalse;
 	qboolean linear = qfalse;
 	qboolean directional = qfalse;
+	qboolean worldDirectional = qfalse;
 	qboolean abslight = qfalse;
 
 	program[0] = '\0';
@@ -512,8 +529,10 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		case DLIGHT_ABS_FRAGMENT_FOG:
 		case DLIGHT_LINEAR_FRAGMENT_FOG:
 		case DLIGHT_LINEAR_ABS_FRAGMENT_FOG:
-		case DLIGHT_DIRECTIONAL_FRAGMENT_FOG:
-		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_ENTITY_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_WORLD_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT_FOG:
 			fog = qtrue;
 			break;
 	}
@@ -528,11 +547,24 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 	}
 
 	switch ( programIndex ) {
-		case DLIGHT_DIRECTIONAL_FRAGMENT:
-		case DLIGHT_DIRECTIONAL_FRAGMENT_FOG:
-		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT:
-		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_ENTITY_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_ENTITY_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_WORLD_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_WORLD_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT_FOG:
 			directional = qtrue;
+			break;
+	}
+
+	switch ( programIndex ) {
+		case DLIGHT_DIRECTIONAL_WORLD_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_WORLD_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT_FOG:
+			worldDirectional = qtrue;
 			break;
 	}
 
@@ -541,8 +573,10 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		case DLIGHT_ABS_FRAGMENT_FOG:
 		case DLIGHT_LINEAR_ABS_FRAGMENT:
 		case DLIGHT_LINEAR_ABS_FRAGMENT_FOG:
-		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT:
-		case DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_ENTITY_ABS_FRAGMENT_FOG:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT:
+		case DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT_FOG:
 			abslight = qtrue;
 			break;
 	}
@@ -700,23 +734,42 @@ static const char *ARB_BuildDlightFP( char *program, int programIndex )
 		}
 	}
 
-	strcat( program, "MAD base, base, bump.w, spec; \n" );
+	if ( worldDirectional ) {
+		// r_dlightMode 0 world-directed surfaces scale the already-lit
+		// framebuffer instead of adding the diffuse texture again; the blend
+		// state uses DST_COLOR for this path so the result is
+		// dst * (1 + light * modulate). Model/bmodel directed lights stay on
+		// the additive pmlight path below.
+		if ( fog ) {
+			strcat( program,
+			"TEMP fog; \n"
+			"TEX fog, fragment.texcoord[4], texture[1], 2D; \n" // fog texture
+			"SUB fog.a, {1.0}, fog.a; \n"
+			"MUL bump.w, bump.w, fog.a; \n" );
+		}
 
-	if ( fog ) {
 		strcat( program,
-		"TEMP fog; \n"
-		"TEX fog, fragment.texcoord[4], texture[1], 2D; \n" // fog texture
-		//"MUL fog, fog, fogColor; \n"
-		// blend with fog
-		//"LRP_SAT base, fog.a, fog, base; \n"
-		// modulate by inverted fog alpha
-		"SUB fog.a, {1.0}, fog.a; \n"
-		"MUL base, base, fog.a; \n" );
-	}
+		"MUL_SAT result.color, light, bump.w; \n"
+		"END \n" );
+	} else {
+		strcat( program, "MAD base, base, bump.w, spec; \n" );
 
-	strcat( program,
-	"MUL_SAT result.color, base, light; \n"
-	"END \n" );
+		if ( fog ) {
+			strcat( program,
+			"TEMP fog; \n"
+			"TEX fog, fragment.texcoord[4], texture[1], 2D; \n" // fog texture
+			//"MUL fog, fog, fogColor; \n"
+			// blend with fog
+			//"LRP_SAT base, fog.a, fog, base; \n"
+			// modulate by inverted fog alpha
+			"SUB fog.a, {1.0}, fog.a; \n"
+			"MUL base, base, fog.a; \n" );
+		}
+
+		strcat( program,
+		"MUL_SAT result.color, base, light; \n"
+		"END \n" );
+	}
 	
 	r_dlightSpecColor->modified = qfalse;
 	r_dlightSpecPower->modified = qfalse;
@@ -1180,7 +1233,7 @@ qboolean ARB_UpdatePrograms( void )
 	if ( !ARB_CompileProgram( Vertex, va( dlightVP, fogLevelVPCode ), programs[ DLIGHT_VERTEX_FOG_LEVEL ] ) )
 		return qfalse;
 
-	for ( i = DLIGHT_FRAGMENT; i <= DLIGHT_DIRECTIONAL_ABS_FRAGMENT_FOG; i++ ) {
+	for ( i = DLIGHT_FRAGMENT; i <= DLIGHT_DIRECTIONAL_WORLD_ABS_FRAGMENT_FOG; i++ ) {
 		program = ARB_BuildDlightFP( buf, i );
 		if ( !ARB_CompileProgram( Fragment, program, programs[ i ] ) ) {
 			return qfalse;

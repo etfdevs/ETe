@@ -499,6 +499,14 @@ void RB_BeginSurface( shader_t *shader, int fogNum ) {
 #else
 	tess.needsNormal = state->needsNormal || r_shownormals->integer;
 #endif
+#ifdef USE_LEGACY_DLIGHTS
+	// r_dlightMode 0 shades vertices using tess.normal (directed lights in
+	// particular); make sure it is populated even when the shader itself
+	// does not need normals
+	if ( !R_GetDlightMode() && backEnd.refdef.num_dlights > 0 ) {
+		tess.needsNormal = qtrue;
+	}
+#endif
 #endif
 
 #ifdef USE_TESS_NEEDS_ST2
@@ -658,10 +666,11 @@ static void DynamicLightSinglePass( void ) {
 		{
 			backEnd.pc.c_dlightVertexes++;
 
-			// directional dlight, origin is a directional normal
+			// directional dlight, transformed is a directional normal in the
+			// current entity/view space
 			if ( dl->flags & REF_DIRECTED_DLIGHT ) {
 				// twosided surfaces use absolute value of the calculated lighting
-				modulate = intensity * DotProduct( dl->origin, tess.normal[ i ] );
+				modulate = intensity * DotProduct( dl->transformed, tess.normal[ i ] );
 				if ( tess.shader->cullType == CT_TWO_SIDED ) {
 					modulate = fabs( modulate );
 				}
@@ -798,10 +807,11 @@ static void DynamicLightPass( void ) {
 		{
 			backEnd.pc.c_dlightVertexes++;
 
-			// directional dlight, origin is a directional normal
+			// directional dlight, transformed is a directional normal in the
+			// current entity/view space
 			if ( dl->flags & REF_DIRECTED_DLIGHT ) {
 				// twosided surfaces use absolute value of the calculated lighting
-				modulate = intensity * DotProduct( dl->origin, tess.normal[ i ] );
+				modulate = intensity * DotProduct( dl->transformed, tess.normal[ i ] );
 				if ( tess.shader->cullType == CT_TWO_SIDED ) {
 					modulate = fabs( modulate );
 				}
@@ -1483,7 +1493,7 @@ void RB_StageIteratorGeneric( void )
 #ifdef USE_LEGACY_DLIGHTS
 #ifdef USE_PMLIGHT
 	if ( !R_GetDlightMode() )
-#endif	
+#endif
 	//%	if( tess.dlightBits && tess.shader->sort <= SS_OPAQUE &&
 	if ( tess.dlightBits && tess.shader->fogPass &&
 		 !( tess.shader->surfaceFlags & ( SURF_NODLIGHT | SURF_SKY ) ) ) {

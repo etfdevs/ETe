@@ -1885,7 +1885,7 @@ static void R_Register( void )
 	ri.Cvar_SetDescription( r_dlightIntensity, "Adjusts dynamic light intensity but not radius" );
 	r_dlightMaxIntensity = ri.Cvar_Get( "r_dlightMaxIntensity", "1.25", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_dlightMaxIntensity, "0", "8", CV_FLOAT );
-	ri.Cvar_SetDescription( r_dlightMaxIntensity, "Clamps dynamic light intensity in per-pixel modes; values above this no longer brighten the light, matching legacy saturation and suppressing overbright flicker from mods that animate intensity. 0 = unlimited" );
+	ri.Cvar_SetDescription( r_dlightMaxIntensity, "Clamps non-directed dynamic light intensity in per-pixel modes; values above this no longer brighten the light. Directed lights keep their full intensity so their flicker/style amplitude matches r_dlightMode 0. 0 = unlimited" );
 #endif // USE_PMLIGHT
 	r_dlightSaturation = ri.Cvar_Get( "r_dlightSaturation", "1", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_dlightSaturation, "0", "1", CV_FLOAT );

@@ -969,6 +969,9 @@ static void RB_RenderLitSurfList( dlight_t* dl ) {
 
 			// set up the dynamic lighting
 			R_TransformDlights( 1, dl, &backEnd.orientation );
+			// only world BSP surfaces use the r_dlightMode 0 directed blend;
+			// models and bmodels keep the additive pmlight look
+			tess.dlightWorldBlend = ( entityNum == REFENTITYNUM_WORLD && ( dl->flags & REF_DIRECTED_DLIGHT ) ) ? qtrue : qfalse;
 			tess.dlightUpdateParams = qtrue;
 
 			qglLoadMatrixf( backEnd.orientation.modelMatrix );
@@ -1232,6 +1235,7 @@ static void RB_LightingPass( void )
 #endif
 
 	tess.dlightPass = qtrue;
+	tess.dlightWorldBlend = qfalse;
 
 	for ( i = 0; i < backEnd.viewParms.num_dlights; i++ )
 	{
