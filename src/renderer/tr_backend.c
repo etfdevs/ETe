@@ -1622,6 +1622,9 @@ static const void *RB_DrawSurfs( const void *data ) {
 	// draw main system development information (surface outlines, etc)
 	R_FogOff();
 	RB_DebugGraphics();
+#ifdef USE_FBO
+	FBO_SSAO();
+#endif
 	R_FogOn();
 
 	//TODO Maybe check for rdf_noworld stuff but q3mme has full 3d ui
