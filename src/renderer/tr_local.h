@@ -1543,6 +1543,13 @@ extern cvar_t	*r_ssao;
 extern cvar_t	*r_ssaoRadius;
 extern cvar_t	*r_ssaoIntensity;
 
+extern cvar_t	*r_toneMap;
+extern cvar_t	*r_toneMapExposure;
+extern cvar_t	*r_colorContrast;
+extern cvar_t	*r_colorSaturation;
+extern cvar_t	*r_colorWarmth;
+extern cvar_t	*r_vignette;
+
 extern cvar_t	*r_renderWidth;
 extern cvar_t	*r_renderHeight;
 extern cvar_t	*r_renderScale;

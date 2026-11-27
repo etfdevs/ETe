@@ -831,6 +831,130 @@ static char *ARB_BuildGreyscaleProgram( char *buf ) {
 }
 
 
+// r_toneMap, r_toneMapExposure, r_color*, r_vignette: final-pass colour grading.
+// Values are baked in (CVG_RENDERER recompiles on change); defaults add no code at all.
+static char *ARB_BuildFinalColorProgram( char *buf ) {
+	const float exposure = r_toneMapExposure->value;
+	const float contrast = r_colorContrast->value;
+	const float saturation = r_colorSaturation->value;
+	const float warmth = r_colorWarmth->value * 0.1f;
+	const float vignette = r_vignette->value;
+	char *s = buf;
+
+	*s = '\0';
+
+	if ( r_toneMap->integer ) {
+		// the curves work on roughly linear colour (base^2), times exposure
+		s = Q_stradd( s, "TEMP gA, gB, gC; \n" "MUL gA, base, base; \n" );
+		s = Q_stradd( s, va( "MUL gA, gA, %1.4f; \n", exposure ) );
+		switch ( r_toneMap->integer ) {
+		default:
+			// 1: ACES filmic (Narkowicz fit): deeper shadows, fuller mid-tones, highlights roll off
+			s = Q_stradd( s,
+				"MAD gB, gA, 2.51, 0.03; \n"
+				"MUL gB, gB, gA; \n"
+				"MAD gC, gA, 2.43, 0.59; \n"
+				"MAD gC, gC, gA, 0.14; \n"
+				"RCP gC.x, gC.x; \n"
+				"RCP gC.y, gC.y; \n"
+				"RCP gC.z, gC.z; \n"
+				"MUL_SAT gA, gB, gC; \n" );
+			break;
+		case 2:
+			// AgX (Sobotka; minimal fit by Wrensch): log2 encoding in an inset gamut, sigmoid, outset;
+			// natural hues, gentle highlights. Its output is already display encoded
+			s = Q_stradd( s,
+				"MUL gB.xyz, { 0.842479, 0.042328, 0.042376, 0.0 }, gA.x; \n"
+				"MAD gB.xyz, { 0.078434, 0.878469, 0.078434, 0.0 }, gA.y, gB; \n"
+				"MAD gB.xyz, { 0.079224, 0.079166, 0.879143, 0.0 }, gA.z, gB; \n"
+				"LG2 gC.x, gB.x; \n"
+				"LG2 gC.y, gB.y; \n"
+				"LG2 gC.z, gB.z; \n"
+				"MAX gC.xyz, gC, -12.47393; \n"
+				"MIN gC.xyz, gC, 4.026069; \n"
+				"MAD gC.xyz, gC, 0.0606061, 0.7559958; \n" // ( ev - min ) / ( max - min )
+				"MAD gB.xyz, gC, 15.5, -40.14; \n"
+				"MAD gB.xyz, gB, gC, 31.96; \n"
+				"MAD gB.xyz, gB, gC, -6.868; \n"
+				"MAD gB.xyz, gB, gC, 0.4298; \n"
+				"MAD gB.xyz, gB, gC, 0.1191; \n"
+				"MAD gB.xyz, gB, gC, -0.00232; \n"
+				"MUL gA.xyz, { 1.196879, -0.052897, -0.052972, 0.0 }, gB.x; \n"
+				"MAD gA.xyz, { -0.098021, 1.151903, -0.098043, 0.0 }, gB.y, gA; \n"
+				"MAD gA.xyz, { -0.099030, -0.098961, 1.151074, 0.0 }, gB.z, gA; \n"
+				"MOV_SAT base.xyz, gA; \n" );
+			break;
+		case 3:
+			// Khronos PBR Neutral: colours stay as authored, only highlights above 0.76 are compressed
+			s = Q_stradd( s,
+				"MIN gB.x, gA.x, gA.y; \n"
+				"MIN gB.x, gB.x, gA.z; \n"
+				"MUL gB.y, gB.x, gB.x; \n"
+				"MAD gB.y, gB.y, -6.25, gB.x; \n"
+				"SUB gB.z, gB.x, 0.08; \n"
+				"CMP gB.x, gB.z, gB.y, 0.04; \n" // offset
+				"SUB gA.xyz, gA, gB.x; \n"
+				"MAX gB.x, gA.x, gA.y; \n"
+				"MAX gB.x, gB.x, gA.z; \n" // peak
+				"SUB gB.y, gB.x, 0.52; \n"
+				"RCP gB.y, gB.y; \n"
+				"MAD gB.y, gB.y, -0.0576, 1.0; \n" // new peak
+				"RCP gB.z, gB.x; \n"
+				"MUL gB.z, gB.z, gB.y; \n"
+				"MUL gC.xyz, gA, gB.z; \n"
+				"SUB gB.w, gB.x, gB.y; \n"
+				"MAD gB.w, gB.w, 0.15, 1.0; \n"
+				"RCP gB.w, gB.w; \n"
+				"MAD gB.w, gB.w, -1.0, 1.0; \n" // desaturation
+				"LRP gC.xyz, gB.w, gB.y, gC; \n"
+				"SUB gB.x, gB.x, 0.76; \n"
+				"CMP gA.xyz, gB.x, gA, gC; \n"
+				"MOV_SAT gA.xyz, gA; \n" );
+			break;
+		}
+		if ( r_toneMap->integer != 2 ) {
+			s = Q_stradd( s,
+				"MOV gB.w, 0.5; \n" // POW needs a register exponent
+				"POW base.x, gA.x, gB.w; \n"
+				"POW base.y, gA.y, gB.w; \n"
+				"POW base.z, gA.z, gB.w; \n" );
+		}
+	} else if ( exposure != 1.0f ) {
+		s = Q_stradd( s, va( "MUL base.xyz, base, %1.4f; \n", sqrtf( exposure ) ) );
+	}
+
+	if ( contrast != 1.0f ) {
+		s = Q_stradd( s, va( "MAD base.xyz, base, %1.4f, %1.4f; \n", contrast, 0.5f - 0.5f * contrast ) );
+	}
+
+	if ( saturation != 1.0f ) {
+		s = Q_stradd( s, "TEMP gL; \n" "DP3 gL, base, { 0.2126, 0.7152, 0.0722, 0.0 }; \n" );
+		s = Q_stradd( s, va( "LRP base.xyz, %1.4f, base, gL; \n", saturation ) );
+	}
+
+	if ( warmth != 0.0f ) {
+		s = Q_stradd( s, va( "MUL base.xyz, base, { %1.4f, 1.0, %1.4f, 1.0 }; \n", 1.0f + warmth, 1.0f - warmth ) );
+	}
+
+	if ( vignette != 0.0f ) {
+		// darken by distance from the centre, squared so the middle stays clean: corners 1 - vignette
+		s = Q_stradd( s,
+			"TEMP gV; \n"
+			"SUB gV.xy, fragment.texcoord[0], 0.5; \n"
+			"MUL gV.x, gV.x, gV.x; \n"
+			"MAD gV.x, gV.y, gV.y, gV.x; \n"
+			"MUL gV.x, gV.x, 2.0; \n"
+			"MUL gV.x, gV.x, gV.x; \n" );
+		s = Q_stradd( s, va( "MAD_SAT gV.x, gV.x, %1.4f, 1.0; \n", -vignette ) );
+		s = Q_stradd( s, "MUL base.xyz, base, gV.x; \n" );
+	}
+
+	ARB_BuildGreyscaleProgram( s );
+
+	return buf;
+}
+
+
 static const char *gammaFP = {
 	"!!ARBfp1.0 \n"
 	"OPTION ARB_precision_hint_fastest; \n"
@@ -1444,7 +1568,7 @@ qboolean ARB_UpdatePrograms( void )
 		return qfalse;
 
 #ifdef USE_FBO
-	if ( !ARB_CompileProgram( Fragment, va( gammaFP, ARB_BuildGreyscaleProgram( buf ) ), programs[ GAMMA_FRAGMENT ] ) )
+	if ( !ARB_CompileProgram( Fragment, va( gammaFP, ARB_BuildFinalColorProgram( buf ) ), programs[ GAMMA_FRAGMENT ] ) )
 		return qfalse;
 
 	if ( !ARB_CompileProgram( Fragment, ARB_BuildBloomProgram( buf ), programs[ BLOOM_EXTRACT_FRAGMENT ] ) )
@@ -1465,7 +1589,7 @@ qboolean ARB_UpdatePrograms( void )
 	if ( !ARB_CompileProgram( Fragment, blend2FP, programs[ BLEND2_FRAGMENT ] ) )
 		return qfalse;
 
-	if ( !ARB_CompileProgram( Fragment, va( blend2gammaFP, ARB_BuildGreyscaleProgram( buf ) ), programs[ BLEND2_GAMMA_FRAGMENT ] ) )
+	if ( !ARB_CompileProgram( Fragment, va( blend2gammaFP, ARB_BuildFinalColorProgram( buf ) ), programs[ BLEND2_GAMMA_FRAGMENT ] ) )
 		return qfalse;
 
 	ssaoCompiled = ARB_CompileOptionalFP( "r_ssao", ARB_BuildSSAOProgram( buf ), programs[ SSAO_FRAGMENT ] )

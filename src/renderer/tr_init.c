@@ -101,6 +101,13 @@ cvar_t	*r_ssao;
 cvar_t	*r_ssaoRadius;
 cvar_t	*r_ssaoIntensity;
 
+cvar_t	*r_toneMap;
+cvar_t	*r_toneMapExposure;
+cvar_t	*r_colorContrast;
+cvar_t	*r_colorSaturation;
+cvar_t	*r_colorWarmth;
+cvar_t	*r_vignette;
+
 cvar_t	*r_renderWidth;
 cvar_t	*r_renderHeight;
 cvar_t	*r_renderScale;
@@ -1954,6 +1961,36 @@ static void R_Register( void )
 	r_ssaoIntensity = ri.Cvar_Get( "r_ssaoIntensity", "1", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_ssaoIntensity, "0", "4", CV_FLOAT );
 	ri.Cvar_SetDescription( r_ssaoIntensity, "SSAO darkening strength" );
+
+	// final-pass colour grading, all require \r_fbo 1
+	r_toneMap = ri.Cvar_Get( "r_toneMap", "0", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_toneMap, "0", "3", CV_INTEGER );
+	ri.Cvar_SetDescription( r_toneMap, "Tone curve, highlights roll off instead of clipping. Requires \\r_fbo 1\n"
+		" 0: off\n"
+		" 1: ACES filmic, deeper shadows and fuller mid-tones\n"
+		" 2: AgX, natural hues and gentle highlights\n"
+		" 3: Khronos PBR Neutral, colours stay as authored, only highlights compressed" );
+	ri.Cvar_SetGroup( r_toneMap, CVG_RENDERER );
+	r_toneMapExposure = ri.Cvar_Get( "r_toneMapExposure", "1", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_toneMapExposure, "0.25", "4", CV_FLOAT );
+	ri.Cvar_SetDescription( r_toneMapExposure, "Exposure, applied before \\r_toneMap; works without it too. Requires \\r_fbo 1" );
+	ri.Cvar_SetGroup( r_toneMapExposure, CVG_RENDERER );
+	r_colorContrast = ri.Cvar_Get( "r_colorContrast", "1", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_colorContrast, "0.5", "2", CV_FLOAT );
+	ri.Cvar_SetDescription( r_colorContrast, "Contrast around mid-grey. Requires \\r_fbo 1" );
+	ri.Cvar_SetGroup( r_colorContrast, CVG_RENDERER );
+	r_colorSaturation = ri.Cvar_Get( "r_colorSaturation", "1", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_colorSaturation, "0", "2", CV_FLOAT );
+	ri.Cvar_SetDescription( r_colorSaturation, "Colour saturation, 0 is greyscale. Requires \\r_fbo 1" );
+	ri.Cvar_SetGroup( r_colorSaturation, CVG_RENDERER );
+	r_colorWarmth = ri.Cvar_Get( "r_colorWarmth", "0", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_colorWarmth, "-1", "1", CV_FLOAT );
+	ri.Cvar_SetDescription( r_colorWarmth, "Colour temperature: positive is warmer (orange), negative cooler (blue), up to 10%. Requires \\r_fbo 1" );
+	ri.Cvar_SetGroup( r_colorWarmth, CVG_RENDERER );
+	r_vignette = ri.Cvar_Get( "r_vignette", "0", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_vignette, "0", "1", CV_FLOAT );
+	ri.Cvar_SetDescription( r_vignette, "Darkens the screen corners by this fraction. Requires \\r_fbo 1" );
+	ri.Cvar_SetGroup( r_vignette, CVG_RENDERER );
 #endif // USE_FBO
 
 	//r_dlightBacks = ri.Cvar_Get( "r_dlightBacks", "1", CVAR_ARCHIVE_ND );
