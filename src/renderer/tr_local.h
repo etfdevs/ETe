@@ -1542,6 +1542,7 @@ extern cvar_t	*r_bloom_saturation;
 extern cvar_t	*r_ssao;
 extern cvar_t	*r_ssaoRadius;
 extern cvar_t	*r_ssaoIntensity;
+extern cvar_t	*r_sharpen;
 
 extern cvar_t	*r_toneMap;
 extern cvar_t	*r_toneMapExposure;

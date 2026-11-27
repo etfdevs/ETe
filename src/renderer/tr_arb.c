@@ -955,12 +955,84 @@ static char *ARB_BuildFinalColorProgram( char *buf ) {
 }
 
 
+// r_sharpen: AMD FidelityFX contrast adaptive sharpening (CAS), 5-tap version, on the raw image before
+// gamma. Neighbours are one output pixel away (program.local[2].xy = output size), so a supersampled
+// image is sharpened at the scale it is shown at. Empty when off.
+static const char *ARB_BuildSharpenProgram( void ) {
+	static char buf[2048];
+	const float sharpness = r_sharpen->value;
+	char *s = buf;
+
+	buf[0] = '\0';
+	if ( sharpness <= 0.0f )
+		return buf;
+
+	s = Q_stradd( s,
+		"PARAM gO = program.local[2]; \n"
+		"TEMP cA, cX, cY, cT, cN, cS, cE, cW, cMn, cMx; \n"
+		"RCP cA.x, gO.x; \n"
+		"RCP cA.y, gO.y; \n"
+		"MUL cX, cA, { 1.0, 0.0, 0.0, 0.0 }; \n"
+		"MUL cY, cA, { 0.0, 1.0, 0.0, 0.0 }; \n"
+		"ADD cT, fragment.texcoord[0], cY; \n"
+		"TEX cN, cT, texture[0], 2D; \n"
+		"SUB cT, fragment.texcoord[0], cY; \n"
+		"TEX cS, cT, texture[0], 2D; \n"
+		"ADD cT, fragment.texcoord[0], cX; \n"
+		"TEX cE, cT, texture[0], 2D; \n"
+		"SUB cT, fragment.texcoord[0], cX; \n"
+		"TEX cW, cT, texture[0], 2D; \n"
+		// per channel: amp = sqrt( sat( min( min, 1 - max ) / max ) ), less where contrast is already high
+		"MIN cMn, cN, cS; \n"
+		"MIN cMn, cMn, cE; \n"
+		"MIN cMn, cMn, cW; \n"
+		"MIN cMn, cMn, base; \n"
+		"MAX cMx, cN, cS; \n"
+		"MAX cMx, cMx, cE; \n"
+		"MAX cMx, cMx, cW; \n"
+		"MAX cMx, cMx, base; \n"
+		"MAD cT, cMx, -1.0, 1.0; \n"
+		"MIN cT, cMn, cT; \n"
+		"ADD cMx, cMx, 0.0001; \n"
+		"RCP cA.x, cMx.x; \n"
+		"RCP cA.y, cMx.y; \n"
+		"RCP cA.z, cMx.z; \n"
+		"MUL_SAT cT, cT, cA; \n"
+		"MOV cA.w, 0.5; \n"
+		"POW cT.x, cT.x, cA.w; \n"
+		"POW cT.y, cT.y, cA.w; \n"
+		"POW cT.z, cT.z, cA.w; \n" );
+	// negative lobe weight w = amp * -1 / lerp( 8, 5, sharpness ); out = ( centre + w * sum ) / ( 1 + 4w )
+	s = Q_stradd( s, va( "MUL cT, cT, %1.5f; \n", -1.0f / ( 8.0f - 3.0f * sharpness ) ) );
+	/*s = */ Q_stradd( s,
+		"ADD cN, cN, cS; \n"
+		"ADD cN, cN, cE; \n"
+		"ADD cN, cN, cW; \n"
+		"MAD cN, cN, cT, base; \n"
+		"MAD cT, cT, 4.0, 1.0; \n"
+		"RCP cA.x, cT.x; \n"
+		"RCP cA.y, cT.y; \n"
+		"RCP cA.z, cT.z; \n"
+		"MUL base.xyz, cN, cA; \n" );
+
+	return buf;
+}
+
+
+// output size for r_sharpen in the final pass programs
+static void ARB_FinalPassParams( void )
+{
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 2, blitX1 - blitX0, blitY1 - blitY0, 0.0f, 0.0f );
+}
+
+
 static const char *gammaFP = {
 	"!!ARBfp1.0 \n"
 	"OPTION ARB_precision_hint_fastest; \n"
 	"PARAM gamma = program.local[0]; \n"
 	"TEMP base; \n"
 	"TEX base, fragment.texcoord[0], texture[0], 2D; \n"
+	"%s" // r_sharpen
 	"POW base.x, base.x, gamma.x; \n"
 	"POW base.y, base.y, gamma.y; \n"
 	"POW base.z, base.z, gamma.z; \n"
@@ -1158,6 +1230,7 @@ static const char *blend2gammaFP = {
 	"TEMP base; \n"
 	"TEMP post; \n"
 	"TEX base, fragment.texcoord[0], texture[0], 2D; \n"
+	"%s" // r_sharpen, before the bloom is added
 	"TEX post, fragment.texcoord[0], texture[1], 2D; \n"
 	//"ADD base, base, post; \n"
 	"MAD base, post, factor.x, base; \n"
@@ -1568,7 +1641,7 @@ qboolean ARB_UpdatePrograms( void )
 		return qfalse;
 
 #ifdef USE_FBO
-	if ( !ARB_CompileProgram( Fragment, va( gammaFP, ARB_BuildFinalColorProgram( buf ) ), programs[ GAMMA_FRAGMENT ] ) )
+	if ( !ARB_CompileProgram( Fragment, va( gammaFP, ARB_BuildSharpenProgram(), ARB_BuildFinalColorProgram( buf ) ), programs[ GAMMA_FRAGMENT ] ) )
 		return qfalse;
 
 	if ( !ARB_CompileProgram( Fragment, ARB_BuildBloomProgram( buf ), programs[ BLOOM_EXTRACT_FRAGMENT ] ) )
@@ -1589,7 +1662,7 @@ qboolean ARB_UpdatePrograms( void )
 	if ( !ARB_CompileProgram( Fragment, blend2FP, programs[ BLEND2_FRAGMENT ] ) )
 		return qfalse;
 
-	if ( !ARB_CompileProgram( Fragment, va( blend2gammaFP, ARB_BuildFinalColorProgram( buf ) ), programs[ BLEND2_GAMMA_FRAGMENT ] ) )
+	if ( !ARB_CompileProgram( Fragment, va( blend2gammaFP, ARB_BuildSharpenProgram(), ARB_BuildFinalColorProgram( buf ) ), programs[ BLEND2_GAMMA_FRAGMENT ] ) )
 		return qfalse;
 
 	ssaoCompiled = ARB_CompileOptionalFP( "r_ssao", ARB_BuildSSAOProgram( buf ), programs[ SSAO_FRAGMENT ] )
@@ -2466,6 +2539,7 @@ qboolean FBO_Bloom( const float gamma, const float obScale, qboolean finalStage 
 		ARB_ProgramEnable( DUMMY_VERTEX, BLEND2_GAMMA_FRAGMENT );
 		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, gamma, gamma, gamma, obScale );
 		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, r_bloom_intensity->value, 0, 0, 0 );
+		ARB_FinalPassParams();
 	} else {
 		// just blend
 		ARB_ProgramEnable( DUMMY_VERTEX, BLEND2_FRAGMENT );
@@ -2715,6 +2789,7 @@ void FBO_PostProcess( void )
 		GL_BindTexture( 0, frameBuffers[ fboReadIndex ].color );
 		ARB_ProgramEnable( DUMMY_VERTEX, GAMMA_FRAGMENT );
 		qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, gamma, gamma, gamma, obScale );
+		ARB_FinalPassParams();
 		RenderQuad( w, h );
 		ARB_ProgramDisable();
 		return;
@@ -2725,6 +2800,7 @@ void FBO_PostProcess( void )
 	GL_BindTexture( 0, frameBuffers[ fboReadIndex ].color );  // source - main color buffer
 	ARB_ProgramEnable( DUMMY_VERTEX, GAMMA_FRAGMENT );
 	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, gamma, gamma, gamma, obScale );
+	ARB_FinalPassParams();
 	RenderQuad( w, h );
 	ARB_ProgramDisable();
 

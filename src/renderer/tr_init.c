@@ -100,6 +100,7 @@ cvar_t	*r_bloom_saturation;
 cvar_t	*r_ssao;
 cvar_t	*r_ssaoRadius;
 cvar_t	*r_ssaoIntensity;
+cvar_t	*r_sharpen;
 
 cvar_t	*r_toneMap;
 cvar_t	*r_toneMapExposure;
@@ -1991,6 +1992,10 @@ static void R_Register( void )
 	ri.Cvar_CheckRange( r_vignette, "0", "1", CV_FLOAT );
 	ri.Cvar_SetDescription( r_vignette, "Darkens the screen corners by this fraction. Requires \\r_fbo 1" );
 	ri.Cvar_SetGroup( r_vignette, CVG_RENDERER );
+	r_sharpen = ri.Cvar_Get( "r_sharpen", "0", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_sharpen, "0", "1", CV_FLOAT );
+	ri.Cvar_SetDescription( r_sharpen, "Contrast adaptive sharpening (AMD CAS) strength, crisper textures without halos; 0 is off. Requires \\r_fbo 1" );
+	ri.Cvar_SetGroup( r_sharpen, CVG_RENDERER );
 #endif // USE_FBO
 
 	//r_dlightBacks = ri.Cvar_Get( "r_dlightBacks", "1", CVAR_ARCHIVE_ND );
