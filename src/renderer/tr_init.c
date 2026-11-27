@@ -97,6 +97,10 @@ cvar_t	*r_bloom_filter_size;
 cvar_t	*r_bloom_reflection;
 cvar_t	*r_bloom_saturation;
 
+cvar_t	*r_ssao;
+cvar_t	*r_ssaoRadius;
+cvar_t	*r_ssaoIntensity;
+
 cvar_t	*r_renderWidth;
 cvar_t	*r_renderHeight;
 cvar_t	*r_renderScale;
@@ -1939,6 +1943,17 @@ static void R_Register( void )
 	r_bloom_reflection = ri.Cvar_Get( "r_bloom_reflection", "0", CVAR_ARCHIVE_ND );
 	ri.Cvar_CheckRange( r_bloom_reflection, "-4", "4", CV_FLOAT );
 	ri.Cvar_SetDescription( r_bloom_reflection, "Bloom lens reflection effect, value is an intensity factor of the effect, negative value means blend only reflection and skip main bloom texture" );
+
+	// screen-space ambient occlusion
+	r_ssao = ri.Cvar_Get( "r_ssao", "0", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_ssao, "0", "1", CV_INTEGER );
+	ri.Cvar_SetDescription( r_ssao, "Screen-space ambient occlusion: soft shadows in corners, creases and around models. Requires \\r_fbo 1; with \\r_ext_multisample and \\r_flares 0, enable it before \\vid_restart" );
+	r_ssaoRadius = ri.Cvar_Get( "r_ssaoRadius", "32", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_ssaoRadius, "4", "256", CV_FLOAT );
+	ri.Cvar_SetDescription( r_ssaoRadius, "SSAO sampling radius in world units, bigger reaches further from corners" );
+	r_ssaoIntensity = ri.Cvar_Get( "r_ssaoIntensity", "1", CVAR_ARCHIVE_ND );
+	ri.Cvar_CheckRange( r_ssaoIntensity, "0", "4", CV_FLOAT );
+	ri.Cvar_SetDescription( r_ssaoIntensity, "SSAO darkening strength" );
 #endif // USE_FBO
 
 	//r_dlightBacks = ri.Cvar_Get( "r_dlightBacks", "1", CVAR_ARCHIVE_ND );

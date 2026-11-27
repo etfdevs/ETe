@@ -10,7 +10,11 @@
 #define SCR_HEIGHT 64
 
 #define BLOOM_BASE 5
-#define FBO_COUNT (BLOOM_BASE+(MAX_BLUR_PASSES*2))
+#define SSAO_BASE (BLOOM_BASE+(MAX_BLUR_PASSES*2))
+#define FBO_COUNT (SSAO_BASE+2)
+
+// r_ssao: samples per pixel, spread over a disc that's rotated per pixel
+#define SSAO_SAMPLES 8
 
 #if BLOOM_BASE < 2
 #error no space for main/postprocess buffers
@@ -22,6 +26,7 @@ static GLuint current_fp;
 
 static int programCompiled = 0;
 static int programEnabled	= 0;
+static qboolean ssaoCompiled = qfalse;
 
 qboolean fboEnabled = qfalse;
 qboolean fboBloomInited = qfalse;
@@ -1043,6 +1048,177 @@ static const char *blend2gammaFP = {
 };
 
 
+// r_ssao helper: view-space position of the depth sample at texcoord uv into dst
+// (x right, y up, z = distance along the view axis), uses temps tmp and dep
+static char *ARB_SSAOPosition( char *s, const char *dst, const char *uv ) {
+	s = Q_stradd( s, va( "TEX dep, %s, texture[0], 2D; \n", uv ) );
+	s = Q_stradd( s,
+		"MAD tmp.x, dep.x, 2.0, c0.x; \n"
+		"RCP tmp.x, tmp.x; \n" );
+	s = Q_stradd( s, va( "MUL %s.z, tmp.x, c0.y; \n", dst ) );
+	s = Q_stradd( s, va( "SUB tmp.xy, %s, c1; \n", uv ) );
+	s = Q_stradd( s,
+		"MUL tmp.xy, tmp, c1.zwzw; \n"
+		"SUB tmp.xy, tmp, 1.0; \n"
+		"MUL tmp.xy, tmp, c0.zwzw; \n" );
+	s = Q_stradd( s, va( "MUL %s.xy, tmp, %s.z; \n", dst, dst ) );
+	return s;
+}
+
+
+// r_ssao occlusion pass: texture[0] = depth, texture[1] = 4x4 rotation noise
+static char *ARB_BuildSSAOProgram( char *buf ) {
+	char *s = buf;
+	int i;
+
+	*s = '\0';
+	s = Q_stradd( s,
+		"!!ARBfp1.0 \n"
+		"PARAM c0 = program.local[0]; \n" // proj[10]-1, proj[14], 1/proj[0], 1/proj[5]
+		"PARAM c1 = program.local[1]; \n" // viewport x, y, 2/width, 2/height, in texcoords
+		"PARAM c2 = program.local[2]; \n" // disc radius in texcoords at distance 1 (x, y), 1/radius^2, strength/samples
+		"PARAM c3 = program.local[3]; \n" // texel width, 0, 0, 0
+		"PARAM c4 = program.local[4]; \n" // 0, texel height, 0, 0
+		"PARAM c5 = program.local[5]; \n" // max disc radius in texcoords, cosine bias, depth hack limit, 4/fade distance
+		"PARAM c6 = program.local[6]; \n" // -half depth texel (x, y): half-res pixel centres sit between depth texels,
+		                                  // 1/distance where the normal's neighbours step one texel further out
+		"ATTRIB tin = fragment.texcoord[0]; \n"
+		"TEMP tc, tmp, dep, uv, pc, pq, da, db, gx, gy, nrm, rot, rad, vec, occ, dc, ox, oy; \n"
+		"ADD tc, tin, c6; \n" );
+
+	s = ARB_SSAOPosition( s, "pc", "tc" );
+	// depth steps grow with distance squared, so take the normal's neighbours whole texels further out
+	// with distance, keeping the depth rounding small against their spacing (else it shimmers far away)
+	s = Q_stradd( s, "MOV dc, dep; \n"
+		"MUL tmp.x, pc.z, c6.z; \n"
+		"FLR tmp.x, tmp.x; \n"
+		"MAX tmp.x, tmp.x, 1.0; \n"
+		"MUL ox, c3, tmp.x; \n"
+		"MUL oy, c4, tmp.x; \n" );
+
+	// normal from the screen-space neighbours, picking the closer one on each axis so depth edges don't bend it
+	s = Q_stradd( s, "ADD uv, tc, ox; \n" );
+	s = ARB_SSAOPosition( s, "pq", "uv" );
+	s = Q_stradd( s, "SUB da, pq, pc; \n" "SUB uv, tc, ox; \n" );
+	s = ARB_SSAOPosition( s, "pq", "uv" );
+	s = Q_stradd( s, "SUB db, pc, pq; \n"
+		"ABS tmp.x, da.z; \n"
+		"ABS tmp.y, db.z; \n"
+		"SUB tmp.x, tmp.x, tmp.y; \n"
+		"CMP gx, tmp.x, da, db; \n"
+		"ADD uv, tc, oy; \n" );
+	s = ARB_SSAOPosition( s, "pq", "uv" );
+	s = Q_stradd( s, "SUB da, pq, pc; \n" "SUB uv, tc, oy; \n" );
+	s = ARB_SSAOPosition( s, "pq", "uv" );
+	s = Q_stradd( s, "SUB db, pc, pq; \n"
+		"ABS tmp.x, da.z; \n"
+		"ABS tmp.y, db.z; \n"
+		"SUB tmp.x, tmp.x, tmp.y; \n"
+		"CMP gy, tmp.x, da, db; \n"
+		"XPD nrm, gx, gy; \n"
+		"DP3 tmp.x, nrm, nrm; \n"
+		"RSQ tmp.x, tmp.x; \n"
+		"MUL nrm.xyz, nrm, tmp.x; \n"
+		"DP3 tmp.x, nrm, pc; \n"
+		"CMP nrm, tmp.x, nrm, -nrm; \n" // face the camera
+		// per-pixel direction to mirror the sample disc about, repeats every 4 pixels
+		"MUL tmp.xy, fragment.position, 0.25; \n"
+		"TEX rot, tmp, texture[1], 2D; \n"
+		"MAD rot, rot, 2.0, -1.0; \n"
+		"MOV rot.zw, 0.0; \n"
+		// disc radius in texcoords shrinks with distance
+		"RCP tmp.x, pc.z; \n"
+		"MUL rad.xy, c2, tmp.x; \n"
+		"MIN rad.xy, rad, c5.x; \n"
+		"MOV occ, 0.0; \n" );
+
+	for ( i = 0; i < SSAO_SAMPLES; i++ ) {
+		// golden-angle spiral evenly filling the unit disc
+		const float r = sqrtf( ( i + 0.5f ) / SSAO_SAMPLES );
+		const float a = i * 2.39996f;
+		s = Q_stradd( s, va( "PARAM k%i = { %f, %f, 0.0, 0.0 }; \n", i, r * cosf( a ), r * sinf( a ) ) );
+		s = Q_stradd( s, va(
+			"DP3 tmp.x, k%i, rot; \n"
+			"MUL tmp, rot, tmp.x; \n"
+			"MAD tmp, tmp, -2.0, k%i; \n"
+			"MAD uv.xy, tmp, rad, tc; \n", i, i ) );
+		s = ARB_SSAOPosition( s, "pq", "uv" );
+		// occlusion = cosine between normal and sample direction, faded out towards the radius
+		s = Q_stradd( s,
+			"SUB vec, pq, pc; \n"
+			"DP3 tmp.y, vec, vec; \n"
+			"ADD tmp.z, tmp.y, 0.0001; \n"
+			"RSQ tmp.z, tmp.z; \n"
+			"DP3 tmp.w, vec, nrm; \n"
+			"MUL tmp.w, tmp.w, tmp.z; \n"
+			"SUB_SAT tmp.w, tmp.w, c5.y; \n"
+			"MAD_SAT tmp.z, tmp.y, -c2.z, 1.0; \n"
+			"MAD occ.x, tmp.w, tmp.z, occ.x; \n" );
+	}
+
+	// no occlusion on depth-hacked first person weapons, faded out where depth precision runs out
+	// (the sky needs no mask: its samples are all far beyond the radius)
+	/*s = */ Q_stradd( s,
+		"MAD_SAT occ.x, occ.x, -c2.w, 1.0; \n"
+		"SLT tmp.x, dc.x, c5.z; \n"
+		"MAD_SAT tmp.y, pc.z, c5.w, -3.0; \n"
+		"MAX tmp.x, tmp.x, tmp.y; \n"
+		"LRP occ.x, tmp.x, 1.0, occ.x; \n"
+		"MOV result.color, occ.x; \n"
+		"END \n" );
+
+	return buf;
+}
+
+
+// r_ssao blur pass, 4x4 to match the noise period, skipping samples at other depths
+// texture[0] = occlusion, texture[1] = depth
+static char *ARB_BuildSSAOBlurProgram( char *buf ) {
+	char *s = buf;
+	int x, y;
+
+	*s = '\0';
+	s = Q_stradd( s,
+		"!!ARBfp1.0 \n"
+		"PARAM c0 = program.local[0]; \n" // proj[10]-1, proj[14]
+		"PARAM c1 = program.local[1]; \n" // texel width, texel height, 1/depth tolerance (fraction of distance)
+		"ATTRIB tc = fragment.texcoord[0]; \n"
+		"TEMP tmp, dep, uv, occ, zc, sum; \n"
+		"TEX dep, tc, texture[1], 2D; \n"
+		"MAD tmp.x, dep.x, 2.0, c0.x; \n"
+		"RCP tmp.x, tmp.x; \n"
+		"MUL zc.x, tmp.x, c0.y; \n"
+		"RCP zc.y, zc.x; \n"
+		"MUL zc.y, zc.y, c1.z; \n"
+		"MOV sum, 0.0; \n" );
+
+	for ( y = -2; y < 2; y++ ) {
+		for ( x = -2; x < 2; x++ ) {
+			s = Q_stradd( s, va( "MAD uv.xy, { %i.0, %i.0, 0.0, 0.0 }, c1, tc; \n", x, y ) );
+			s = Q_stradd( s,
+				"TEX occ, uv, texture[0], 2D; \n"
+				"TEX dep, uv, texture[1], 2D; \n"
+				"MAD tmp.x, dep.x, 2.0, c0.x; \n"
+				"RCP tmp.x, tmp.x; \n"
+				"MUL tmp.x, tmp.x, c0.y; \n"
+				"SUB tmp.x, tmp.x, zc.x; \n"
+				"ABS tmp.x, tmp.x; \n"
+				"MAD_SAT tmp.x, tmp.x, -zc.y, 1.0; \n"
+				"MAD sum.x, occ.x, tmp.x, sum.x; \n"
+				"ADD sum.y, sum.y, tmp.x; \n" );
+		}
+	}
+
+	/*s = */ Q_stradd( s,
+		"RCP tmp.x, sum.y; \n"
+		"MUL tmp.x, sum.x, tmp.x; \n"
+		"MOV result.color, tmp.x; \n"
+		"END \n" );
+
+	return buf;
+}
+
+
 static void RenderQuad( int w, int h )
 {
 	static const vec2_t t[4] = { {0.0, 1.0}, {1.0, 1.0}, {0.0, 0.0}, {1.0, 0.0} };
@@ -1204,6 +1380,26 @@ qboolean ARB_CompileProgram( programType ptype, const char *text, GLuint program
 }
 
 
+#ifdef USE_FBO
+// unlike ARB_CompileProgram, a failure here only turns the optional feature off
+static qboolean ARB_CompileOptionalFP( const char *name, const char *text, GLuint program )
+{
+	GLint errorPos;
+
+	qglGetError();
+	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, program );
+	qglProgramStringARB( GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_FORMAT_ASCII_ARB, strlen( text ), text );
+	qglGetIntegerv( GL_PROGRAM_ERROR_POSITION_ARB, &errorPos );
+	if ( errorPos != -1 ) {
+		ri.Printf( PRINT_WARNING, "%s is unavailable, FP compile error at %i: %s\n", name, errorPos, qglGetString( GL_PROGRAM_ERROR_STRING_ARB ) );
+		qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, 0 );
+		return qfalse;
+	}
+	return qtrue;
+}
+#endif
+
+
 qboolean ARB_UpdatePrograms( void )
 {
 #ifdef USE_PMLIGHT
@@ -1211,7 +1407,7 @@ qboolean ARB_UpdatePrograms( void )
 	int i;
 #endif
 #if defined (USE_FBO) || defined (USE_PMLIGHT)
-	char buf[4096];
+	char buf[16384]; // r_ssao programs need about 12K
 #endif
 
 	if ( !qglGenProgramsARB )
@@ -1271,6 +1467,9 @@ qboolean ARB_UpdatePrograms( void )
 
 	if ( !ARB_CompileProgram( Fragment, va( blend2gammaFP, ARB_BuildGreyscaleProgram( buf ) ), programs[ BLEND2_GAMMA_FRAGMENT ] ) )
 		return qfalse;
+
+	ssaoCompiled = ARB_CompileOptionalFP( "r_ssao", ARB_BuildSSAOProgram( buf ), programs[ SSAO_FRAGMENT ] )
+		&& ARB_CompileOptionalFP( "r_ssao", ARB_BuildSSAOBlurProgram( buf ), programs[ SSAO_BLUR_FRAGMENT ] );
 #endif // USE_FBO
 
 	programCompiled = 1;
@@ -1385,6 +1584,9 @@ static GLuint FBO_CreateDepthTextureOrBuffer( GLsizei width, GLsizei height )
 	GL_BindTexture( 0, tex );
 	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	// r_ssao samples it, don't wrap around at screen edges
+	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_clamp_mode );
+	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl_clamp_mode );
 	if ( glConfig.stencilBits == 0 )
 		qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL );
 	else
@@ -2179,6 +2381,168 @@ void R_BloomScreen( void )
 }
 
 
+static GLuint ssaoNoise;
+static qboolean fboSSAOInited = qfalse;
+
+static void FBO_CleanSSAO( void )
+{
+	FBO_Clean( &frameBuffers[ SSAO_BASE + 0 ] );
+	FBO_Clean( &frameBuffers[ SSAO_BASE + 1 ] );
+	if ( ssaoNoise )
+	{
+		GL_BindTexture( 1, 0 );
+		GL_BindTexture( 0, 0 );
+		qglDeleteTextures( 1, &ssaoNoise );
+		ssaoNoise = 0;
+	}
+	fboSSAOInited = qfalse;
+}
+
+
+static qboolean FBO_CreateSSAO( void )
+{
+	// 16 directions over half a circle (mirroring about d and -d is the same) in 4x4 Bayer order
+	static const byte order[ 16 ] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+	byte noise[ 16 * 4 ];
+	int i;
+
+	// half resolution: a quarter of the cost, upscaled bilinearly by the composite
+	const int w = ( glConfig.vidWidth + 1 ) / 2;
+	const int h = ( glConfig.vidHeight + 1 ) / 2;
+
+	if ( !FBO_Create( &frameBuffers[ SSAO_BASE + 0 ], w, h, qfalse, NULL, NULL ) ||
+		!FBO_Create( &frameBuffers[ SSAO_BASE + 1 ], w, h, qfalse, NULL, NULL ) )
+		return qfalse;
+
+	for ( i = 0; i < 16; i++ )
+	{
+		const float a = order[ i ] * ( (float)M_PI / 16.0f );
+		noise[ i * 4 + 0 ] = (byte)( ( cosf( a ) * 0.5f + 0.5f ) * 255.0f + 0.5f );
+		noise[ i * 4 + 1 ] = (byte)( ( sinf( a ) * 0.5f + 0.5f ) * 255.0f + 0.5f );
+		noise[ i * 4 + 2 ] = 128;
+		noise[ i * 4 + 3 ] = 255;
+	}
+
+	qglGenTextures( 1, &ssaoNoise );
+	GL_BindTexture( 0, ssaoNoise );
+	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, noise );
+	GL_BindTexture( 0, 0 );
+
+	return qtrue;
+}
+
+
+/*
+=============
+FBO_SSAO
+
+Darkens the main 3D view by screen-space ambient occlusion, computed from its depth buffer.
+Runs once the view is drawn, so translucent surfaces get the occlusion of what's behind them.
+=============
+*/
+void FBO_SSAO( void )
+{
+	const viewParms_t *vp = &backEnd.viewParms;
+	const float *pm = vp->projectionMatrix;
+	const int w = glConfig.vidWidth;
+	const int h = glConfig.vidHeight;
+	const GLuint depth = frameBuffers[ 0 ].depthStencil;
+	int aw, ah;
+	float sx, sy, radius, zNear, fade;
+
+	if ( !r_ssao->integer || !fboEnabled || !programCompiled || !ssaoCompiled || !qglActiveTextureARB )
+		return;
+
+	// main world view only: no portals, skybox portal views or 3D UI models
+	if ( ( backEnd.refdef.rdflags & ( RDF_NOWORLDMODEL | RDF_SKYBOXPORTAL ) ) || vp->portalView != PV_NONE )
+		return;
+
+	// multisampling without r_flares creates no resolved depth buffer, see QGL_InitFBO
+	if ( !depth )
+		return;
+
+	if ( !fboSSAOInited )
+	{
+		if ( ( fboSSAOInited = FBO_CreateSSAO() ) == qfalse )
+		{
+			ri.Printf( PRINT_WARNING, "...error creating framebuffers for SSAO\n" );
+			ri.Cvar_Set( "r_ssao", "0" );
+			FBO_CleanSSAO();
+			return;
+		}
+	}
+
+	aw = frameBuffers[ SSAO_BASE + 0 ].width;
+	ah = frameBuffers[ SSAO_BASE + 0 ].height;
+
+	if ( blitMSfbo )
+		FBO_BlitMS( qtrue ); // resolve depth into frameBuffers[ 0 ]
+
+	ARB_ProgramDisable();
+	qglViewport( 0, 0, w, h );
+	qglScissor( 0, 0, w, h );
+	qglMatrixMode( GL_PROJECTION );
+	qglLoadMatrixf( GL_Ortho( 0, w, h, 0, 0, 1 ) );
+	qglMatrixMode( GL_MODELVIEW );
+	qglLoadIdentity();
+	backEnd.projection2D = qtrue;
+	qglColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+	GL_State( GLS_DEPTHTEST_DISABLE | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
+	GL_Cull( CT_TWO_SIDED );
+
+	sx = 2.0f * w / vp->viewportWidth;
+	sy = 2.0f * h / vp->viewportHeight;
+	radius = r_ssaoRadius->value;
+
+	// 1: occlusion, at the half size of the AO buffers
+	qglViewport( 0, 0, aw, ah );
+	FBO_Bind( GL_FRAMEBUFFER, frameBuffers[ SSAO_BASE + 0 ].fbo );
+	GL_BindTexture( 1, ssaoNoise );
+	GL_BindTexture( 0, depth );
+	ARB_ProgramEnable( DUMMY_VERTEX, SSAO_FRAGMENT );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, pm[10] - 1.0f, pm[14], 1.0f / pm[0], 1.0f / pm[5] );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, (float)vp->viewportX / w, (float)vp->viewportY / h, sx, sy );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 2, radius * pm[0] / sx, radius * pm[5] / sy,
+		1.0f / ( radius * radius ), 2.0f * r_ssaoIntensity->value / SSAO_SAMPLES );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 3, 1.0f / w, 0, 0, 0 );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 4, 0, 1.0f / h, 0, 0 );
+	// weapons are drawn with glDepthRange( 0, 0.3 ); fade out over 75-100% of the distance where
+	// a 24-bit depth step (about z^2 / zNear / 2^24) grows past 1/16 of the radius
+	zNear = pm[14] / ( pm[10] - 1.0f );
+	fade = sqrtf( radius * 0.0625f * zNear * 16777216.0f );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 5, 0.1f, 0.1f, 0.3f, 4.0f / fade );
+	// a texel spans about 2z / ( proj[0] * viewport width ), so the depth step is 5% of it at distance
+	// 0.05 * 2 zNear 2^24 / ( proj[0] * viewport width )
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 6, -0.5f / w, -0.5f / h,
+		pm[0] * vp->viewportWidth / ( 0.1f * zNear * 16777216.0f ), 0 );
+	RenderQuad( w, h );
+
+	// 2: blur away the noise pattern
+	FBO_Bind( GL_FRAMEBUFFER, frameBuffers[ SSAO_BASE + 1 ].fbo );
+	GL_BindTexture( 1, depth );
+	GL_BindTexture( 0, frameBuffers[ SSAO_BASE + 0 ].color );
+	ARB_ProgramEnable( DUMMY_VERTEX, SSAO_BLUR_FRAGMENT );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, pm[10] - 1.0f, pm[14], 0, 0 );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 1, 1.0f / aw, 1.0f / ah, 1.0f / 0.05f, 0 );
+	RenderQuad( w, h );
+	GL_BindTexture( 1, 0 );
+
+	// 3: multiply into the scene, inside the view's viewport (fixed function, fog is off here)
+	ARB_ProgramDisable();
+	FBO_BindMain();
+	qglViewport( 0, 0, w, h );
+	qglScissor( vp->viewportX, vp->viewportY, vp->viewportWidth, vp->viewportHeight );
+	GL_State( GLS_DEPTHTEST_DISABLE | GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ZERO );
+	GL_BindTexture( 0, frameBuffers[ SSAO_BASE + 1 ].color );
+	RenderQuad( w, h );
+	qglScissor( 0, 0, w, h );
+}
+
+
 void FBO_PostProcess( void )
 {
 	const float obScale = 1 << tr.overbrightBits;
@@ -2329,6 +2693,7 @@ void QGL_DoneFBO( void )
 		FBO_Clean(&frameBuffers[3]);
 		FBO_Clean(&frameBuffers[4]);
 		FBO_CleanBloom();
+		FBO_CleanSSAO();
 		FBO_CleanDepth();
 		fboEnabled = qfalse;
 		fboBloomInited = qfalse;
@@ -2373,7 +2738,7 @@ void QGL_InitFBO( void )
 	if ( FBO_CreateMS( &frameBufferMS, w, h ) )
 	{
 		frameBufferMultiSampling = qtrue;
-		if ( r_flares->integer )
+		if ( r_flares->integer || r_ssao->integer ) // they read the resolved depth
 			depthStencil = qtrue;
 		else
 			depthStencil = qfalse;

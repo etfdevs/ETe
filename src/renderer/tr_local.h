@@ -1539,6 +1539,10 @@ extern cvar_t	*r_bloom_filter_size;
 extern cvar_t	*r_bloom_reflection;
 extern cvar_t	*r_bloom_saturation;
 
+extern cvar_t	*r_ssao;
+extern cvar_t	*r_ssaoRadius;
+extern cvar_t	*r_ssaoIntensity;
+
 extern cvar_t	*r_renderWidth;
 extern cvar_t	*r_renderHeight;
 extern cvar_t	*r_renderScale;
@@ -1968,6 +1972,7 @@ void FBO_BindMain( void );
 void FBO_PostProcess( void );
 void FBO_BlitMS( qboolean depthOnly );
 void FBO_BlitSS( void );
+void FBO_SSAO( void );
 qboolean FBO_Bloom( const float gamma, const float obScale, qboolean finalPass );
 void FBO_CopyScreen( void );
 GLuint FBO_ScreenTexture( void );
@@ -2504,6 +2509,8 @@ typedef enum {
 	BLENDX_FRAGMENT,
 	BLEND2_FRAGMENT,
 	BLEND2_GAMMA_FRAGMENT,
+	SSAO_FRAGMENT,
+	SSAO_BLUR_FRAGMENT,
 #endif
 	PROGRAM_COUNT
 
